@@ -1,0 +1,221 @@
+const StockTransfer = require('../models/StockTransfer');
+const Stock = require('../models/Stock');
+const Branch = require('../models/Branch');
+const Product = require('../models/Product');
+const AuditLog = require('../models/AuditLog');
+
+const createTransfer = async (req, res, next) => {
+  try {
+    const { fromBranchId, toBranchId, items, remarks } = req.body;
+
+    if (!fromBranchId || !toBranchId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุสาขาต้นทาง สาขาปลายทาง และรายการสินค้าให้ครบถ้วน' });
+    }
+
+    if (fromBranchId === toBranchId) {
+      return res.status(400).json({ success: false, message: 'สาขาต้นทางและสาขาปลายทางต้องเป็นคนละสาขากัน' });
+    }
+
+    const [fromBranch, toBranch] = await Promise.all([
+      Branch.findById(fromBranchId),
+      Branch.findById(toBranchId)
+    ]);
+
+    if (!fromBranch || !toBranch) {
+      return res.status(404).json({ success: false, message: 'ข้อมูลสาขาต้นทางหรือปลายทางไม่ถูกต้อง' });
+    }
+
+    // Validate available stock in fromBranch
+    const preparedItems = [];
+    for (const item of items) {
+      const stock = await Stock.findOne({ branch: fromBranchId, sku: item.sku }).populate('product');
+      if (!stock || stock.quantity < item.quantity) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `จำนวนสินค้าคงเหลือไม่เพียงพอสำหรับ รหัส SKU "${item.sku}" ที่ ${fromBranch.name} (คงเหลือ: ${stock ? stock.quantity : 0}, ร้องขอ: ${item.quantity})` 
+        });
+      }
+
+      preparedItems.push({
+        product: stock.product._id,
+        sku: item.sku,
+        productName: stock.product.name,
+        quantity: item.quantity,
+        imei_serials: item.imei_serials || []
+      });
+    }
+
+    const transferCount = await StockTransfer.countDocuments();
+    const transferNumber = `TRF-${new Date().getFullYear()}-${String(transferCount + 1).padStart(5, '0')}`;
+
+    const transfer = await StockTransfer.create({
+      transferNumber,
+      fromBranch: fromBranch._id,
+      toBranch: toBranch._id,
+      items: preparedItems,
+      requestedBy: req.user._id,
+      remarks: remarks || '',
+      status: 'pending'
+    });
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'CREATE_TRANSFER',
+      entity: 'StockTransfer',
+      entityId: transfer._id.toString(),
+      details: { transferNumber, from: fromBranch.name, to: toBranch.name }
+    });
+
+    const populatedTransfer = await StockTransfer.findById(transfer._id).populate('fromBranch toBranch requestedBy');
+
+    res.status(201).json({
+      success: true,
+      message: 'สร้างเอกสารโอนย้ายสินค้าระหว่างสาขาเรียบร้อยแล้ว',
+      transfer: populatedTransfer
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getTransfers = async (req, res, next) => {
+  try {
+    const { branchId, status } = req.query;
+    const filter = {};
+
+    if (branchId) {
+      filter.$or = [{ fromBranch: branchId }, { toBranch: branchId }];
+    }
+    if (status) filter.status = status;
+
+    const transfers = await StockTransfer.find(filter)
+      .populate('fromBranch toBranch requestedBy approvedBy items.product')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      transfers
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateTransferStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, remarks } = req.body;
+
+    if (!['approved', 'in_transit', 'completed', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'สถานะเอกสารไม่ถูกต้อง' });
+    }
+
+    const transfer = await StockTransfer.findById(id).populate('fromBranch toBranch');
+    if (!transfer) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการโอนย้ายสินค้า' });
+    }
+
+    if (transfer.status === 'completed' || transfer.status === 'rejected') {
+      return res.status(400).json({ success: false, message: `รายการนี้อยู่ในสถานะ ${transfer.status} แล้ว ไม่สามารถเปลี่ยนแปลงได้` });
+    }
+
+    // Process completion -> deduct stock from Source, add stock to Destination
+    if (status === 'completed') {
+      for (const item of transfer.items) {
+        // Source branch stock reduction
+        const sourceStock = await Stock.findOne({ branch: transfer.fromBranch._id, sku: item.sku });
+        if (sourceStock) {
+          sourceStock.quantity = Math.max(0, sourceStock.quantity - item.quantity);
+          if (item.imei_serials && item.imei_serials.length > 0) {
+            sourceStock.imei_serials = sourceStock.imei_serials.filter(i => !item.imei_serials.includes(i.imei));
+          }
+          await sourceStock.save();
+        }
+
+        // Destination branch stock addition
+        let destStock = await Stock.findOne({ branch: transfer.toBranch._id, sku: item.sku });
+        const importDate = new Date();
+        if (destStock) {
+          destStock.quantity += item.quantity;
+          if (item.imei_serials && item.imei_serials.length > 0) {
+            destStock.imei_serials.push(...item.imei_serials.map(s => ({ imei: s, status: 'in_stock', received_date: importDate })));
+          }
+          destStock.import_date = importDate;
+          await destStock.save();
+        } else {
+          await Stock.create({
+            branch: transfer.toBranch._id,
+            product: item.product,
+            sku: item.sku,
+            quantity: item.quantity,
+            imei_serials: (item.imei_serials || []).map(s => ({ imei: s, status: 'in_stock', received_date: importDate })),
+            import_date: importDate
+          });
+        }
+      }
+    }
+
+    transfer.status = status;
+    transfer.approvedBy = req.user._id;
+    if (remarks) transfer.remarks = remarks;
+    await transfer.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: `TRANSFER_STATUS_${status.toUpperCase()}`,
+      entity: 'StockTransfer',
+      entityId: transfer._id.toString(),
+      details: { transferNumber: transfer.transferNumber, newStatus: status }
+    });
+
+    const updatedTransfer = await StockTransfer.findById(transfer._id).populate('fromBranch toBranch requestedBy approvedBy');
+
+    res.json({
+      success: true,
+      message: `อัปเดตสถานะเอกสารโอนย้ายสำเร็จเป็น ${status}`,
+      transfer: updatedTransfer
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getTransferDocument = async (req, res, next) => {
+  try {
+    const transfer = await StockTransfer.findById(req.params.id)
+      .populate('fromBranch toBranch requestedBy approvedBy items.product');
+
+    if (!transfer) {
+      return res.status(404).json({ success: false, message: 'ไม่พบเอกสารใบโอนย้ายสินค้า' });
+    }
+
+    res.json({
+      success: true,
+      document: {
+        documentTitle: 'ใบโอนย้ายสินค้าระหว่างสาขา',
+        transferNumber: transfer.transferNumber,
+        date: transfer.createdAt,
+        status: transfer.status,
+        fromBranch: transfer.fromBranch,
+        toBranch: transfer.toBranch,
+        requestedBy: transfer.requestedBy ? transfer.requestedBy.username : 'ไม่ระบุ',
+        approvedBy: transfer.approvedBy ? transfer.approvedBy.username : 'ไม่ระบุ',
+        items: transfer.items,
+        remarks: transfer.remarks
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  createTransfer,
+  getTransfers,
+  updateTransferStatus,
+  getTransferDocument
+};
