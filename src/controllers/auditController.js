@@ -10,21 +10,30 @@ const getBranchExpectedStock = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'กรุณาระบุรหัสสาขา' });
     }
 
-    const stocks = await Stock.find({ branch: branchId }).populate('product');
+    const todayStr = new Date().toISOString().split('T')[0];
+    const existingAudit = await DailyAudit.findOne({ auditDate: todayStr, branch: branchId });
+
+    const stocks = await Stock.find({ branch: branchId, quantity: { $gt: 0 } }).populate('product');
     
-    const items = stocks.map(st => {
-      const activeImeis = st.imei_serials
-        ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-        : [];
-      
-      return {
-        product: st.product._id,
-        sku: st.sku,
-        productName: st.product.name,
-        expectedCount: st.quantity,
-        expectedImeis: activeImeis
-      };
-    });
+    const items = stocks
+      .filter(st => st.product && st.quantity > 0)
+      .map(st => {
+        const activeImeis = st.imei_serials
+          ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
+          : [];
+        
+        const existingItem = existingAudit && existingAudit.items ? existingAudit.items.find(i => i.sku === st.sku) : null;
+
+        return {
+          product: st.product._id,
+          sku: st.sku,
+          productName: st.product.name,
+          expectedCount: st.quantity,
+          expectedImeis: activeImeis,
+          scannedImeis: existingItem ? existingItem.scannedImeis || [] : [],
+          imeiImages: existingItem ? existingItem.imeiImages || [] : []
+        };
+      });
 
     res.json({
       success: true,
@@ -96,7 +105,8 @@ const submitBranchAudit = async (req, res, next) => {
         expectedImeis,
         scannedImeis,
         missingImeis,
-        unexpectedImeis
+        unexpectedImeis,
+        imeiImages: scanned.imeiImages || []
       });
     }
 
@@ -293,9 +303,103 @@ const verifyOrRejectAudit = async (req, res, next) => {
   }
 };
 
+const uploadImeiImage = async (req, res, next) => {
+  try {
+    const { imei, auditDate } = req.body;
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'กรุณาเลือกไฟล์รูปภาพเพื่ออัปโหลด' });
+    }
+
+    if (!imei) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI' });
+    }
+
+    const { uploadImeiImageToDrive } = require('../config/googleDrive');
+
+    const driveResult = await uploadImeiImageToDrive({
+      fileBuffer: req.file.buffer,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      imei: imei.trim(),
+      dateStr: auditDate || new Date().toISOString().split('T')[0]
+    });
+
+    res.json({
+      success: true,
+      message: `อัปโหลดรูปถ่ายสำหรับ IMEI ${imei} ขึ้น Google Drive สำเร็จ`,
+      fileId: driveResult.fileId,
+      url: driveResult.url || driveResult.webViewLink,
+      webViewLink: driveResult.webViewLink,
+      webContentLink: driveResult.webContentLink,
+      fileName: driveResult.fileName
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const driveImageCache = new Map();
+
+const proxyDriveImage = async (req, res, next) => {
+  try {
+    const { fileId } = req.params;
+    if (!fileId) {
+      return res.status(400).send('Missing fileId');
+    }
+
+    if (driveImageCache.has(fileId)) {
+      const cached = driveImageCache.get(fileId);
+      res.setHeader('Content-Type', cached.contentType || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      return res.send(cached.buffer);
+    }
+
+    const { getAccessToken } = require('../config/googleDrive');
+    const accessToken = await getAccessToken();
+
+    const https = require('https');
+    const googleReq = https.request(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    }, (googleRes) => {
+      if (googleRes.statusCode >= 200 && googleRes.statusCode < 300) {
+        const contentType = googleRes.headers['content-type'] || 'image/jpeg';
+        const chunks = [];
+
+        googleRes.on('data', (chunk) => chunks.push(chunk));
+        googleRes.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          if (buffer.length > 0) {
+            driveImageCache.set(fileId, { contentType, buffer });
+          }
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+          res.send(buffer);
+        });
+      } else if (googleRes.statusCode === 429) {
+        res.redirect(`https://drive.google.com/file/d/${fileId}/view`);
+      } else {
+        res.redirect(`https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`);
+      }
+    });
+
+    googleReq.on('error', () => {
+      res.redirect(`https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`);
+    });
+
+    googleReq.end();
+  } catch (err) {
+    res.redirect(`https://drive.google.com/thumbnail?id=${req.params.fileId}&sz=w1000`);
+  }
+};
+
 module.exports = {
   getBranchExpectedStock,
   submitBranchAudit,
   getHqDashboard,
-  verifyOrRejectAudit
+  verifyOrRejectAudit,
+  uploadImeiImage,
+  proxyDriveImage
 };

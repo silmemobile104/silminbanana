@@ -36,27 +36,16 @@
         <form id="login-form">
           <div class="form-group">
             <label for="login-username">ชื่อผู้ใช้งาน (Username)</label>
-            <input type="text" id="login-username" class="form-control" placeholder="เช่น admin" required value="admin">
+            <input type="text" id="login-username" class="form-control">
           </div>
           <div class="form-group">
             <label for="login-password">รหัสผ่าน (Password)</label>
-            <input type="password" id="login-password" class="form-control" placeholder="••••••••" required value="Admin@123456">
+            <input type="password" id="login-password" class="form-control">
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
             <i class="fa-solid fa-right-to-bracket"></i> เข้าสู่ระบบ POS
           </button>
         </form>
-
-        <div style="margin-top: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: var(--radius-md); font-size: 0.8rem; color: var(--text-muted);">
-          <div style="font-weight: 700; color: #fbbf24; margin-bottom: 0.4rem;">⚡ ปุ่มทางลัดทดสอบสิทธิ์ผู้ใช้งาน (กดเพื่อกรอก Username):</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="fillLogin('admin', 'Admin@123456')">ผู้ดูแลระบบ (admin)</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="fillLogin('auditor', 'Staff@123456')">ฝ่ายสต็อกส่วนกลาง (auditor)</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="fillLogin('staff.b1', 'Staff@123456')">พนักงานสาขา 1 (staff.b1)</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="fillLogin('staff.b2', 'Staff@123456')">พนักงานสาขา 2 (staff.b2)</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="fillLogin('tech', 'Staff@123456')">ฝ่ายเทคนิค (tech)</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -66,7 +55,7 @@
       <aside class="sidebar">
         <div class="sidebar-header">
           <div class="brand-logo" style="font-size: 1.35rem; justify-content: flex-start; display:flex; align-items:center; gap:0.6rem;">
-            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:32px; width:32px; object-fit:contain;"> Silmin POS
+            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:32px; width:32px; object-fit:contain;"> Silmin Banana
           </div>
         </div>
 
@@ -80,7 +69,13 @@
           <li>
             <a class="nav-link" data-view="pos">
               <i class="fa-solid fa-cash-register"></i>
-              <span class="nav-text">ขายสินค้า & ออกใบเสร็จ (POS)</span>
+              <span class="nav-text">ขายสินค้า</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" data-view="finance">
+              <i class="fa-solid fa-coins"></i>
+              <span class="nav-text">รายงานการเงิน</span>
             </a>
           </li>
           <li>
@@ -92,7 +87,7 @@
           <li>
             <a class="nav-link" data-view="hq-audit">
               <i class="fa-solid fa-clipboard-check"></i>
-              <span class="nav-text">ตรวจสอบสต็อก (ส่วนกลาง)</span>
+              <span class="nav-text">ตรวจสอบสต็อก</span>
             </a>
           </li>
           <li>
@@ -108,21 +103,21 @@
             </a>
           </li>
           <li>
+            <a class="nav-link" data-view="receipt-verification">
+              <i class="fa-solid fa-clipboard-check"></i>
+              <span class="nav-text">ตรวจสอบรายการรับสินค้าเข้าสต็อก</span>
+            </a>
+          </li>
+          <li>
             <a class="nav-link" data-view="transfers">
               <i class="fa-solid fa-arrow-right-arrow-left"></i>
               <span class="nav-text">โอนย้ายสินค้าระหว่างสาขา</span>
             </a>
           </li>
           <li>
-            <a class="nav-link" data-view="products">
-              <i class="fa-solid fa-mobile-screen"></i>
-              <span class="nav-text">ข้อมูลหลักสินค้า Master</span>
-            </a>
-          </li>
-          <li>
             <a class="nav-link" data-view="master-settings">
               <i class="fa-solid fa-sliders"></i>
-              <span class="nav-text">ตั้งค่าตัวเลือก Master</span>
+              <span class="nav-text">ตั้งค่าตัวเลือกสินค้า</span>
             </a>
           </li>
           <li>

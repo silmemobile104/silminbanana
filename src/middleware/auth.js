@@ -15,8 +15,14 @@ const authenticateToken = async (req, res, next) => {
     return res.status(500).json({ success: false, message: 'การตั้งค่าระบบความปลอดภัยไม่ถูกต้อง' });
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, jwtSecret);
+    decoded = jwt.verify(token, jwtSecret);
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่' });
+  }
+
+  try {
     const user = await User.findById(decoded.id).populate('branch');
 
     if (!user || !user.isActive) {
@@ -26,7 +32,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    return res.status(401).json({ success: false, message: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่' });
+    next(err);
   }
 };
 

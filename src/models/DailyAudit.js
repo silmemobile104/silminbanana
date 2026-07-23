@@ -39,6 +39,11 @@ const auditItemSchema = new mongoose.Schema({
   }],
   unexpectedImeis: [{
     type: String
+  }],
+  imeiImages: [{
+    imei: String,
+    fileId: String,
+    url: String
   }]
 }, { _id: false });
 

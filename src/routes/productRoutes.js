@@ -15,5 +15,11 @@ router.post(
   upload.single('image'), 
   productController.createProduct
 );
+router.put(
+  '/:id', 
+  authenticateToken, 
+  authorize('admin', 'hq_stock_staff', 'purchase_staff'), 
+  productController.updateProduct
+);
 
 module.exports = router;

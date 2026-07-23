@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const Stock = require('../models/Stock');
 const AuditLog = require('../models/AuditLog');
 const { uploadToCloudinary } = require('../config/cloudinary');
 
@@ -90,8 +91,77 @@ const createProduct = async (req, res, next) => {
   }
 };
 
+const updateProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { sku, name, brand, model, capacity, color, variation, category, purchase_price, selling_price, hasImei } = req.body;
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลหลักสินค้าที่ต้องการแก้ไข' });
+    }
+
+    const newSku = sku ? sku.trim().toUpperCase() : product.sku;
+
+    // Check SKU duplicate if changed
+    if (newSku !== product.sku) {
+      const existingSKU = await Product.findOne({ sku: newSku, _id: { $ne: id } });
+      if (existingSKU) {
+        return res.status(400).json({ success: false, message: `รหัส SKU "${newSku}" มีในระบบอยู่แล้ว` });
+      }
+
+      // Update Stock records matching old SKU
+      await Stock.updateMany({ product: id }, { sku: newSku });
+    }
+
+    let finalVariation = variation || '';
+    if (capacity && color) {
+      finalVariation = `${capacity} - ${color}`;
+    } else if (capacity) {
+      finalVariation = capacity;
+    } else if (color) {
+      finalVariation = color;
+    } else {
+      finalVariation = product.variation;
+    }
+
+    product.sku = newSku;
+    if (name) product.name = name.trim();
+    if (brand) product.brand = brand.trim();
+    if (model) product.model = model.trim();
+    if (capacity !== undefined) product.capacity = capacity.trim();
+    if (color !== undefined) product.color = color.trim();
+    product.variation = finalVariation;
+    if (category) product.category = category.trim();
+    if (purchase_price !== undefined) product.purchase_price = Number(purchase_price);
+    if (selling_price !== undefined) product.selling_price = Number(selling_price);
+    if (hasImei !== undefined) product.hasImei = Boolean(hasImei);
+
+    await product.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'UPDATE_PRODUCT_MASTER',
+      entity: 'Product',
+      entityId: product._id.toString(),
+      details: { sku: product.sku, name: product.name }
+    });
+
+    res.json({
+      success: true,
+      message: `แก้ไขข้อมูลหลักสินค้า Master SKU "${product.sku}" สำเร็จ`,
+      product
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAllProducts,
   getProductById,
-  createProduct
+  createProduct,
+  updateProduct
 };

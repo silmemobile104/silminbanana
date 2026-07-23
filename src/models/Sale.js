@@ -26,10 +26,12 @@ const saleSchema = new mongoose.Schema({
     sku: { type: String, required: true },
     productName: { type: String, required: true },
     imei: { type: String, default: '' },
+    costPrice: { type: Number, default: 0 },
     unitPrice: { type: Number, required: true },
     quantity: { type: Number, default: 1 },
     discount: { type: Number, default: 0 },
-    totalPrice: { type: Number, required: true }
+    totalPrice: { type: Number, required: true },
+    profit: { type: Number, default: 0 }
   }],
   subtotal: {
     type: Number,
@@ -43,10 +45,24 @@ const saleSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  totalCost: {
+    type: Number,
+    default: 0
+  },
+  totalProfit: {
+    type: Number,
+    default: 0
+  },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'transfer', 'credit_card'],
+    enum: ['cash', 'transfer', 'credit_card', 'finance'],
     default: 'cash'
+  },
+  financeDetails: {
+    companyName: { type: String, default: '' },
+    payoutStatus: { type: String, enum: ['pending_payout', 'received', 'not_applicable'], default: 'not_applicable' },
+    payoutReceivedDate: { type: Date, default: null },
+    payoutRemarks: { type: String, default: '' }
   },
   receivedAmount: {
     type: Number,
