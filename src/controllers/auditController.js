@@ -24,14 +24,29 @@ const getBranchExpectedStock = async (req, res, next) => {
         
         const existingItem = existingAudit && existingAudit.items ? existingAudit.items.find(i => i.sku === st.sku) : null;
 
+        let scannedImeis = existingItem ? existingItem.scannedImeis || [] : [];
+        let imeiImages = existingItem ? existingItem.imeiImages || [] : [];
+
+        // Exclude IMEIs marked as 'resubmit' by HQ so staff count resets
+        if (existingItem && existingItem.imeiDecisions && existingItem.imeiDecisions.length > 0) {
+          const resubmitImeis = existingItem.imeiDecisions
+            .filter(d => d.decision === 'resubmit')
+            .map(d => d.imei);
+          
+          if (resubmitImeis.length > 0) {
+            scannedImeis = scannedImeis.filter(im => !resubmitImeis.includes(im));
+            imeiImages = imeiImages.filter(img => !resubmitImeis.includes(img.imei));
+          }
+        }
+
         return {
           product: st.product._id,
           sku: st.sku,
           productName: st.product.name,
           expectedCount: st.quantity,
           expectedImeis: activeImeis,
-          scannedImeis: existingItem ? existingItem.scannedImeis || [] : [],
-          imeiImages: existingItem ? existingItem.imeiImages || [] : []
+          scannedImeis,
+          imeiImages
         };
       });
 
@@ -182,15 +197,45 @@ const getHqDashboard = async (req, res, next) => {
       }
     });
 
+    // Fetch real-time expected stocks from Stock collection for fallback calculations
+    const allStocks = await Stock.find({ quantity: { $gt: 0 } }).populate('product');
+    const branchStocksMap = new Map();
+    allStocks.forEach(st => {
+      if (st.branch && st.product) {
+        const bId = st.branch.toString();
+        if (!branchStocksMap.has(bId)) {
+          branchStocksMap.set(bId, []);
+        }
+        const activeImeis = st.imei_serials
+          ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
+          : [];
+        branchStocksMap.get(bId).push({
+          product: st.product._id,
+          sku: st.sku,
+          productName: st.product.name,
+          expectedCount: st.quantity,
+          actualCount: 0,
+          variance: -st.quantity,
+          expectedImeis: activeImeis,
+          scannedImeis: [],
+          missingImeis: activeImeis,
+          unexpectedImeis: [],
+          imeiImages: []
+        });
+      }
+    });
+
     const branchSummaries = branches.map(branch => {
-      const audit = auditMap.get(branch._id.toString());
+      const bIdStr = branch._id.toString();
+      const audit = auditMap.get(bIdStr);
       
       let status = 'ยังไม่ได้ส่งรายงาน';
       let totalExpected = 0;
       let totalActual = 0;
       let totalVariance = 0;
-      let colorCode = 'gray';
+      let colorCode = 'yellow';
       let hasVariance = false;
+      let items = [];
 
       if (audit) {
         const rawStatus = audit.status;
@@ -198,6 +243,7 @@ const getHqDashboard = async (req, res, next) => {
         totalActual = audit.totalActual;
         totalVariance = audit.totalVariance;
         hasVariance = totalVariance !== 0;
+        items = audit.items || [];
 
         if (rawStatus === 'Verified') {
           status = 'ตรวจสอบแล้ว';
@@ -209,6 +255,15 @@ const getHqDashboard = async (req, res, next) => {
           status = 'รอการตรวจสอบ';
           colorCode = hasVariance ? 'red' : 'green';
         }
+      } else {
+        const fallbackItems = branchStocksMap.get(bIdStr) || [];
+        totalExpected = fallbackItems.reduce((sum, i) => sum + i.expectedCount, 0);
+        totalActual = 0;
+        totalVariance = totalExpected;
+        hasVariance = totalExpected > 0;
+        status = 'ยังไม่ได้ส่งรายงาน';
+        colorCode = 'yellow';
+        items = fallbackItems;
       }
 
       return {
@@ -227,11 +282,11 @@ const getHqDashboard = async (req, res, next) => {
         totalExpected,
         totalActual,
         totalVariance,
-        submittedBy: audit && audit.submittedBy ? audit.submittedBy.username : null,
+        submittedBy: audit && audit.submittedBy ? (audit.submittedBy.fullName || audit.submittedBy.username) : null,
         submittedAt: audit ? audit.updatedAt : null,
         hqComments: audit ? audit.hqComments : '',
-        hqVerifiedBy: audit && audit.hqVerifiedBy ? audit.hqVerifiedBy.username : null,
-        items: audit ? audit.items : []
+        hqVerifiedBy: audit && audit.hqVerifiedBy ? (audit.hqVerifiedBy.fullName || audit.hqVerifiedBy.username) : null,
+        items
       };
     });
 
@@ -395,11 +450,111 @@ const proxyDriveImage = async (req, res, next) => {
   }
 };
 
+const saveImeiDecision = async (req, res, next) => {
+  try {
+    const { auditDate, branchId, imei, decision } = req.body;
+    if (!auditDate || !branchId || !imei || !decision) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุ วันที่, สาขา, IMEI และผลการลงความเห็น' });
+    }
+
+    let audit = await DailyAudit.findOne({ auditDate, branch: branchId });
+    if (!audit) {
+      audit = new DailyAudit({
+        auditDate,
+        branch: branchId,
+        submittedBy: req.user._id,
+        items: [],
+        totalExpected: 0,
+        totalActual: 0,
+        totalVariance: 0
+      });
+    }
+
+    let foundItem = false;
+    for (const item of audit.items) {
+      const hasImei = item.sku === imei ||
+        (item.scannedImeis && item.scannedImeis.includes(imei)) ||
+        (item.expectedImeis && item.expectedImeis.includes(imei));
+      if (hasImei) {
+        foundItem = true;
+        item.imeiDecisions = item.imeiDecisions || [];
+        const existingIdx = item.imeiDecisions.findIndex(d => d.imei === imei);
+        if (existingIdx >= 0) {
+          item.imeiDecisions[existingIdx].decision = decision;
+          item.imeiDecisions[existingIdx].updatedAt = new Date();
+        } else {
+          item.imeiDecisions.push({ imei, decision, updatedAt: new Date() });
+        }
+        // If decision is 'resubmit', reset/remove this imei from scannedImeis & imeiImages, and recalculate actualCount & variance!
+        if (decision === 'resubmit') {
+          if (item.scannedImeis && item.scannedImeis.includes(imei)) {
+            item.scannedImeis = item.scannedImeis.filter(im => im !== imei);
+          }
+          if (item.imeiImages && item.imeiImages.length > 0) {
+            item.imeiImages = item.imeiImages.filter(img => img.imei !== imei);
+          }
+          item.actualCount = item.scannedImeis ? item.scannedImeis.length : 0;
+          item.variance = item.actualCount - item.expectedCount;
+        }
+
+        break;
+      }
+    }
+
+    if (!foundItem) {
+      audit.items.push({
+        product: req.user._id,
+        sku: imei,
+        productName: imei,
+        expectedCount: 1,
+        actualCount: decision === 'resubmit' ? 0 : 1,
+        variance: decision === 'resubmit' ? -1 : 0,
+        scannedImeis: decision === 'resubmit' ? [] : [imei],
+        imeiDecisions: [{ imei, decision, updatedAt: new Date() }]
+      });
+    }
+
+    // Recalculate audit totals
+    let totalExp = 0;
+    let totalAct = 0;
+    let totalVar = 0;
+    audit.items.forEach(it => {
+      totalExp += it.expectedCount || 0;
+      totalAct += it.actualCount || 0;
+      totalVar += Math.abs(it.variance || 0);
+    });
+
+    audit.totalExpected = totalExp;
+    audit.totalActual = totalAct;
+    audit.totalVariance = totalVar;
+
+    await audit.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'AUDIT_ITEM_DECISION',
+      entity: 'DailyAudit',
+      entityId: audit._id.toString(),
+      details: { auditDate, imei, decision }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `บันทึกผลการลงความเห็น IMEI ${imei}: ${decision} ลงฐานข้อมูลสำเร็จ`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getBranchExpectedStock,
   submitBranchAudit,
   getHqDashboard,
   verifyOrRejectAudit,
   uploadImeiImage,
-  proxyDriveImage
+  proxyDriveImage,
+  saveImeiDecision
 };

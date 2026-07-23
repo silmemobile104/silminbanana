@@ -15,5 +15,6 @@ router.post('/upload-imei-image', authenticateToken, upload.single('image'), aud
 router.get('/drive-image/:fileId', auditController.proxyDriveImage);
 router.get('/dashboard', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.getHqDashboard);
 router.post('/verify/:id', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.verifyOrRejectAudit);
+router.post('/decision', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.saveImeiDecision);
 
 module.exports = router;

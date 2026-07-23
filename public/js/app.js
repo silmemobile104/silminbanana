@@ -370,7 +370,7 @@ async function renderDashboardView() {
               <div class="audit-stats">
                 <div class="stat-item">
                   <div class="stat-val">${b.totalExpected}</div>
-                  <div class="stat-lbl">คาดการณ์</div>
+                  <div class="stat-lbl">จำนวนสินค้า</div>
                 </div>
                 <div class="stat-item">
                   <div class="stat-val">${b.totalActual}</div>
@@ -683,7 +683,7 @@ async function renderPosView(selectedBranchId = null) {
               <label for="pos-finance-company" style="font-size:0.82rem; font-weight:700; color:#c084fc;">
                 <i class="fa-solid fa-file-contract"></i> ชื่อบริษัทไฟแนนซ์ / สถาบันการเงิน (จำเป็น)
               </label>
-              <input type="text" id="pos-finance-company" class="form-control" placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" style="margin-top:0.4rem;" value="SG Capital">
+              <input type="text" id="pos-finance-company" class="form-control" placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" style="margin-top:0.4rem;" value="Banana">
               <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* รายการขายจัดไฟแนนซ์จะเข้าสู่สถานะ "รอรับเงินจากไฟแนนซ์" ในเมนูการเงิน</span>
             </div>
 
@@ -1131,7 +1131,7 @@ async function renderFinanceView(filterParams = {}) {
             <tr>
               <th>เลขที่ใบเสร็จ / วันเวลา</th>
               <th>สาขา & ลูกค้า</th>
-              <th>รายการสินค้า (SKU & IMEI)</th>
+              <th>รายการสินค้า (IMEI)</th>
               <th>ช่องทางชำระเงิน</th>
               <th>ราคาต้นทุน (บาท)</th>
               <th>ราคาขาย (บาท)</th>
@@ -1142,7 +1142,7 @@ async function renderFinanceView(filterParams = {}) {
           <tbody>
             ${sales.length === 0 ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
             ${sales.map(s => {
-              const itemsStr = (s.items || []).map(i => `${i.productName} (SKU: ${i.sku}${i.imei ? ' | IMEI: ' + i.imei : ''})`).join('<br>');
+              const itemsStr = (s.items || []).map(i => `${i.productName} (${i.imei})`).join('<br>');
               const isFinance = s.paymentMethod === 'finance';
               const finDetails = s.financeDetails || {};
               const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
@@ -1554,7 +1554,7 @@ async function loadHqAuditGrid(dateStr) {
         <div class="audit-stats">
           <div class="stat-item">
             <div class="stat-val">${b.totalExpected}</div>
-            <div class="stat-lbl">คาดการณ์</div>
+            <div class="stat-lbl">จำนวนสินค้า</div>
           </div>
           <div class="stat-item">
             <div class="stat-val">${b.totalActual}</div>
@@ -1573,13 +1573,9 @@ async function loadHqAuditGrid(dateStr) {
         </div>
 
         <div style="display:flex; gap:0.5rem;">
-          ${b.auditId ? `
-            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="inspectBranchAudit('${b.auditId}')">
-              <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรายละเอียด
-            </button>
-          ` : `
-            <span style="font-size:0.8rem; color:var(--text-muted); font-style:italic;">รอพนักงานหน้าร้านส่งผลการนับ</span>
-          `}
+          <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="inspectBranchAudit('${b.branch.id}')">
+            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรายละเอียดสต็อก
+          </button>
         </div>
       </div>
     `).join('');
@@ -1588,14 +1584,14 @@ async function loadHqAuditGrid(dateStr) {
   }
 }
 
-async function inspectBranchAudit(auditId) {
-  window.currentInspectedAuditId = auditId;
+async function inspectBranchAudit(targetId) {
+  window.currentInspectedAuditId = targetId;
   openModal('กำลังโหลดรายละเอียดการนับสต็อก...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
 
   try {
     const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
     const res = await apiRequest(`/audit/dashboard?date=${todayStr}`);
-    const branchItem = res.summary.branches.find(b => b.auditId === auditId);
+    const branchItem = res.summary.branches.find(b => b.auditId === targetId || b.branch.id === targetId);
 
     if (!branchItem) {
       openModal('เกิดข้อผิดพลาด', '<p style="color:#ef4444;">ไม่พบข้อมูลการนับสต็อก</p>');
@@ -1604,9 +1600,10 @@ async function inspectBranchAudit(auditId) {
 
     const items = (branchItem.items || []).filter(item => (item.expectedCount > 0 || item.actualCount > 0));
 
-    if (!window.hqAuditInspectionState || window.hqAuditInspectionState.auditId !== auditId) {
+    if (!window.hqAuditInspectionState || window.hqAuditInspectionState.auditId !== targetId) {
       window.hqAuditInspectionState = {
-        auditId,
+        auditId: targetId,
+        branchId: branchItem.branch.id,
         items,
         viewedPhotos: new Set(),
         verifiedImeis: new Set(),
@@ -1617,9 +1614,20 @@ async function inspectBranchAudit(auditId) {
       };
     } else {
       window.hqAuditInspectionState.items = items;
+      window.hqAuditInspectionState.branchId = branchItem.branch.id;
     }
 
     items.forEach(item => {
+      (item.imeiDecisions || []).forEach(d => {
+        if (d.decision === 'passed') {
+          window.hqAuditInspectionState.verifiedImeis.add(d.imei);
+        } else if (d.decision === 'failed') {
+          window.hqAuditInspectionState.failedImeis.add(d.imei);
+        } else if (d.decision === 'resubmit') {
+          window.hqAuditInspectionState.resubmitImeis.add(d.imei);
+        }
+      });
+
       (item.scannedImeis || []).forEach(imei => {
         window.hqAuditInspectionState.allScannedImeis.add(imei);
         const imgObj = (item.imeiImages || []).find(img => img.imei === imei);
@@ -1645,7 +1653,7 @@ async function inspectBranchAudit(auditId) {
           <thead>
             <tr>
               <th>รหัส SKU / ชื่อสินค้า</th>
-              <th>จำนวนคาดการณ์</th>
+              <th>จำนวนสินค้า</th>
               <th>จำนวนนับจริง</th>
               <th>ยอดที่ขาด/เกิน</th>
               <th>รายการ IMEI ที่สแกน & ผลการตรวจสอบรูปถ่าย</th>
@@ -1711,21 +1719,10 @@ async function inspectBranchAudit(auditId) {
           </tbody>
         </table>
       </div>
-
-      <div class="form-group">
-        <label for="hq-audit-comments">ข้อคิดเห็น / เหตุผลการอนุมัติหรือปฏิเสธ (HQ Auditor):</label>
-        <textarea id="hq-audit-comments" class="form-control" rows="2" placeholder="ระบุเหตุผลหรือข้อสังเกตเพิ่มเติม...">${branchItem.hqComments || ''}</textarea>
-      </div>
     `;
-
-    const isHqOrAdmin = ['admin', 'hq_stock_staff'].includes(state.user.role);
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-      ${isHqOrAdmin ? `
-        <button class="btn btn-danger" onclick="submitHqAuditAction('${auditId}', 'Reject')"><i class="fa-solid fa-xmark"></i> ปฏิเสธการตรวจสอบ (ข้อมูลไม่ตรง)</button>
-        <button class="btn btn-success" onclick="submitHqAuditAction('${auditId}', 'Verify')"><i class="fa-solid fa-check"></i> อนุมัติการตรวจสอบถูกต้อง</button>
-      ` : ''}
     `;
 
     openModal(`ตรวจสอบการนับสต็อก - ${branchItem.branch.name}`, bodyHtml, footerHtml);
@@ -1860,8 +1857,11 @@ function openFullscreenImageModal(imgUrl, imei, productName, sku) {
   openModal(`ขยายรูปถ่ายสินค้า - IMEI: ${imei}`, lightboxHtml, `<button class="btn btn-secondary" onclick="openImeiInspectionModal('${imei}', '${imgUrl.replace(/'/g, "\\'")}', '${(productName || '').replace(/'/g, "\\'")}', '${sku}')"><i class="fa-solid fa-arrow-left"></i> ย้อนกลับไปลงความเห็น</button>`);
 }
 
-function setItemDecision(imei, decision) {
+async function setItemDecision(imei, decision) {
   if (!window.hqAuditInspectionState) return;
+
+  const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
+  const branchId = window.hqAuditInspectionState.branchId || window.currentInspectedAuditId;
 
   if (decision === 'passed') {
     window.hqAuditInspectionState.verifiedImeis.add(imei);
@@ -1878,6 +1878,18 @@ function setItemDecision(imei, decision) {
     window.hqAuditInspectionState.failedImeis.delete(imei);
     window.hqAuditInspectionState.resubmitImeis.add(imei);
     showToast(`ลงความเห็น IMEI ${imei}: ให้ส่งตรวจใหม่`, 'warning');
+  }
+
+  // Save decision into MongoDB Database
+  try {
+    await apiRequest('/audit/decision', 'POST', {
+      auditDate: todayStr,
+      branchId,
+      imei,
+      decision
+    });
+  } catch (err) {
+    console.warn('Unable to persist decision:', err);
   }
 
   if (window.currentInspectedAuditId) {
@@ -1926,6 +1938,7 @@ async function renderBranchAuditView() {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังดึงรายการสินค้าคงคลังสาขา...</div>`;
 
   const userBranchId = state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null);
+  window.stagedGoodsReceiptItems = window.stagedGoodsReceiptItems || [];
   
   try {
     const res = await apiRequest(`/audit/expected?branchId=${userBranchId}`);
@@ -1962,7 +1975,7 @@ async function renderBranchAuditView() {
           <thead>
             <tr>
               <th>รหัส SKU / ชื่อสินค้า</th>
-              <th>จำนวนคาดการณ์</th>
+              <th>จำนวนสินค้า</th>
               <th>จำนวนนับได้จริง</th>
               <th>ยอดที่ขาด/เกิน</th>
             </tr>
@@ -2292,34 +2305,40 @@ async function renderGoodsReceiptView() {
     const initialName = generateAutoName(initialBrand, initialModel, initialCapacity, initialColor);
 
     container.innerHTML = `
+      <!-- Entry Card -->
       <div class="card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
         <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก
+          <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (คละรุ่น / คละความจุ / คละสี)
         </h3>
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1.5rem;">
-          กรอกตัวเลือกข้อมูลสินค้า ปริมาณสินค้า และระบุหมายเลข IMEI/ซีเรียล (ฝ่ายจัดซื้อ/สต็อกส่วนกลางจะเข้ามาตรวจสอบตั้งราคาและยืนยันเข้าสต็อกจริงในภายหลัง)
+          เลือกรุ่น สเปกสินค้า และกรอกหมายเลข IMEI แล้วกดปุ่ม <strong>"+ เพิ่มเข้ารายการคละ"</strong> เพื่อคละสินค้าต่างรุ่น/สีในรอบเดียวกันได้ไม่จำกัด
         </p>
 
-        <form id="goods-receipt-form">
-          <div class="form-group">
-            <label for="gr-branch">สาขาที่รับสินค้าเข้าสต็อก</label>
-            <select id="gr-branch" class="form-select" required>
-              ${userBranches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
-            </select>
+        <div class="form-group">
+          <label for="gr-branch">สาขาที่รับสินค้าเข้าสต็อก</label>
+          <select id="gr-branch" class="form-select" required>
+            ${userBranches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
+          </select>
+        </div>
+
+        <!-- Add Item Box -->
+        <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem;">
+          <div style="font-weight:700; color:#38bdf8; font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
+            <i class="fa-solid fa-plus-circle"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
           </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
             <div class="form-group">
-              <label for="gr-brand">ยี่ห้อ (เลือกจาก Master List)</label>
-              <select id="gr-brand" class="form-select" onchange="recalculateGrAutoFields()" required>
+              <label for="gr-brand">ยี่ห้อ</label>
+              <select id="gr-brand" class="form-select" onchange="recalculateGrAutoFields()">
                 <option value="">-- เลือกยี่ห้อ --</option>
                 ${brands.map(b => `<option value="${b.value}">${b.value}</option>`).join('')}
               </select>
             </div>
 
             <div class="form-group">
-              <label for="gr-model">ชื่อรุ่น (เลือกจาก Master List)</label>
-              <select id="gr-model" class="form-select" onchange="recalculateGrAutoFields()" required>
+              <label for="gr-model">ชื่อรุ่น</label>
+              <select id="gr-model" class="form-select" onchange="recalculateGrAutoFields()">
                 <option value="">-- เลือกชื่อรุ่น --</option>
                 ${models.map(m => `<option value="${m.value}">${m.value}</option>`).join('')}
               </select>
@@ -2328,63 +2347,86 @@ async function renderGoodsReceiptView() {
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
             <div class="form-group">
-              <label for="gr-capacity">ความจุ (เลือกจาก Master List)</label>
-              <select id="gr-capacity" class="form-select" onchange="recalculateGrAutoFields()" required>
+              <label for="gr-capacity">ความจุ</label>
+              <select id="gr-capacity" class="form-select" onchange="recalculateGrAutoFields()">
                 <option value="">-- เลือกความจุ --</option>
                 ${capacities.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
               </select>
             </div>
 
             <div class="form-group">
-              <label for="gr-color">สีสินค้า (เลือกจาก Master List)</label>
-              <select id="gr-color" class="form-select" onchange="recalculateGrAutoFields()" required>
+              <label for="gr-color">สีสินค้า</label>
+              <select id="gr-color" class="form-select" onchange="recalculateGrAutoFields()">
                 <option value="">-- เลือกสีสินค้า --</option>
                 ${colors.map(cl => `<option value="${cl.value}">${cl.value}</option>`).join('')}
               </select>
             </div>
           </div>
 
-          <div class="form-group">
-            <label for="gr-category">หมวดหมู่สินค้า (เลือกจาก Master List)</label>
-            <select id="gr-category" class="form-select" required>
-              <option value="">-- เลือกหมวดหมู่ --</option>
-              ${categories.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
-            </select>
-          </div>
-
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="form-group">
+              <label for="gr-category">หมวดหมู่สินค้า</label>
+              <select id="gr-category" class="form-select">
+                <option value="">-- เลือกหมวดหมู่ --</option>
+                ${categories.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
+              </select>
+            </div>
+
             <div class="form-group">
               <label for="gr-name">ชื่อสินค้าแบบเต็ม (ประกอบให้อัตโนมัติ)</label>
               <input type="text" id="gr-name" class="form-control" value="${initialName}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" readonly>
             </div>
+          </div>
 
-            <div class="form-group">
-              <label for="gr-sku">รหัสสินค้า SKU (รันให้อัตโนมัติ)</label>
-              <input type="text" id="gr-sku" class="form-control" value="ใช้เลข IMEI แต่ละเครื่อง เป็น รหัส SKU อัตโนมัติ" style="font-weight:700; color:#38bdf8; background:rgba(0,0,0,0.3);" readonly>
+          <div class="form-group" style="margin-bottom:0.8rem;">
+            <label for="gr-single-imei">หมายเลขซีเรียล / IMEI <span style="color:#ef4444;">*</span></label>
+            <div style="display:flex; gap:0.8rem;">
+              <input type="text" id="gr-single-imei" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI" style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:1.05rem;" onkeypress="if(event.key==='Enter'){ event.preventDefault(); addStagedGoodsReceiptItem(); }">
+              <button type="button" class="btn btn-warning" onclick="addStagedGoodsReceiptItem()" style="white-space:nowrap; font-weight:700;">
+                <i class="fa-solid fa-cart-plus"></i> + เพิ่มเข้ารายการคละ
+              </button>
             </div>
           </div>
+        </div>
 
-          <div class="form-group">
-            <label for="gr-quantity">จำนวนสินค้าที่รับเข้า (ชิ้น)</label>
-            <input type="number" id="gr-quantity" class="form-control" min="1" max="100" value="1" oninput="generateImeiInputs()" onchange="generateImeiInputs()" required>
-          </div>
-
-          <div class="form-group">
-            <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-              <span>หมายเลขซีเรียล / IMEI (สร้างช่องป้อนแยกตามจำนวนสินค้าที่รับเข้า)</span>
-              <span id="gr-imei-count-badge" class="badge badge-gold">1 เครื่อง</span>
-            </label>
-
-            <div id="gr-imei-inputs-container" style="display:flex; flex-direction:column; gap:0.6rem; margin-top:0.6rem; max-height:300px; overflow-y:auto; padding-right:0.3rem;">
-              <!-- Dynamic individual IMEI TextBoxes -->
+        <!-- Staged Items Table -->
+        <div style="margin-bottom:1.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+            <div style="font-weight:700; color:#fff; font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
+              <i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
+              <span id="staged-count-badge" class="badge badge-gold" style="font-size:0.8rem;">${(window.stagedGoodsReceiptItems || []).length} เครื่อง</span>
             </div>
+            ${(window.stagedGoodsReceiptItems || []).length > 0 ? `
+              <button type="button" class="btn btn-sm btn-danger" onclick="clearAllStagedGoodsReceiptItems()">
+                <i class="fa-solid fa-trash-can"></i> ล้างรายการทั้งหมด
+              </button>
+            ` : ''}
           </div>
 
-          <div style="margin-top: 1.5rem; display:flex; justify-content:flex-end; gap:0.8rem;">
-            <button type="button" class="btn btn-secondary" onclick="navigateTo('dashboard')">ยกเลิก</button>
-            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> บันทึกรายการรับสินค้าเข้าสต็อก</button>
+          <div class="table-container" style="background:rgba(0,0,0,0.2); border-radius:6px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:40px; text-align:center;">#</th>
+                  <th>รายละเอียดสินค้า</th>
+                  <th>หมวดหมู่</th>
+                  <th>หมายเลข IMEI / ซีเรียล</th>
+                  <th style="text-align:center; width:80px;">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="staged-items-tbody">
+                <!-- Rendered by renderStagedItemsTable() -->
+              </tbody>
+            </table>
           </div>
-        </form>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.8rem;">
+          <button type="button" class="btn btn-secondary" onclick="navigateTo('dashboard')">ยกเลิก</button>
+          <button type="button" id="submit-batch-gr-btn" class="btn btn-primary" onclick="submitBatchGoodsReceipt()" style="padding:0.65rem 1.4rem; font-size:0.95rem; font-weight:700;" ${(window.stagedGoodsReceiptItems || []).length === 0 ? 'disabled' : ''}>
+            <i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${(window.stagedGoodsReceiptItems || []).length} รายการ)
+          </button>
+        </div>
       </div>
 
       <!-- History & Editing Section -->
@@ -2463,51 +2505,7 @@ async function renderGoodsReceiptView() {
       </div>
     `;
 
-    generateImeiInputs();
-
-    document.getElementById('goods-receipt-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const branchId = document.getElementById('gr-branch').value;
-      const brand = document.getElementById('gr-brand').value;
-      const model = document.getElementById('gr-model').value;
-      const capacity = document.getElementById('gr-capacity').value;
-      const color = document.getElementById('gr-color').value;
-      const category = document.getElementById('gr-category').value;
-      const quantity = parseInt(document.getElementById('gr-quantity').value);
-
-      const imeiInputs = document.querySelectorAll('.gr-imei-input');
-      const imeiSerials = Array.from(imeiInputs).map(input => input.value.trim()).filter(v => v);
-
-      if (!brand || !model || !category) {
-        showToast('กรุณาเลือก ยี่ห้อ, ชื่อรุ่น และ หมวดหมู่สินค้า', 'error');
-        return;
-      }
-
-      if (imeiSerials.length === 0) {
-        showToast('กรุณาระบุหมายเลข IMEI/ซีเรียลอย่างน้อย 1 เครื่อง', 'error');
-        return;
-      }
-
-      try {
-        const res = await apiRequest('/stock/receive', 'POST', {
-          branchId,
-          brand,
-          model,
-          capacity,
-          color,
-          category,
-          quantity,
-          imeiSerials
-        });
-
-        if (res.success) {
-          showToast(res.message);
-          renderGoodsReceiptView();
-        }
-      } catch (err) {
-        // Handled
-      }
-    });
+    renderStagedItemsTable();
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444;">${err.message}</div>`;
   }
@@ -2655,6 +2653,318 @@ async function deleteGoodsReceiptItem(receiptId) {
     const res = await apiRequest(`/stock/receipts/${receiptId}`, 'DELETE');
     if (res.success) {
       showToast(res.message);
+      closeModal();
+      renderGoodsReceiptView();
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+function renderStagedItemsTable() {
+  const tbody = document.getElementById('staged-items-tbody');
+  const countBadge = document.getElementById('staged-count-badge');
+  const submitBtn = document.getElementById('submit-batch-gr-btn');
+  const items = window.stagedGoodsReceiptItems || [];
+
+  if (countBadge) countBadge.innerText = `${items.length} เครื่อง`;
+  if (submitBtn) {
+    submitBtn.disabled = items.length === 0;
+    submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${items.length} รายการ)`;
+  }
+
+  if (!tbody) return;
+
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:1.5rem; font-style:italic;">ยังไม่มีรายการสินค้าคละในตาราง (กรอกข้อมูลสเปกสินค้าและ IMEI แล้วกด "+ เพิ่มเข้ารายการคละ")</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map((it, idx) => `
+    <tr>
+      <td style="text-align:center; font-weight:700;">${idx + 1}</td>
+      <td>
+        <strong style="color:#34d399;">${it.name}</strong><br>
+        <span style="font-size:0.78rem; color:var(--text-muted);">${it.brand} | ${it.model} ${it.capacity ? '| ' + it.capacity : ''} ${it.color ? '| ' + it.color : ''}</span>
+      </td>
+      <td><span class="badge badge-gray">${it.category}</span></td>
+      <td><span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.95rem;">${it.imei}</span></td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button type="button" class="btn btn-sm btn-warning" onclick="openEditStagedItemModal(${idx})" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-right:0.3rem;">
+          <i class="fa-solid fa-pen"></i> แก้ไข
+        </button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="removeStagedGoodsReceiptItem(${idx})" style="padding:0.25rem 0.5rem; font-size:0.75rem;">
+          <i class="fa-solid fa-xmark"></i> ลบ
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openEditStagedItemModal(idx) {
+  const items = window.stagedGoodsReceiptItems || [];
+  const it = items[idx];
+  if (!it) return;
+
+  const { brands = [], models = [], capacities = [], colors = [], categories = [] } = state.masterOptions || {};
+
+  const bodyHtml = `
+    <form id="edit-staged-item-form" onsubmit="event.preventDefault(); submitEditStagedItem(${idx});">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+        <div class="form-group">
+          <label for="edit-staged-brand">ยี่ห้อ</label>
+          <select id="edit-staged-brand" class="form-select" onchange="recalculateEditStagedAutoFields()" required>
+            ${brands.map(b => `<option value="${b.value}" ${b.value === it.brand ? 'selected' : ''}>${b.value}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-staged-model">ชื่อรุ่น</label>
+          <select id="edit-staged-model" class="form-select" onchange="recalculateEditStagedAutoFields()" required>
+            ${models.map(m => `<option value="${m.value}" ${m.value === it.model ? 'selected' : ''}>${m.value}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+        <div class="form-group">
+          <label for="edit-staged-capacity">ความจุ</label>
+          <select id="edit-staged-capacity" class="form-select" onchange="recalculateEditStagedAutoFields()">
+            <option value="">-- ไม่ระบุ --</option>
+            ${capacities.map(c => `<option value="${c.value}" ${c.value === it.capacity ? 'selected' : ''}>${c.value}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-staged-color">สีสินค้า</label>
+          <select id="edit-staged-color" class="form-select" onchange="recalculateEditStagedAutoFields()">
+            <option value="">-- ไม่ระบุ --</option>
+            ${colors.map(cl => `<option value="${cl.value}" ${cl.value === it.color ? 'selected' : ''}>${cl.value}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-staged-category">หมวดหมู่สินค้า</label>
+        <select id="edit-staged-category" class="form-select" required>
+          ${categories.map(c => `<option value="${c.value}" ${c.value === it.category ? 'selected' : ''}>${c.value}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-staged-name">ชื่อสินค้าแบบเต็ม</label>
+        <input type="text" id="edit-staged-name" class="form-control" value="${it.name}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" readonly>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-staged-imei">หมายเลขซีเรียล / IMEI</label>
+        <input type="text" id="edit-staged-imei" class="form-control" value="${it.imei}" style="font-family:monospace; font-weight:700; color:#fbbf24;" required>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="button" class="btn btn-primary" onclick="submitEditStagedItem(${idx})">
+      <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+    </button>
+  `;
+
+  openModal(`แก้ไขรายการในตารางคละ (#${idx + 1})`, bodyHtml, footerHtml);
+}
+
+function recalculateEditStagedAutoFields() {
+  const brand = document.getElementById('edit-staged-brand') ? document.getElementById('edit-staged-brand').value : '';
+  const model = document.getElementById('edit-staged-model') ? document.getElementById('edit-staged-model').value : '';
+  const capacity = document.getElementById('edit-staged-capacity') ? document.getElementById('edit-staged-capacity').value : '';
+  const color = document.getElementById('edit-staged-color') ? document.getElementById('edit-staged-color').value : '';
+
+  const nameInput = document.getElementById('edit-staged-name');
+  if (nameInput) {
+    nameInput.value = generateAutoName(brand, model, capacity, color);
+  }
+}
+
+function submitEditStagedItem(idx) {
+  const brand = document.getElementById('edit-staged-brand').value;
+  const model = document.getElementById('edit-staged-model').value;
+  const capacity = document.getElementById('edit-staged-capacity').value;
+  const color = document.getElementById('edit-staged-color').value;
+  const category = document.getElementById('edit-staged-category').value;
+  const imei = document.getElementById('edit-staged-imei').value.trim();
+
+  if (!brand || !model || !category || !imei) {
+    showToast('กรุณากรอกข้อมูลยี่ห้อ, รุ่น, หมวดหมู่ และ IMEI ให้ครบถ้วน', 'error');
+    return;
+  }
+
+  // Check duplicate IMEI in other staged items
+  const existsOther = window.stagedGoodsReceiptItems.some((it, i) => i !== idx && it.imei === imei);
+  if (existsOther) {
+    showToast(`หมายเลข IMEI/ซีเรียล (${imei}) นี้ซ้ำกับรายการอื่นในตาราง`, 'error');
+    return;
+  }
+
+  const name = generateAutoName(brand, model, capacity, color);
+
+  window.stagedGoodsReceiptItems[idx] = {
+    brand,
+    model,
+    capacity,
+    color,
+    category,
+    name,
+    imei
+  };
+
+  closeModal();
+  renderStagedItemsTable();
+  showToast(`อัปเดตรายการ #${idx + 1} เรียบร้อยแล้ว`, 'success');
+}
+
+function addStagedGoodsReceiptItem() {
+  const brand = document.getElementById('gr-brand') ? document.getElementById('gr-brand').value : '';
+  const model = document.getElementById('gr-model') ? document.getElementById('gr-model').value : '';
+  const capacity = document.getElementById('gr-capacity') ? document.getElementById('gr-capacity').value : '';
+  const color = document.getElementById('gr-color') ? document.getElementById('gr-color').value : '';
+  const category = document.getElementById('gr-category') ? document.getElementById('gr-category').value : '';
+  const imeiInput = document.getElementById('gr-single-imei');
+  const imei = imeiInput ? imeiInput.value.trim() : '';
+
+  if (!brand || !model || !category) {
+    showToast('กรุณาเลือก ยี่ห้อ, ชื่อรุ่น และ หมวดหมู่สินค้าให้เรียบร้อยก่อนกดเพิ่ม', 'error');
+    return;
+  }
+
+  if (!imei) {
+    showToast('กรุณาระบุหมายเลข IMEI / ซีเรียลของเครื่องที่จะรับเข้า', 'error');
+    if (imeiInput) imeiInput.focus();
+    return;
+  }
+
+  window.stagedGoodsReceiptItems = window.stagedGoodsReceiptItems || [];
+
+  const existsInStaged = window.stagedGoodsReceiptItems.some(it => it.imei === imei);
+  if (existsInStaged) {
+    showToast(`หมายเลข IMEI/ซีเรียล (${imei}) นี้มีอยู่ในรายการคละที่เตรียมรับเข้าแล้ว`, 'error');
+    return;
+  }
+
+  const name = generateAutoName(brand, model, capacity, color);
+
+  window.stagedGoodsReceiptItems.push({
+    brand,
+    model,
+    capacity,
+    color,
+    category,
+    name,
+    imei
+  });
+
+  if (imeiInput) {
+    imeiInput.value = '';
+    imeiInput.focus();
+  }
+
+  renderStagedItemsTable();
+  showToast(`+ เพิ่ม ${name} (IMEI: ${imei}) เข้ารายการคละเรียบร้อยแล้ว`, 'success');
+}
+
+function removeStagedGoodsReceiptItem(idx) {
+  window.stagedGoodsReceiptItems = window.stagedGoodsReceiptItems || [];
+  if (idx >= 0 && idx < window.stagedGoodsReceiptItems.length) {
+    window.stagedGoodsReceiptItems.splice(idx, 1);
+    renderStagedItemsTable();
+  }
+}
+
+function clearAllStagedGoodsReceiptItems() {
+  if (!confirm('คุณต้องการล้างรายการสินค้าคละทั้งหมดใช่หรือไม่?')) return;
+  window.stagedGoodsReceiptItems = [];
+  renderStagedItemsTable();
+}
+
+function submitBatchGoodsReceipt() {
+  const items = window.stagedGoodsReceiptItems || [];
+  const branchSelect = document.getElementById('gr-branch');
+  const branchName = branchSelect && branchSelect.options[branchSelect.selectedIndex] ? branchSelect.options[branchSelect.selectedIndex].text : 'สาขาของฉัน';
+  const branchId = branchSelect ? branchSelect.value : null;
+
+  if (items.length === 0) {
+    showToast('กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการก่อนกดบันทึก', 'error');
+    return;
+  }
+
+  const bodyHtml = `
+    <div style="margin-bottom:1rem; background:rgba(255,193,7,0.1); border:1px solid rgba(255,193,7,0.3); padding:0.8rem 1rem; border-radius:6px;">
+      <div style="font-weight:700; color:#fbbf24; font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)
+      </div>
+      <div style="font-size:0.85rem; color:var(--text-muted);">
+        สาขาที่รับเข้า: <strong style="color:#fff;">${branchName}</strong> | จำนวนสินค้ารวม: <strong style="color:#38bdf8;">${items.length} เครื่อง</strong>
+      </div>
+    </div>
+
+    <p style="font-size:0.85rem; margin-bottom:0.8rem;">กรุณาตรวจสอบรายชื่อและหมายเลข IMEI สินค้าทั้งหมดที่จะรับเข้าสต็อกก่อนยืนยัน:</p>
+
+    <div class="table-container" style="max-height: 320px; overflow-y: auto; background:rgba(0,0,0,0.25); border-radius:6px; margin-bottom:1rem;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:40px; text-align:center;">#</th>
+            <th>ชื่อสินค้า</th>
+            <th>หมวดหมู่</th>
+            <th>หมายเลข IMEI / ซีเรียล</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((it, idx) => `
+            <tr>
+              <td style="text-align:center; font-weight:700;">${idx + 1}</td>
+              <td>
+                <strong style="color:#34d399;">${it.name}</strong><br>
+                <span style="font-size:0.75rem; color:var(--text-muted);">${it.brand} | ${it.model}</span>
+              </td>
+              <td><span class="badge badge-gray" style="font-size:0.7rem;">${it.category}</span></td>
+              <td><span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.9rem;">${it.imei}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">
+      <i class="fa-solid fa-arrow-left"></i> ยกเลิก / กลับไปแก้ไข
+    </button>
+    <button type="button" class="btn btn-primary" onclick="confirmSubmitBatchGoodsReceipt('${branchId}')" style="font-weight:700; background:#059669; border-color:#059669;">
+      <i class="fa-solid fa-check-double"></i> ยืนยันบันทึกเข้าสต็อกจริง (${items.length} รายการ)
+    </button>
+  `;
+
+  openModal(`ตรวจสอบและยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)`, bodyHtml, footerHtml);
+}
+
+async function confirmSubmitBatchGoodsReceipt(branchId) {
+  const items = window.stagedGoodsReceiptItems || [];
+
+  if (items.length === 0) {
+    showToast('ไม่พบรายการสินค้า', 'error');
+    closeModal();
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/stock/receive', 'POST', {
+      branchId,
+      items
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      window.stagedGoodsReceiptItems = [];
       closeModal();
       renderGoodsReceiptView();
     }
