@@ -179,8 +179,8 @@ function navigateTo(viewName) {
 
   switch (viewName) {
     case 'dashboard':
-      heading.innerText = 'แผงควบคุมภาพรวมระบบคลังสินค้า';
-      subheading.innerText = 'สรุปยอดสินค้าคงคลังและสถานะการนับสต็อกประจำวันของทั้ง 5 สาขา';
+      heading.innerText = 'แดชบอร์ดผู้บริหาร (Executive Dashboard)';
+      subheading.innerText = 'สรุปยอดขาย ประสิทธิภาพรายสาขา มูลค่าสต็อกสินค้าคงคลัง และสถานะการนับสต็อกประจำวันเรียลไทม์';
       renderDashboardView();
       break;
     case 'pos':
@@ -312,46 +312,165 @@ function initAppSession() {
    ========================================================================== */
 async function renderDashboardView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดภาพรวมระบบ...</div>`;
+  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร (Executive Dashboard)...</span></div>`;
 
   try {
     const todayStr = new Date().toISOString().split('T')[0];
-    const [stockRes, auditRes] = await Promise.all([
-      apiRequest('/stock/all'),
+    const [execRes, auditRes] = await Promise.all([
+      apiRequest('/pos/executive-dashboard'),
       apiRequest(`/audit/dashboard?date=${todayStr}`)
     ]);
 
-    const totalProductsInStock = stockRes.stock ? stockRes.stock.reduce((sum, item) => sum + item.quantity, 0) : 0;
+    const stats = execRes.executiveStats || {};
     const branchesSummary = auditRes.summary ? auditRes.summary.branches : [];
     const pendingAuditsCount = auditRes.summary ? auditRes.summary.pendingCount : 0;
+    const submittedCount = auditRes.summary ? auditRes.summary.submittedCount : 0;
 
-    const userRole = state.user ? state.user.role : 'branch_staff';
-    const allowedViews = ROLE_ALLOWED_VIEWS[userRole] || ['dashboard'];
+    const todayRevenue = stats.todayRevenue || 0;
+    const todayProfit = stats.todayProfit || 0;
+    const todayBills = stats.todayBills || 0;
+    const todayCashRevenue = stats.todayCashRevenue || 0;
+    const todayFinanceRevenue = stats.todayFinanceRevenue || 0;
+    const totalStockItems = stats.totalStockItems || 0;
+    const totalStockValue = stats.totalStockValue || 0;
+    const branchPerformance = stats.branchPerformance || [];
+    const topSellingProducts = stats.topSellingProducts || [];
+    const lowStockAlerts = stats.lowStockAlerts || [];
 
     container.innerHTML = `
-      <div class="grid-cards">
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:600;">สินค้าคงเหลือรวมทั้งระบบ</span>
-            <i class="fa-solid fa-boxes-stacked" style="color: var(--accent-primary); font-size:1.4rem;"></i>
-          </div>
-          <div style="font-size: 2.2rem; font-weight:800;">${totalProductsInStock.toLocaleString()} <span style="font-size:0.9rem; color:var(--text-muted);">ชิ้น</span></div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top:0.3rem;">ครอบคลุมทั้ง 5 สาขาที่เปิดใช้งาน</p>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem;">
+        <div>
+          <h3 style="font-size:1.25rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);"></i> ภาพรวมแดชบอร์ดผู้บริหาร (Executive Dashboard)
+          </h3>
+          <p style="font-size:0.85rem; color:var(--text-muted);">วิเคราะห์สถิติจำนวนสินค้า ยอดขาย รายได้ และสถานะการนับสต็อกเรียลไทม์</p>
         </div>
 
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:600;">สถานะนับสต็อกวันนี้ (ส่วนกลาง)</span>
-            <i class="fa-solid fa-clipboard-check" style="color: var(--accent-gold); font-size:1.4rem;"></i>
-          </div>
-          <div style="font-size: 2.2rem; font-weight:800; color: ${pendingAuditsCount > 0 ? '#fbbf24' : '#34d399'};">
-            ${auditRes.summary ? auditRes.summary.submittedCount : 0} / 5 <span style="font-size:0.9rem; color:var(--text-muted);">สาขาส่งแล้ว</span>
-          </div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top:0.3rem;">${pendingAuditsCount} สาขารอการตรวจสอบจากส่วนกลาง</p>
+        <div>
+          <button class="btn btn-primary" onclick="openExecutiveReportModal()" style="padding:0.6rem 1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 14px rgba(99,102,241,0.4);">
+            <i class="fa-solid fa-file-invoice-dollar"></i> ดูรายงานสรุปผู้บริหาร
+          </button>
         </div>
       </div>
 
-      <div class="card" style="margin-top: 1.5rem;">
+      <!-- Executive KPI Cards Grid -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        
+        <!-- KPI 1: Today Revenue -->
+        <div class="card" style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.04)); border: 1px solid rgba(16,185,129,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">ยอดขายรวมวันนี้</span>
+            <i class="fa-solid fa-sack-dollar" style="color:#34d399; font-size:1.5rem;"></i>
+          </div>
+          <div style="font-size:2.2rem; font-weight:800; color:#34d399;">฿${todayRevenue.toLocaleString()}</div>
+          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
+            สด/โอน: <strong style="color:#fff;">฿${todayCashRevenue.toLocaleString()}</strong> | ไฟแนนซ์: <strong style="color:#fbbf24;">฿${todayFinanceRevenue.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        <!-- KPI 2: Today Bills -->
+        <div class="card" style="background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(56,189,248,0.04)); border: 1px solid rgba(56,189,248,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">บิลขายวันนี้</span>
+            <i class="fa-solid fa-receipt" style="color:#38bdf8; font-size:1.5rem;"></i>
+          </div>
+          <div style="font-size:2.2rem; font-weight:800; color:#38bdf8;">${todayBills} <span style="font-size:0.95rem; color:var(--text-muted);">บิล</span></div>
+          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
+            ประมาณการกำไร: <strong style="color:#34d399;">฿${todayProfit.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        <!-- KPI 3: Total Stock Value -->
+        <div class="card" style="background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(99,102,241,0.04)); border: 1px solid rgba(99,102,241,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">มูลค่าสต็อกสินค้าคงเหลือ</span>
+            <i class="fa-solid fa-boxes-stacked" style="color:#818cf8; font-size:1.5rem;"></i>
+          </div>
+          <div style="font-size:2.2rem; font-weight:800; color:#fff;">฿${totalStockValue.toLocaleString()}</div>
+          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
+            สินค้าคงคลัง: <strong style="color:#38bdf8;">${totalStockItems.toLocaleString()}</strong> เครื่อง (5 สาขา)
+          </div>
+        </div>
+
+        <!-- KPI 4: Daily Audit Status -->
+        <div class="card" style="background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.04)); border: 1px solid rgba(251,191,36,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">สถานะนับสต็อกประจำวัน</span>
+            <i class="fa-solid fa-clipboard-check" style="color:#fbbf24; font-size:1.5rem;"></i>
+          </div>
+          <div style="font-size:2.2rem; font-weight:800; color:${pendingAuditsCount > 0 ? '#fbbf24' : '#34d399'};">
+            ${submittedCount} / 5 <span style="font-size:0.95rem; color:var(--text-muted);">สาขาส่งแล้ว</span>
+          </div>
+          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
+            ${pendingAuditsCount} สาขารอตรวจสอบจากส่วนกลาง
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts & Widgets Middle Grid -->
+      <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1.2rem; margin-bottom:1.5rem; align-items:stretch;">
+        
+        <!-- Interactive Chart: Revenue & Stock Value per Branch -->
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก 5 สาขา
+            </h3>
+            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#34d399;"></i> ข้อมูลประจำวันวันนี้</span>
+          </div>
+          <div style="position:relative; flex:1; min-height:260px;">
+            <canvas id="executive-branch-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Right Side Widgets: Top Selling & Low Stock Alerts -->
+        <div style="display:flex; flex-direction:column; gap:1.2rem;">
+          
+          <!-- Top Selling Products Widget -->
+          <div class="card" style="flex:1;">
+            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
+              <i class="fa-solid fa-fire" style="color:#f97316;"></i> สินค้าขายดีประจำวัน Top 5
+            </h4>
+            <div style="font-size:0.82rem;">
+              ${topSellingProducts.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:1rem 0; text-align:center;">ยังไม่มีรายการขายในวันนี้</div>' : ''}
+              ${topSellingProducts.map((p, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+                  <div>
+                    <strong style="color:#fff;">${idx + 1}. ${p.productName}</strong>
+                  </div>
+                  <div style="text-align:right;">
+                    <span class="badge badge-green" style="font-size:0.75rem;">${p.quantity} เครื่อง</span>
+                    <div style="font-weight:700; color:#34d399; font-size:0.8rem; margin-top:0.1rem;">฿${p.revenue.toLocaleString()}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Low Stock Alerts Widget -->
+          <div class="card" style="flex:1;">
+            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#f87171; display:flex; align-items:center; gap:0.4rem;">
+              <i class="fa-solid fa-triangle-exclamation"></i> แจ้งเตือนสินค้าสต็อกต่ำ (เหลือ ≤ 2)
+            </h4>
+            <div style="font-size:0.8rem; max-height:140px; overflow-y:auto;">
+              ${lowStockAlerts.length === 0 ? '<div style="color:#34d399; font-style:italic; padding:0.5rem 0;">ไม่มีสินค้าสต็อกต่ำในขณะนี้ ทุกสาขามีสต็อกเพียงพอ</div>' : ''}
+              ${lowStockAlerts.map(item => `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:rgba(248,113,113,0.08); border-radius:6px; margin-bottom:0.4rem; border:1px solid rgba(248,113,113,0.2);">
+                  <div>
+                    <strong style="color:#fff;">${item.productName}</strong>
+                    <div style="font-size:0.73rem; color:var(--text-muted);">${item.branchName} • SKU: ${item.sku}</div>
+                  </div>
+                  <span class="badge badge-red" style="font-weight:800; font-size:0.82rem;">เหลือ ${item.quantity} เครื่อง</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Real-time 5-Branch Operational & Audit Health Grid -->
+      <div class="card" style="margin-bottom: 1.5rem;">
         <h3 style="font-size: 1.1rem; font-weight:700; margin-bottom: 1rem; display:flex; align-items:center; gap:0.5rem;">
           <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สถานะการนับสต็อกประจำวันเรียลไทม์ 5 สาขา (${todayStr})
         </h3>
@@ -391,9 +510,298 @@ async function renderDashboardView() {
         </div>
       </div>
     `;
+
+    // Render Chart.js Chart
+    setTimeout(() => {
+      const ctx = document.getElementById('executive-branch-chart');
+      if (ctx && window.Chart) {
+        const labels = branchPerformance.map(b => b.name.replace('บานาน่า ', ''));
+        const revenues = branchPerformance.map(b => b.revenue);
+        const stockValues = branchPerformance.map(b => b.stockValue);
+
+        new window.Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels.length > 0 ? labels : ['เบตง', 'ยะลา', 'ปัตตานี', 'นราธิวาส', 'หาดใหญ่'],
+            datasets: [
+              {
+                label: 'ยอดขายวันนี้ (บาท)',
+                data: revenues.length > 0 ? revenues : [0, 0, 0, 0, 0],
+                backgroundColor: 'rgba(52, 211, 153, 0.75)',
+                borderColor: '#34d399',
+                borderWidth: 1,
+                borderRadius: 4
+              },
+              {
+                label: 'มูลค่าสต็อกคงเหลือ (บาท)',
+                data: stockValues.length > 0 ? stockValues : [0, 0, 0, 0, 0],
+                backgroundColor: 'rgba(99, 102, 241, 0.5)',
+                borderColor: '#818cf8',
+                borderWidth: 1,
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#e2e8f0', font: { family: 'Prompt', size: 12 } }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#94a3b8', font: { family: 'Prompt' } },
+                grid: { color: 'rgba(255,255,255,0.05)' }
+              },
+              y: {
+                ticks: { color: '#94a3b8', font: { family: 'Prompt' } },
+                grid: { color: 'rgba(255,255,255,0.08)' }
+              }
+            }
+          }
+        });
+      }
+    }, 100);
+
   } catch (err) {
-    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดภาพรวมระบบ: ${err.message}</div>`;
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดผู้บริหาร: ${err.message}</div>`;
   }
+}
+
+/* ==========================================================================
+   EXECUTIVE HISTORICAL REPORT MODAL (POP-UP)
+   ========================================================================== */
+async function openExecutiveReportModal(startDate = null, endDate = null) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const startVal = startDate || todayStr;
+  const endVal = endDate || todayStr;
+
+  const modalTitle = `📊 สรุปรายงานผู้บริหาร (Executive Report)`;
+
+  openModal(modalTitle, `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังรวบรวมรายงานสรุปผู้บริหาร (${startVal} ถึง ${endVal})...</span></div>`);
+
+  try {
+    const res = await apiRequest(`/pos/executive-report?startDate=${startVal}&endDate=${endVal}`);
+    const data = res.summary || {};
+
+    const totalRev = data.totalRevenue || 0;
+    const totalProf = data.totalProfit || 0;
+    const margin = data.profitMargin || 0;
+    const totalBills = data.totalBills || 0;
+    const aov = data.averageOrderValue || 0;
+    const cashRev = data.cashRevenue || 0;
+    const finRev = data.financeRevenue || 0;
+    const branchPerf = data.branchPerformance || [];
+    const topProducts = data.topProducts || [];
+
+    const bodyHtml = `
+      <div style="padding:0.2rem;">
+        
+        <!-- Filter Controls Bar at top of Modal -->
+        <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
+            
+            <!-- Quick Presets -->
+            <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+              <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-right:0.3rem;">เลือกช่วงวัน:</span>
+              <button class="btn btn-sm ${startVal === todayStr && endVal === todayStr ? 'btn-primary' : 'btn-secondary'}" onclick="triggerReportPreset('today')">วันนี้</button>
+              <button class="btn btn-sm btn-secondary" onclick="triggerReportPreset('7days')">7 วันล่าสุด</button>
+              <button class="btn btn-sm btn-secondary" onclick="triggerReportPreset('thisMonth')">เดือนนี้</button>
+              <button class="btn btn-sm btn-secondary" onclick="triggerReportPreset('lastMonth')">เดือนที่แล้ว</button>
+            </div>
+
+            <!-- Custom Date Range Form -->
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <input type="date" id="exec-modal-start" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${startVal}">
+              <span style="font-size:0.8rem; color:var(--text-muted);">ถึง</span>
+              <input type="date" id="exec-modal-end" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${endVal}">
+              <button class="btn btn-sm btn-primary" onclick="triggerCustomReportModal()"><i class="fa-solid fa-rotate"></i> แสดงรายงาน</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Report Printable Content -->
+        <div id="executive-printable-report">
+          
+          <!-- Header Sub-Info -->
+          <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.25); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <div>
+              <h4 style="font-size:1.05rem; font-weight:800; color:#fff; margin-bottom:0.15rem;">
+                <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร (Executive Performance Report)
+              </h4>
+              <div style="font-size:0.83rem; color:var(--text-muted);">
+                ประจำช่วงวันที่: <strong style="color:#fbbf24;">${startVal}</strong> ถึง <strong style="color:#fbbf24;">${endVal}</strong>
+              </div>
+            </div>
+            <div style="text-align:right; font-size:0.75rem; color:var(--text-muted);">
+              อัปเดตล่าสุด: ${new Date().toLocaleTimeString('th-TH')}
+            </div>
+          </div>
+
+          <!-- 4 KPI Cards -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:0.8rem; margin-bottom:1.5rem;">
+            
+            <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:0.8rem; border-radius:8px;">
+              <div style="font-size:0.78rem; color:var(--text-muted);">ยอดขายรวมสุทธิ (Total Revenue)</div>
+              <div style="font-size:1.55rem; font-weight:800; color:#34d399; margin:0.2rem 0;">฿${totalRev.toLocaleString()}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">สด/โอน: ฿${cashRev.toLocaleString()} | ไฟแนนซ์: ฿${finRev.toLocaleString()}</div>
+            </div>
+
+            <div style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:0.8rem; border-radius:8px;">
+              <div style="font-size:0.78rem; color:var(--text-muted);">กำไรขั้นต้นรวม (Gross Profit)</div>
+              <div style="font-size:1.55rem; font-weight:800; color:#38bdf8; margin:0.2rem 0;">฿${totalProf.toLocaleString()}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">อัตรากำไร (Margin): <strong style="color:#34d399;">${margin.toFixed(1)}%</strong></div>
+            </div>
+
+            <div style="background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.3); padding:0.8rem; border-radius:8px;">
+              <div style="font-size:0.78rem; color:var(--text-muted);">จำนวนรายการขาย (Total Bills)</div>
+              <div style="font-size:1.55rem; font-weight:800; color:#fbbf24; margin:0.2rem 0;">${totalBills} <span style="font-size:0.8rem;">บิล</span></div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">ยอดเฉลี่ยต่อบิล (AOV): ฿${Math.round(aov).toLocaleString()}</div>
+            </div>
+
+            <div style="background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.3); padding:0.8rem; border-radius:8px;">
+              <div style="font-size:0.78rem; color:var(--text-muted);">สัดส่วนช่องทางชำระเงิน</div>
+              <div style="font-size:1.1rem; font-weight:800; color:#fff; margin:0.3rem 0;">
+                สด/โอน: ${totalRev > 0 ? Math.round((cashRev/totalRev)*100) : 0}% | ไฟแนนซ์: ${totalRev > 0 ? Math.round((finRev/totalRev)*100) : 0}%
+              </div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">ครอบคลุมทั้ง 5 สาขา</div>
+            </div>
+
+          </div>
+
+          <!-- Branch Performance Breakdown Table -->
+          <h5 style="font-size:0.95rem; font-weight:700; color:#38bdf8; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
+            <i class="fa-solid fa-store"></i> 1. สรุปผลงานและยอดขายแยกรายสาขา (5 สาขา)
+          </h5>
+
+          <div class="table-container" style="margin-bottom:1.5rem;">
+            <table class="data-table" style="font-size:0.83rem;">
+              <thead>
+                <tr>
+                  <th>รหัสสาขา / ชื่อสาขา</th>
+                  <th>จำนวนบิลขาย</th>
+                  <th>ยอดขายรวม (บาท)</th>
+                  <th>ต้นทุนรวม (บาท)</th>
+                  <th>กำไรขั้นต้น (บาท)</th>
+                  <th>สัดส่วนยอดขาย</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${branchPerf.length === 0 ? '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:1.5rem;">ไม่พบข้อมูลยอดขายรายสาขาในช่วงวันที่เลือก</td></tr>' : ''}
+                ${branchPerf.map(b => {
+                  const pct = totalRev > 0 ? Math.round((b.revenue / totalRev) * 100) : 0;
+                  return `
+                    <tr>
+                      <td><strong>${b.name}</strong> (${b.code})</td>
+                      <td><strong style="font-size:0.95rem;">${b.bills}</strong> บิล</td>
+                      <td><strong style="color:#34d399;">฿${b.revenue.toLocaleString()}</strong></td>
+                      <td style="color:var(--text-muted);">฿${b.cost.toLocaleString()}</td>
+                      <td><strong style="color:#38bdf8;">฿${b.profit.toLocaleString()}</strong></td>
+                      <td>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                          <div style="flex:1; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden;">
+                            <div style="width:${pct}%; background:var(--accent-primary); height:100%;"></div>
+                          </div>
+                          <span style="font-weight:700; width:35px; text-align:right;">${pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Top 10 Best Selling Products Table -->
+          <h5 style="font-size:0.95rem; font-weight:700; color:#fbbf24; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
+            <i class="fa-solid fa-trophy"></i> 2. Top 10 สินค้าขายดีที่สุด (ประจำช่วงเวลา)
+          </h5>
+
+          <div class="table-container">
+            <table class="data-table" style="font-size:0.83rem;">
+              <thead>
+                <tr>
+                  <th style="width:50px; text-align:center;">อันดับ</th>
+                  <th>รหัส SKU / ชื่อสินค้า</th>
+                  <th>จำนวนที่ขายได้</th>
+                  <th>ยอดขายรวม (บาท)</th>
+                  <th>กำไรรวม (บาท)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topProducts.length === 0 ? '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:1.5rem;">ไม่พบรายการขายสินค้าในช่วงวันที่เลือก</td></tr>' : ''}
+                ${topProducts.map((p, idx) => `
+                  <tr>
+                    <td style="text-align:center;"><span class="badge badge-${idx < 3 ? 'gold' : 'gray'}" style="font-weight:800;">${idx + 1}</span></td>
+                    <td><strong>${p.productName}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(SKU: ${p.sku})</span></td>
+                    <td><strong style="color:#38bdf8; font-size:0.95rem;">${p.quantity} เครื่อง</strong></td>
+                    <td><strong style="color:#34d399;">฿${p.revenue.toLocaleString()}</strong></td>
+                    <td><strong style="color:#818cf8;">฿${p.profit.toLocaleString()}</strong></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    window.lastExecutiveReportData = data;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+      <button class="btn btn-success" onclick="exportExecutiveReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์รายงาน / Export PDF</button>
+    `;
+
+    openModal(modalTitle, bodyHtml, footerHtml);
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+function triggerReportPreset(presetKey) {
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  let sDate = todayStr;
+  let eDate = todayStr;
+
+  if (presetKey === 'today') {
+    sDate = todayStr;
+    eDate = todayStr;
+  } else if (presetKey === '7days') {
+    const past7 = new Date();
+    past7.setDate(now.getDate() - 6);
+    sDate = past7.toISOString().split('T')[0];
+    eDate = todayStr;
+  } else if (presetKey === 'thisMonth') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    sDate = firstDay.toISOString().split('T')[0];
+    eDate = todayStr;
+  } else if (presetKey === 'lastMonth') {
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    sDate = firstDayLastMonth.toISOString().split('T')[0];
+    eDate = lastDayLastMonth.toISOString().split('T')[0];
+  }
+
+  openExecutiveReportModal(sDate, eDate);
+}
+
+function triggerCustomReportModal() {
+  const sDate = document.getElementById('exec-modal-start').value;
+  const eDate = document.getElementById('exec-modal-end').value;
+
+  if (!sDate || !eDate) {
+    showToast('กรุณาระบุวันที่เริ่มต้นและสิ้นสุดให้ถูกต้อง', 'error');
+    return;
+  }
+
+  openExecutiveReportModal(sDate, eDate);
 }
 
 /* ==========================================================================
@@ -420,7 +828,8 @@ async function renderBranchInventoryView(selectedBranchId = null) {
           <p style="font-size:0.85rem; color:var(--text-muted);">แสดงรายการสินค้าที่มีอยู่จริง พร้อมจำนวนและหมายเลขซีเรียล/IMEI ในสาขานี้เท่านั้น</p>
         </div>
 
-        <div style="display:flex; align-items:center; gap:1rem;">
+        <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+          <button class="btn btn-success" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
@@ -516,7 +925,7 @@ async function renderPosView(selectedBranchId = null) {
   try {
     const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
-    const stockList = res.stock || [];
+    const stockList = (res.stock || []).filter(st => st.quantity > 0);
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
     const isAdminOrHq = ['admin', 'hq_stock_staff'].includes(state.user.role);
@@ -1514,6 +1923,7 @@ async function renderHqAuditView() {
         <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เลือกวันที่:</label>
         <input type="date" id="hq-audit-date-picker" class="form-control" style="width:auto;" value="${todayStr}">
         <button class="btn btn-primary btn-sm" id="load-hq-audit-btn"><i class="fa-solid fa-rotate"></i> รีเฟรช</button>
+        <button class="btn btn-success btn-sm" onclick="exportBranchAuditToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
       </div>
     </div>
 
@@ -2440,7 +2850,10 @@ async function renderGoodsReceiptView() {
               รายการที่ขึ้นสถานะ <span class="badge badge-yellow" style="font-size:0.7rem;">🟡 รอตั้งราคา / ยืนยัน</span> สามารถกดแก้ไขข้อมูล/IMEI ได้ ก่อนที่ฝ่ายจัดซื้อจะยืนยันเข้าสต็อกจริง
             </p>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+            <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
+          </div>
         </div>
 
         <div class="table-container">
@@ -2464,7 +2877,7 @@ async function renderGoodsReceiptView() {
                 const dateStr = new Date(r.createdAt).toLocaleString('th-TH');
 
                 return `
-                  <tr>
+                  <tr class="receipt-history-row">
                     <td>
                       <strong style="color:#38bdf8;">${r.receiptNumber}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
@@ -3302,7 +3715,10 @@ async function renderTransfersView() {
           <h3 style="font-size:1.1rem; font-weight:700;">จัดการโอนย้ายสินค้าระหว่างสาขา</h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">ส่งคำขอโอนย้ายสินค้า และพิมพ์เอกสาร "ใบโอนย้ายสินค้าระหว่างสาขา"</p>
         </div>
-        <button class="btn btn-primary btn-sm" id="create-transfer-btn"><i class="fa-solid fa-plus"></i> สร้างคำขอโอนย้ายใหม่</button>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <button class="btn btn-success btn-sm" onclick="exportTransfersHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          <button class="btn btn-primary btn-sm" id="create-transfer-btn"><i class="fa-solid fa-plus"></i> สร้างคำขอโอนย้ายใหม่</button>
+        </div>
       </div>
 
       <div class="table-container">
@@ -3321,7 +3737,7 @@ async function renderTransfersView() {
           <tbody>
             ${transfers.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">ไม่พบรายการโอนย้ายสินค้า</td></tr>` : ''}
             ${transfers.map(t => `
-              <tr>
+              <tr class="transfer-history-row">
                 <td><strong>${t.transferNumber}</strong></td>
                 <td>${t.fromBranch ? t.fromBranch.name : 'ไม่ระบุ'}</td>
                 <td>${t.toBranch ? t.toBranch.name : 'ไม่ระบุ'}</td>
@@ -3535,9 +3951,12 @@ async function renderProductMasterView() {
           <h3 style="font-size:1.1rem; font-weight:700;">ข้อมูลหลักสินค้า (Product Master Catalog)</h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">ระบบจะประกอบ <strong>ชื่อสินค้าแบบเต็ม</strong> และ <strong>รหัส SKU</strong> ให้อัตโนมัติจากตัวเลือก Master Data</p>
         </div>
-        ${canAddProduct ? `
-          <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus"></i> เพิ่ม Master SKU ใหม่</button>
-        ` : ''}
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <button class="btn btn-success btn-sm" onclick="exportProductsMasterToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          ${canAddProduct ? `
+            <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus"></i> เพิ่ม Master SKU ใหม่</button>
+          ` : ''}
+        </div>
       </div>
 
       <div class="table-container">
@@ -3558,7 +3977,7 @@ async function renderProductMasterView() {
           <tbody>
             ${products.length === 0 ? `<tr><td colspan="${canAddProduct ? 9 : 8}" style="text-align:center; color:var(--text-muted);">ยังไม่มีการลงทะเบียนสินค้าในระบบ</td></tr>` : ''}
             ${products.map(p => `
-              <tr>
+              <tr class="product-master-row">
                 <td style="text-align:center; font-size:1.4rem; color:var(--accent-primary);">
                   <i class="fa-solid fa-mobile-screen-button"></i>
                 </td>
@@ -4339,6 +4758,184 @@ async function submitEditEmp(id) {
   } catch (err) {
     // Handled
   }
+}
+
+/* ==========================================================================
+   GLOBAL EXCEL EXPORT SYSTEM (SHEETJS / XLSX.JS)
+   ========================================================================== */
+function exportToExcel(dataArray, fileName, sheetName = 'Sheet1') {
+  if (!dataArray || dataArray.length === 0) {
+    showToast('ไม่พบข้อมูลสำหรับส่งออกไฟล์ Excel', 'warning');
+    return;
+  }
+  if (!window.XLSX) {
+    showToast('กำลังโหลดโมดูล Export Excel กรุณาลองใหม่อีกครั้ง', 'error');
+    return;
+  }
+
+  try {
+    const worksheet = XLSX.utils.json_to_sheet(dataArray);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Format auto column widths
+    const max_width = dataArray.reduce((w, r) => {
+      return Object.keys(r).map((k, i) => {
+        const val = String(r[k] || '');
+        return Math.max(w[i] || 12, val.length + 6);
+      });
+    }, []);
+    worksheet['!cols'] = max_width.map(w => ({ wch: w }));
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `${fileName}_${todayStr}.xlsx`);
+    showToast(`ดาวน์โหลดไฟล์ Excel: ${fileName}_${todayStr}.xlsx เรียบร้อยแล้ว`);
+  } catch (err) {
+    showToast(`เกิดข้อผิดพลาดในการส่งออก Excel: ${err.message}`, 'error');
+  }
+}
+
+// 1. Export Executive Report
+function exportExecutiveReportToExcel() {
+  if (!window.lastExecutiveReportData) {
+    showToast('ไม่พบข้อมูลรายงานสำหรับส่งออก Excel', 'warning');
+    return;
+  }
+  const data = window.lastExecutiveReportData;
+
+  const branchRows = (data.branchPerformance || []).map(b => ({
+    'รหัสสาขา': b.code,
+    'ชื่อสาขา': b.name,
+    'จำนวนบิลขาย (บิล)': b.bills,
+    'ยอดขายรวม (บาท)': b.revenue,
+    'ต้นทุนรวม (บาท)': b.cost,
+    'กำไรขั้นต้น (บาท)': b.profit
+  }));
+
+  exportToExcel(branchRows, 'Executive_Report_Branches', 'สรุปยอดขายรายสาขา');
+}
+
+// 2. Export Branch Inventory
+function exportBranchInventoryToExcel() {
+  const rows = Array.from(document.querySelectorAll('.bi-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'รหัส SKU': tds[1] ? tds[1].innerText.trim() : '',
+      'รายการสินค้า': tds[2] ? tds[2].innerText.trim() : '',
+      'ยี่ห้อ / รุ่น': tds[3] ? tds[3].innerText.trim() : '',
+      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : '',
+      'ราคาขาย (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'สถานะสต็อก': tds[6] ? tds[6].innerText.trim() : '',
+      'รายการ IMEI ทั้งหมด': tr.getAttribute('data-search') || ''
+    };
+  });
+  exportToExcel(rows, 'Branch_Inventory_Stock', 'สินค้าคงคลังสาขา');
+}
+
+// 3. Export Goods Receipt History
+function exportGoodsReceiptHistoryToExcel() {
+  const rows = Array.from(document.querySelectorAll('.receipt-history-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'วันที่รับสินค้า': tds[0] ? tds[0].innerText.trim() : '',
+      'เลขที่ใบรับสินค้า': tds[1] ? tds[1].innerText.trim() : '',
+      'สาขา': tds[2] ? tds[2].innerText.trim() : '',
+      'รายการสินค้า': tds[3] ? tds[3].innerText.trim() : '',
+      'หมายเลข IMEI': tds[4] ? tds[4].innerText.trim() : '',
+      'ผู้บันทึก': tds[5] ? tds[5].innerText.trim() : '',
+      'สถานะ': tds[6] ? tds[6].innerText.trim() : ''
+    };
+  });
+  exportToExcel(rows, 'Goods_Receipt_History', 'ประวัติรับสินค้าเข้า');
+}
+
+// 4. Export Branch Audit Inspection
+function exportBranchAuditToExcel() {
+  const rows = Array.from(document.querySelectorAll('.audit-grid .audit-card')).map(card => {
+    const branchName = card.querySelector('.branch-name') ? card.querySelector('.branch-name').innerText : '';
+    const status = card.querySelector('.badge') ? card.querySelector('.badge').innerText : '';
+    const stats = card.querySelectorAll('.stat-val');
+    return {
+      'ชื่อสาขา': branchName,
+      'สถานะการตรวจ': status,
+      'จำนวนสินค้าในคลัง': stats[0] ? stats[0].innerText : '0',
+      'จำนวนนับได้จริง': stats[1] ? stats[1].innerText : '0',
+      'ยอดที่ขาด/เกิน': stats[2] ? stats[2].innerText : '0'
+    };
+  });
+  exportToExcel(rows, 'Daily_Stock_Audit_Summary', 'รายงานนับสต็อกประจำวัน');
+}
+
+// 5. Export Sales POS History
+function exportSalesHistoryToExcel() {
+  const rows = Array.from(document.querySelectorAll('.sales-history-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'วันที่-เวลาขาย': tds[0] ? tds[0].innerText.trim() : '',
+      'เลขที่ใบเสร็จ': tds[1] ? tds[1].innerText.trim() : '',
+      'สาขา': tds[2] ? tds[2].innerText.trim() : '',
+      'ชื่อลูกค้า': tds[3] ? tds[3].innerText.trim() : '',
+      'รายการสินค้า / IMEI': tds[4] ? tds[4].innerText.trim() : '',
+      'ยอดขายรวม (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'วิธีชำระเงิน': tds[6] ? tds[6].innerText.trim() : '',
+      'พนักงานผู้ขาย': tds[7] ? tds[7].innerText.trim() : ''
+    };
+  });
+  exportToExcel(rows, 'Sales_POS_History', 'ประวัติการขายสินค้า');
+}
+
+// 6. Export Financial Profit Report
+function exportFinanceReportToExcel() {
+  const rows = Array.from(document.querySelectorAll('.finance-report-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'วันที่ขาย': tds[0] ? tds[0].innerText.trim() : '',
+      'เลขที่ใบเสร็จ': tds[1] ? tds[1].innerText.trim() : '',
+      'สาขา': tds[2] ? tds[2].innerText.trim() : '',
+      'ชื่อลูกค้า': tds[3] ? tds[3].innerText.trim() : '',
+      'ช่องทางชำระเงิน': tds[4] ? tds[4].innerText.trim() : '',
+      'ยอดขายรวม (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'ต้นทุนรวม (บาท)': tds[6] ? tds[6].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'กำไรสุทธิ (บาท)': tds[7] ? tds[7].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'สถานะการรับเงินไฟแนนซ์': tds[8] ? tds[8].innerText.trim() : ''
+    };
+  });
+  exportToExcel(rows, 'Financial_Profit_Report', 'รายงานการเงินและกำไร');
+}
+
+// 7. Export Product Master Catalog
+function exportProductsMasterToExcel() {
+  const rows = Array.from(document.querySelectorAll('.product-master-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'รหัส SKU': tds[0] ? tds[0].innerText.trim() : '',
+      'ชื่อสินค้า': tds[1] ? tds[1].innerText.trim() : '',
+      'ยี่ห้อ': tds[2] ? tds[2].innerText.trim() : '',
+      'ชื่อรุ่น': tds[3] ? tds[3].innerText.trim() : '',
+      'ความจุ': tds[4] ? tds[4].innerText.trim() : '',
+      'สีสินค้า': tds[5] ? tds[5].innerText.trim() : '',
+      'ราคาซื้อต้นทุน (บาท)': tds[6] ? tds[6].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+      'ราคาขาย (บาท)': tds[7] ? tds[7].innerText.replace('฿', '').replace(/,/g, '').trim() : ''
+    };
+  });
+  exportToExcel(rows, 'Product_Master_Catalog', 'ทะเบียนสินค้าทั้งหมด');
+}
+
+// 8. Export Stock Transfer History
+function exportTransfersHistoryToExcel() {
+  const rows = Array.from(document.querySelectorAll('.transfer-history-row')).map(tr => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      'วันที่ทำรายการ': tds[0] ? tds[0].innerText.trim() : '',
+      'เลขที่ใบโอน': tds[1] ? tds[1].innerText.trim() : '',
+      'สาขาต้นทาง': tds[2] ? tds[2].innerText.trim() : '',
+      'สาขาปลายทาง': tds[3] ? tds[3].innerText.trim() : '',
+      'รายการสินค้า / IMEI': tds[4] ? tds[4].innerText.trim() : '',
+      'ผู้ร้องขอ': tds[5] ? tds[5].innerText.trim() : '',
+      'สถานะการโอน': tds[6] ? tds[6].innerText.trim() : ''
+    };
+  });
+  exportToExcel(rows, 'Stock_Transfer_History', 'ประวัติการโอนย้ายสินค้า');
 }
 
 // Global Initialization

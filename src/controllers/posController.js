@@ -350,10 +350,261 @@ const updateFinancePayoutStatus = async (req, res, next) => {
   }
 };
 
+// Executive Dashboard Analytics
+const getExecutiveDashboard = async (req, res, next) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [todaySales, allStock, branches] = await Promise.all([
+      Sale.find({ createdAt: { $gte: todayStart, $lte: todayEnd } }).populate('branch'),
+      Stock.find({ quantity: { $gt: 0 } }).populate('product').populate('branch'),
+      Branch.find({ is_active: true })
+    ]);
+
+    // 1. Calculate Today's Sales KPIs
+    let todayRevenue = 0;
+    let todayProfit = 0;
+    let todayCashRevenue = 0;
+    let todayFinanceRevenue = 0;
+    let todayBills = todaySales.length;
+
+    const branchSalesMap = {};
+    branches.forEach(b => {
+      branchSalesMap[b._id.toString()] = {
+        branchId: b._id,
+        name: b.name,
+        code: b.code,
+        revenue: 0,
+        bills: 0,
+        stockItems: 0,
+        stockValue: 0
+      };
+    });
+
+    todaySales.forEach(s => {
+      todayRevenue += s.grandTotal || 0;
+      todayProfit += s.totalProfit || 0;
+      if (s.paymentMethod === 'finance') {
+        todayFinanceRevenue += s.grandTotal || 0;
+      } else {
+        todayCashRevenue += s.grandTotal || 0;
+      }
+
+      if (s.branch && branchSalesMap[s.branch._id.toString()]) {
+        branchSalesMap[s.branch._id.toString()].revenue += s.grandTotal || 0;
+        branchSalesMap[s.branch._id.toString()].bills += 1;
+      }
+    });
+
+    // 2. Stock KPIs & Low Stock Alerts
+    let totalStockItems = 0;
+    let totalStockValue = 0;
+    let totalStockCost = 0;
+    const lowStockAlerts = [];
+
+    allStock.forEach(st => {
+      if (st.product && st.quantity > 0) {
+        const qty = st.quantity || 0;
+        const sellPrice = st.product.selling_price || 0;
+        const buyPrice = st.product.purchase_price || 0;
+
+        totalStockItems += qty;
+        totalStockValue += (qty * sellPrice);
+        totalStockCost += (qty * buyPrice);
+
+        if (st.branch && branchSalesMap[st.branch._id.toString()]) {
+          branchSalesMap[st.branch._id.toString()].stockItems += qty;
+          branchSalesMap[st.branch._id.toString()].stockValue += (qty * sellPrice);
+        }
+
+        if (qty <= 2) {
+          lowStockAlerts.push({
+            branchName: st.branch ? st.branch.name : 'สาขาไม่ระบุ',
+            sku: st.sku,
+            productName: st.product.name,
+            brand: st.product.brand || '',
+            quantity: qty,
+            sellingPrice: sellPrice
+          });
+        }
+      }
+    });
+
+    // 3. Top Selling Products
+    const productSalesCount = {};
+    todaySales.forEach(s => {
+      (s.items || []).forEach(it => {
+        const pName = it.productName || it.sku;
+        if (!productSalesCount[pName]) {
+          productSalesCount[pName] = { productName: pName, sku: it.sku, quantity: 0, revenue: 0 };
+        }
+        productSalesCount[pName].quantity += (it.quantity || 1);
+        productSalesCount[pName].revenue += (it.totalPrice || 0);
+      });
+    });
+
+    const topSellingProducts = Object.values(productSalesCount)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    // 4. Recent Sales Transactions
+    const recentSales = todaySales.slice(-5).reverse().map(s => ({
+      receiptNumber: s.receiptNumber,
+      branchName: s.branch ? s.branch.name : '-',
+      customerName: s.customer ? s.customer.name : 'ลูกค้าทั่วไป',
+      grandTotal: s.grandTotal,
+      paymentMethod: s.paymentMethod,
+      time: new Date(s.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+    }));
+
+    res.json({
+      success: true,
+      executiveStats: {
+        todayRevenue,
+        todayProfit,
+        todayBills,
+        todayCashRevenue,
+        todayFinanceRevenue,
+        totalStockItems,
+        totalStockValue,
+        totalStockCost,
+        branchPerformance: Object.values(branchSalesMap),
+        topSellingProducts,
+        lowStockAlerts: lowStockAlerts.slice(0, 10),
+        recentSales
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Executive Report Range API
+const getExecutiveReportRange = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุวันที่เริ่มต้นและสิ้นสุด' });
+    }
+
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const [sales, branches] = await Promise.all([
+      Sale.find({ createdAt: { $gte: start, $lte: end } }).populate('branch').populate('soldBy', 'fullName username'),
+      Branch.find({ is_active: true })
+    ]);
+
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+    let totalBills = sales.length;
+    let cashRevenue = 0;
+    let financeRevenue = 0;
+
+    const branchSummaryMap = {};
+    branches.forEach(b => {
+      branchSummaryMap[b._id.toString()] = {
+        branchId: b._id,
+        name: b.name,
+        code: b.code,
+        revenue: 0,
+        cost: 0,
+        profit: 0,
+        bills: 0
+      };
+    });
+
+    const productSalesMap = {};
+
+    sales.forEach(s => {
+      const gTotal = s.grandTotal || 0;
+      let sCost = s.totalCost || 0;
+      if (!sCost && s.items && s.items.length > 0) {
+        sCost = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
+      }
+      let sProfit = s.totalProfit || (gTotal - sCost);
+
+      totalRevenue += gTotal;
+      totalCost += sCost;
+      totalProfit += sProfit;
+
+      if (s.paymentMethod === 'finance') {
+        financeRevenue += gTotal;
+      } else {
+        cashRevenue += gTotal;
+      }
+
+      if (s.branch && branchSummaryMap[s.branch._id.toString()]) {
+        const bItem = branchSummaryMap[s.branch._id.toString()];
+        bItem.revenue += gTotal;
+        bItem.cost += sCost;
+        bItem.profit += sProfit;
+        bItem.bills += 1;
+      }
+
+      (s.items || []).forEach(it => {
+        const key = it.sku || it.productName;
+        if (!productSalesMap[key]) {
+          productSalesMap[key] = {
+            sku: it.sku,
+            productName: it.productName,
+            quantity: 0,
+            revenue: 0,
+            profit: 0
+          };
+        }
+        const qty = it.quantity || 1;
+        const rev = it.totalPrice || 0;
+        const prof = it.profit || (rev - ((it.costPrice || 0) * qty));
+
+        productSalesMap[key].quantity += qty;
+        productSalesMap[key].revenue += rev;
+        productSalesMap[key].profit += prof;
+      });
+    });
+
+    const topProducts = Object.values(productSalesMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    const averageOrderValue = totalBills > 0 ? (totalRevenue / totalBills) : 0;
+    const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100) : 0;
+
+    res.json({
+      success: true,
+      reportPeriod: { startDate, endDate },
+      summary: {
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        profitMargin,
+        totalBills,
+        averageOrderValue,
+        cashRevenue,
+        financeRevenue,
+        branchPerformance: Object.values(branchSummaryMap),
+        topProducts
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createSale,
   getSaleReceipt,
   getSalesHistory,
   getFinanceProfitReport,
-  updateFinancePayoutStatus
+  updateFinancePayoutStatus,
+  getExecutiveDashboard,
+  getExecutiveReportRange
 };
