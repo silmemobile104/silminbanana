@@ -2251,11 +2251,37 @@ async function submitBranchAuditFormSilent() {
    ========================================================================== */
 async function renderGoodsReceiptView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดตัวเลือกสินค้า...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลรับสินค้าเข้าสต็อก...</div>`;
 
   try {
     await loadMasterOptions();
     const { brands = [], models = [], capacities = [], colors = [], categories = [], branches = [] } = state.masterOptions;
+
+    // Fetch past goods receipts
+    let receipts = [];
+    try {
+      const rcptRes = await apiRequest('/stock/receipts');
+      if (rcptRes.success) {
+        receipts = rcptRes.receipts || [];
+      }
+    } catch (rcptErr) {
+      console.warn('Unable to load receipt history:', rcptErr);
+    }
+    window.currentGoodsReceipts = receipts;
+
+    let userBranches = branches;
+    if (state.user && state.user.branch) {
+      const userBranchId = String(state.user.branch._id || state.user.branch);
+      const filtered = branches.filter(b => String(b._id) === userBranchId);
+      if (filtered.length > 0) {
+        userBranches = filtered;
+      } else {
+        userBranches = [{
+          _id: userBranchId,
+          name: state.user.branch.name || 'สาขาของฉัน'
+        }];
+      }
+    }
 
     const initialBrand = brands[0] ? brands[0].value : '';
     const initialModel = models[0] ? models[0].value : '';
@@ -2266,19 +2292,19 @@ async function renderGoodsReceiptView() {
     const initialName = generateAutoName(initialBrand, initialModel, initialCapacity, initialColor);
 
     container.innerHTML = `
-      <div class="card" style="max-width: 800px; margin: 0 auto;">
+      <div class="card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
         <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (Goods Receipt)
+          <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก
         </h3>
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1.5rem;">
-          กรอกตัวเลือกข้อมูลสินค้า ปริมาณสินค้า และระบุหมายเลข IMEI/ซีเรียล (ฝ่ายจัดซื้อ/สต็อกส่วนกลางจะเข้ามาตรวจสอบตั้งราคาและยืนยันในภายหลัง)
+          กรอกตัวเลือกข้อมูลสินค้า ปริมาณสินค้า และระบุหมายเลข IMEI/ซีเรียล (ฝ่ายจัดซื้อ/สต็อกส่วนกลางจะเข้ามาตรวจสอบตั้งราคาและยืนยันเข้าสต็อกจริงในภายหลัง)
         </p>
 
         <form id="goods-receipt-form">
           <div class="form-group">
             <label for="gr-branch">สาขาที่รับสินค้าเข้าสต็อก</label>
             <select id="gr-branch" class="form-select" required>
-              ${branches.map(b => `<option value="${b._id}">${b.name} (${b.code})</option>`).join('')}
+              ${userBranches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
             </select>
           </div>
 
@@ -2360,6 +2386,81 @@ async function renderGoodsReceiptView() {
           </div>
         </form>
       </div>
+
+      <!-- History & Editing Section -->
+      <div class="card" style="max-width: 950px; margin: 0 auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h4 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติรายการรับสินค้าเข้าสต็อกที่คีย์ไว้
+            </h4>
+            <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0.2rem;">
+              รายการที่ขึ้นสถานะ <span class="badge badge-yellow" style="font-size:0.7rem;">🟡 รอตั้งราคา / ยืนยัน</span> สามารถกดแก้ไขข้อมูล/IMEI ได้ ก่อนที่ฝ่ายจัดซื้อจะยืนยันเข้าสต็อกจริง
+            </p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>เลขที่ใบรับ / วันเวลา</th>
+                <th>สาขา & ผู้รับสินค้า</th>
+                <th>รายละเอียดสินค้า</th>
+                <th>รหัส SKU (IMEI)</th>
+                <th>สถานะการรับเข้า</th>
+                <th style="text-align:center;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${receipts.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีประวัติการรับสินค้าเข้าสต็อก</td></tr>` : ''}
+              ${receipts.map(r => {
+                const p = r.productInfo || {};
+                const isPending = r.status === 'pending_pricing';
+                const isConfirmed = r.status === 'confirmed';
+                const dateStr = new Date(r.createdAt).toLocaleString('th-TH');
+
+                return `
+                  <tr>
+                    <td>
+                      <strong style="color:#38bdf8;">${r.receiptNumber}</strong><br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
+                    </td>
+                    <td>
+                      <strong>${r.branch ? r.branch.name : '-'}</strong><br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">ผู้บันทึก: ${r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '-'}</span>
+                    </td>
+                    <td>
+                      <strong style="color:#fff;">${p.name || '-'}</strong><br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">${p.brand || ''} | ${p.model || ''} (${p.category || ''})</span>
+                    </td>
+                    <td>
+                      <span style="font-family:monospace; font-weight:700; color:#fbbf24;">${p.sku || (r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
+                    </td>
+                    <td>
+                      ${isPending ? '<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
+                        isConfirmed ? '<span class="badge badge-green"><i class="fa-solid fa-check-double"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
+                        '<span class="badge badge-red"><i class="fa-solid fa-xmark"></i> ถูกปฏิเสธ</span>'}
+                    </td>
+                    <td style="text-align:center;">
+                      ${isPending ? `
+                        <button class="btn btn-sm btn-warning" onclick="openEditGoodsReceiptModal('${r._id}')" style="font-size:0.75rem; padding:0.35rem 0.75rem;">
+                          <i class="fa-solid fa-pen-to-square"></i> แก้ไขรายการ
+                        </button>
+                      ` : `
+                        <span style="font-size:0.78rem; color:var(--text-muted); font-style:italic;">
+                          <i class="fa-solid fa-lock"></i> ยืนยันแล้ว (ล็อก)
+                        </span>
+                      `}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
     `;
 
     generateImeiInputs();
@@ -2401,7 +2502,7 @@ async function renderGoodsReceiptView() {
 
         if (res.success) {
           showToast(res.message);
-          navigateTo('receipt-verification');
+          renderGoodsReceiptView();
         }
       } catch (err) {
         // Handled
@@ -2409,6 +2510,156 @@ async function renderGoodsReceiptView() {
     });
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444;">${err.message}</div>`;
+  }
+}
+
+function openEditGoodsReceiptModal(receiptId) {
+  const receipts = window.currentGoodsReceipts || [];
+  const receipt = receipts.find(r => r._id === receiptId);
+
+  if (!receipt) {
+    showToast('ไม่พบข้อมูลรายการรับสินค้า', 'error');
+    return;
+  }
+
+  const { brands = [], models = [], capacities = [], colors = [], categories = [] } = state.masterOptions || {};
+  const p = receipt.productInfo || {};
+  const currentImei = p.sku || (receipt.imeiSerials && receipt.imeiSerials[0]) || '';
+
+  const bodyHtml = `
+    <div style="background:rgba(0,0,0,0.2); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
+      <div style="font-weight:700; color:#38bdf8; font-size:0.95rem; margin-bottom:0.2rem;">
+        เลขที่ใบรับ: <strong>${receipt.receiptNumber}</strong>
+      </div>
+      <div style="font-size:0.82rem; color:var(--text-muted);">
+        สาขา: ${receipt.branch ? receipt.branch.name : '-'} | สถานะ: <span class="badge badge-yellow">รอฝ่ายจัดซื้อตั้งราคา/ยืนยัน</span>
+      </div>
+    </div>
+
+    <form id="edit-gr-modal-form" onsubmit="event.preventDefault(); submitEditGoodsReceipt('${receipt._id}');">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+        <div class="form-group">
+          <label for="edit-gr-brand">ยี่ห้อ</label>
+          <select id="edit-gr-brand" class="form-select" onchange="recalculateEditGrAutoFields()" required>
+            ${brands.map(b => `<option value="${b.value}" ${b.value === p.brand ? 'selected' : ''}>${b.value}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-gr-model">ชื่อรุ่น</label>
+          <select id="edit-gr-model" class="form-select" onchange="recalculateEditGrAutoFields()" required>
+            ${models.map(m => `<option value="${m.value}" ${m.value === p.model ? 'selected' : ''}>${m.value}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+        <div class="form-group">
+          <label for="edit-gr-capacity">ความจุ</label>
+          <select id="edit-gr-capacity" class="form-select" onchange="recalculateEditGrAutoFields()">
+            <option value="">-- ไม่ระบุ --</option>
+            ${capacities.map(c => `<option value="${c.value}" ${c.value === p.capacity ? 'selected' : ''}>${c.value}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-gr-color">สีสินค้า</label>
+          <select id="edit-gr-color" class="form-select" onchange="recalculateEditGrAutoFields()">
+            <option value="">-- ไม่ระบุ --</option>
+            ${colors.map(cl => `<option value="${cl.value}" ${cl.value === p.color ? 'selected' : ''}>${cl.value}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-gr-category">หมวดหมู่สินค้า</label>
+        <select id="edit-gr-category" class="form-select" required>
+          ${categories.map(c => `<option value="${c.value}" ${c.value === p.category ? 'selected' : ''}>${c.value}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-gr-name">ชื่อสินค้าแบบเต็ม</label>
+        <input type="text" id="edit-gr-name" class="form-control" value="${p.name || ''}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" readonly>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-gr-imei">หมายเลขซีเรียล / IMEI (SKU)</label>
+        <input type="text" id="edit-gr-imei" class="form-control" value="${currentImei}" style="font-family:monospace; font-weight:700; color:#fbbf24;" required>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-danger" onclick="deleteGoodsReceiptItem('${receipt._id}')" style="margin-right:auto;">
+      <i class="fa-solid fa-trash"></i> ยกเลิกรายการนี้
+    </button>
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+    <button type="button" class="btn btn-primary" onclick="submitEditGoodsReceipt('${receipt._id}')">
+      <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+    </button>
+  `;
+
+  openModal(`แก้ไขรายการรับสินค้า - ${receipt.receiptNumber}`, bodyHtml, footerHtml);
+}
+
+function recalculateEditGrAutoFields() {
+  const brand = document.getElementById('edit-gr-brand') ? document.getElementById('edit-gr-brand').value : '';
+  const model = document.getElementById('edit-gr-model') ? document.getElementById('edit-gr-model').value : '';
+  const capacity = document.getElementById('edit-gr-capacity') ? document.getElementById('edit-gr-capacity').value : '';
+  const color = document.getElementById('edit-gr-color') ? document.getElementById('edit-gr-color').value : '';
+
+  const nameInput = document.getElementById('edit-gr-name');
+  if (nameInput) {
+    nameInput.value = generateAutoName(brand, model, capacity, color);
+  }
+}
+
+async function submitEditGoodsReceipt(receiptId) {
+  const brand = document.getElementById('edit-gr-brand').value;
+  const model = document.getElementById('edit-gr-model').value;
+  const capacity = document.getElementById('edit-gr-capacity').value;
+  const color = document.getElementById('edit-gr-color').value;
+  const category = document.getElementById('edit-gr-category').value;
+  const imei = document.getElementById('edit-gr-imei').value.trim();
+
+  if (!brand || !model || !category || !imei) {
+    showToast('กรุณากรอก ยี่ห้อ, ชื่อรุ่น, หมวดหมู่ และหมายเลข IMEI ให้ครบถ้วน', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/stock/receipts/${receiptId}`, 'PUT', {
+      brand,
+      model,
+      capacity,
+      color,
+      category,
+      imei
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderGoodsReceiptView();
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function deleteGoodsReceiptItem(receiptId) {
+  if (!confirm('คุณต้องการยกเลิก/ลบรายการรับสินค้านี้ออกใช่หรือไม่? (รายการที่ลบจะถูกยกเลิกถาวร)')) return;
+
+  try {
+    const res = await apiRequest(`/stock/receipts/${receiptId}`, 'DELETE');
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderGoodsReceiptView();
+    }
+  } catch (err) {
+    // Handled
   }
 }
 

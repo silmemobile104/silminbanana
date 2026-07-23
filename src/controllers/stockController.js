@@ -15,11 +15,16 @@ const receiveStock = async (req, res, next) => {
   try {
     const { branchId, brand, model, capacity, color, category, quantity, imeiSerials } = req.body;
 
-    if (!branchId || !brand || !model || !category || !quantity || quantity <= 0) {
+    let targetBranchId = branchId;
+    if (req.user && req.user.branch) {
+      targetBranchId = req.user.branch._id || req.user.branch;
+    }
+
+    if (!targetBranchId || !brand || !model || !category || !quantity || quantity <= 0) {
       return res.status(400).json({ success: false, message: 'กรุณาระบุ สาขา, ยี่ห้อ, ชื่อรุ่น, หมวดหมู่ และจำนวนสินค้าให้ถูกต้อง' });
     }
 
-    const branch = await Branch.findById(branchId);
+    const branch = await Branch.findById(targetBranchId);
     if (!branch || !branch.isActive) {
       return res.status(404).json({ success: false, message: 'สาขาที่เลือกไม่ถูกต้อง หรือถูกปิดใช้งาน' });
     }
@@ -423,11 +428,135 @@ const getAllBranchStock = async (req, res, next) => {
   }
 };
 
+// Update Goods Receipt (Only if status is pending_pricing)
+const updateGoodsReceipt = async (req, res, next) => {
+  try {
+    const { receiptId } = req.params;
+    const { brand, model, capacity, color, category, imei } = req.body;
+
+    const receipt = await GoodsReceipt.findById(receiptId);
+    if (!receipt) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการรับสินค้าที่ระบุ' });
+    }
+
+    if (receipt.status !== 'pending_pricing') {
+      return res.status(400).json({ success: false, message: 'ไม่สามารถแก้ไขได้ เนื่องจากรายการนี้ถูกยืนยันเข้าสต็อกเรียบร้อยแล้ว' });
+    }
+
+    if (req.user.branch) {
+      const userBranchId = String(req.user.branch._id || req.user.branch);
+      if (String(receipt.branch) !== userBranchId) {
+        return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขรายการของสาขาอื่น' });
+      }
+    }
+
+    const newImei = imei ? String(imei).trim() : (receipt.productInfo.sku || (receipt.imeiSerials && receipt.imeiSerials[0]));
+    
+    if (newImei && newImei !== receipt.productInfo.sku) {
+      const existingStock = await Stock.findOne({
+        $or: [
+          { 'imei_serials.imei': newImei },
+          { 'sku': newImei }
+        ]
+      });
+
+      if (existingStock) {
+        return res.status(400).json({
+          success: false,
+          message: `หมายเลขซีเรียล/IMEI (${newImei}) นี้มีอยู่ในระบบคลังสินค้าแล้ว`
+        });
+      }
+    }
+
+    const updatedBrand = (brand || receipt.productInfo.brand).trim();
+    const updatedModel = (model || receipt.productInfo.model).trim();
+    const updatedCapacity = capacity !== undefined ? capacity.trim() : receipt.productInfo.capacity;
+    const updatedColor = color !== undefined ? color.trim() : receipt.productInfo.color;
+    const updatedCategory = (category || receipt.productInfo.category).trim();
+
+    const generatedName = generateAutoName(updatedBrand, updatedModel, updatedCapacity, updatedColor);
+
+    receipt.productInfo = {
+      sku: newImei,
+      name: generatedName,
+      brand: updatedBrand,
+      model: updatedModel,
+      capacity: updatedCapacity,
+      color: updatedColor,
+      category: updatedCategory
+    };
+    receipt.imeiSerials = [newImei];
+    
+    await receipt.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'UPDATE_GOODS_RECEIPT',
+      entity: 'GoodsReceipt',
+      entityId: receipt._id.toString(),
+      details: { receiptNumber: receipt.receiptNumber, sku: newImei, imei: newImei }
+    });
+
+    res.json({
+      success: true,
+      message: 'แก้ไขรายการรับสินค้าเข้าสต็อกสำเร็จ',
+      receipt
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Delete/Cancel Goods Receipt (Only if status is pending_pricing)
+const deleteGoodsReceipt = async (req, res, next) => {
+  try {
+    const { receiptId } = req.params;
+    const receipt = await GoodsReceipt.findById(receiptId);
+    if (!receipt) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการรับสินค้าที่ระบุ' });
+    }
+
+    if (receipt.status !== 'pending_pricing') {
+      return res.status(400).json({ success: false, message: 'ไม่สามารถยกเลิกได้ เนื่องจากรายการนี้ถูกยืนยันเข้าสต็อกเรียบร้อยแล้ว' });
+    }
+
+    if (req.user.branch) {
+      const userBranchId = String(req.user.branch._id || req.user.branch);
+      if (String(receipt.branch) !== userBranchId) {
+        return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ยกเลิกรายการของสาขาอื่น' });
+      }
+    }
+
+    await GoodsReceipt.findByIdAndDelete(receiptId);
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'DELETE_GOODS_RECEIPT',
+      entity: 'GoodsReceipt',
+      entityId: receiptId,
+      details: { receiptNumber: receipt.receiptNumber }
+    });
+
+    res.json({
+      success: true,
+      message: 'ยกเลิก/ลบรายการรับสินค้าเรียบร้อยแล้ว'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   receiveStock,
   getGoodsReceipts,
   confirmGoodsReceipt,
   confirmBatchGoodsReceipts,
+  updateGoodsReceipt,
+  deleteGoodsReceipt,
   getMyBranchStock,
   getBranchStock,
   getAllBranchStock
