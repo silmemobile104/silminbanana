@@ -4,7 +4,7 @@ const Product = require('../models/Product');
 const Branch = require('../models/Branch');
 const AuditLog = require('../models/AuditLog');
 
-// Process POS Checkout & Stock Deduction
+// Process POS Checkout & Stock Deduction (Atomic checkout per IMEI)
 const createSale = async (req, res, next) => {
   try {
     const { branchId, customer, items, paymentMethod, receivedAmount, discountTotal = 0, financeCompanyName } = req.body;
@@ -22,40 +22,30 @@ const createSale = async (req, res, next) => {
     let calculatedTotalCost = 0;
     const saleItems = [];
 
-    // Process each item, calculate cost/profit, and deduct stock
+    // Process each item, calculate cost/profit, and mark 1-to-1 Stock Document as sold atomically
     for (const item of items) {
-      const [stock, product] = await Promise.all([
-        Stock.findOne({ branch: branch._id, product: item.productId }),
-        Product.findById(item.productId)
-      ]);
+      const targetImei = String(item.imei || '').trim();
+      
+      if (!targetImei) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI สำหรับสินค้าทุกรายการ' });
+      }
 
-      if (!stock || stock.quantity < (item.quantity || 1)) {
+      // Atomic find and mark sold
+      const stockItem = await Stock.findOneAndUpdate(
+        { branch: branch._id, imei: targetImei, status: 'in_stock' },
+        { $set: { status: 'sold', sold_date: new Date() } },
+        { new: true }
+      ).populate('product');
+
+      if (!stockItem) {
         return res.status(400).json({
           success: false,
-          message: `สินค้า SKU "${item.sku}" ในสาขา ${branch.name} มีจำนวนคงเหลือไม่เพียงพอ (คงเหลือ: ${stock ? stock.quantity : 0} ชิ้น)`
+          message: `หมายเลข IMEI "${targetImei}" ไม่พบในคลังสาขา ${branch.name} หรือถูกขายไปแล้ว`
         });
       }
 
-      // If IMEI is specified, check IMEI availability in stock
-      if (item.imei) {
-        const imeiItem = stock.imei_serials.find(i => i.imei === item.imei && i.status === 'in_stock');
-        if (!imeiItem) {
-          return res.status(400).json({
-            success: false,
-            message: `หมายเลข IMEI "${item.imei}" สำหรับสินค้า SKU "${item.sku}" ไม่พร้อมจำหน่ายหรือถูกขายไปแล้ว`
-          });
-        }
-        // Mark IMEI as sold
-        imeiItem.status = 'sold';
-        imeiItem.sold_date = new Date();
-      }
-
-      // Deduct stock quantity
-      stock.quantity -= (item.quantity || 1);
-      await stock.save();
-
-      const costPrice = product ? (product.purchase_price || 0) : (item.costPrice || 0);
-      const qty = item.quantity || 1;
+      const costPrice = stockItem.purchase_price !== undefined ? stockItem.purchase_price : (item.costPrice || 0);
+      const qty = 1;
       const itemTotal = (item.unitPrice * qty) - (item.discount || 0);
       const itemCostTotal = costPrice * qty;
       const itemProfit = itemTotal - itemCostTotal;
@@ -64,13 +54,12 @@ const createSale = async (req, res, next) => {
       calculatedTotalCost += itemCostTotal;
 
       saleItems.push({
-        product: item.productId,
-        sku: item.sku,
-        productName: item.productName,
-        imei: item.imei || '',
+        product: stockItem.product ? stockItem.product._id : null,
+        productName: stockItem.productName || item.productName,
+        imei: stockItem.imei,
         costPrice,
         unitPrice: item.unitPrice,
-        quantity: qty,
+        quantity: 1,
         discount: item.discount || 0,
         totalPrice: itemTotal,
         profit: itemProfit
@@ -252,7 +241,6 @@ const getFinanceProfitReport = async (req, res, next) => {
     let pendingFinanceCount = 0;
 
     sales.forEach(sale => {
-      // If sale totalCost is 0 (legacy record), fallback cost from items or calculate
       let sCost = sale.totalCost || 0;
       if (!sCost && sale.items && sale.items.length > 0) {
         sCost = sale.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
@@ -361,8 +349,8 @@ const getExecutiveDashboard = async (req, res, next) => {
 
     const [todaySales, allStock, branches] = await Promise.all([
       Sale.find({ createdAt: { $gte: todayStart, $lte: todayEnd } }).populate('branch'),
-      Stock.find({ quantity: { $gt: 0 } }).populate('product').populate('branch'),
-      Branch.find({ is_active: true })
+      Stock.find({ status: 'in_stock' }).populate('product').populate('branch'),
+      Branch.find({ isActive: true })
     ]);
 
     // 1. Calculate Today's Sales KPIs
@@ -407,30 +395,17 @@ const getExecutiveDashboard = async (req, res, next) => {
     const lowStockAlerts = [];
 
     allStock.forEach(st => {
-      if (st.product && st.quantity > 0) {
-        const qty = st.quantity || 0;
-        const sellPrice = st.product.selling_price || 0;
-        const buyPrice = st.product.purchase_price || 0;
+      const qty = 1;
+      const sellPrice = st.selling_price || (st.product ? st.product.selling_price : 0);
+      const buyPrice = st.purchase_price || (st.product ? st.product.purchase_price : 0);
 
-        totalStockItems += qty;
-        totalStockValue += (qty * sellPrice);
-        totalStockCost += (qty * buyPrice);
+      totalStockItems += qty;
+      totalStockValue += sellPrice;
+      totalStockCost += buyPrice;
 
-        if (st.branch && branchSalesMap[st.branch._id.toString()]) {
-          branchSalesMap[st.branch._id.toString()].stockItems += qty;
-          branchSalesMap[st.branch._id.toString()].stockValue += (qty * sellPrice);
-        }
-
-        if (qty <= 2) {
-          lowStockAlerts.push({
-            branchName: st.branch ? st.branch.name : 'สาขาไม่ระบุ',
-            sku: st.sku,
-            productName: st.product.name,
-            brand: st.product.brand || '',
-            quantity: qty,
-            sellingPrice: sellPrice
-          });
-        }
+      if (st.branch && branchSalesMap[st.branch._id.toString()]) {
+        branchSalesMap[st.branch._id.toString()].stockItems += qty;
+        branchSalesMap[st.branch._id.toString()].stockValue += sellPrice;
       }
     });
 
@@ -438,9 +413,9 @@ const getExecutiveDashboard = async (req, res, next) => {
     const productSalesCount = {};
     todaySales.forEach(s => {
       (s.items || []).forEach(it => {
-        const pName = it.productName || it.sku;
+        const pName = it.productName || it.imei;
         if (!productSalesCount[pName]) {
-          productSalesCount[pName] = { productName: pName, sku: it.sku, quantity: 0, revenue: 0 };
+          productSalesCount[pName] = { productName: pName, quantity: 0, revenue: 0 };
         }
         productSalesCount[pName].quantity += (it.quantity || 1);
         productSalesCount[pName].revenue += (it.totalPrice || 0);
@@ -499,7 +474,7 @@ const getExecutiveReportRange = async (req, res, next) => {
 
     const [sales, branches] = await Promise.all([
       Sale.find({ createdAt: { $gte: start, $lte: end } }).populate('branch').populate('soldBy', 'fullName username'),
-      Branch.find({ is_active: true })
+      Branch.find({ isActive: true })
     ]);
 
     let totalRevenue = 0;
@@ -551,11 +526,10 @@ const getExecutiveReportRange = async (req, res, next) => {
       }
 
       (s.items || []).forEach(it => {
-        const key = it.sku || it.productName;
+        const key = it.productName || it.imei;
         if (!productSalesMap[key]) {
           productSalesMap[key] = {
-            sku: it.sku,
-            productName: it.productName,
+            productName: key,
             quantity: 0,
             revenue: 0,
             profit: 0

@@ -14,11 +14,11 @@ const state = {
 
 // Role Access Matrix - Authorized Menus per Role
 const ROLE_ALLOWED_VIEWS = {
-  'admin': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees'],
-  'hq_stock_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'receipt-verification', 'transfers', 'master-settings'],
-  'branch_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'branch-audit', 'goods-receipt', 'receipt-verification', 'transfers'],
-  'technical_staff': ['dashboard', 'pos', 'branch-inventory', 'branch-audit'],
-  'purchase_staff': ['dashboard', 'finance', 'branch-inventory', 'goods-receipt', 'receipt-verification', 'master-settings']
+  'admin': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees'],
+  'hq_stock_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings'],
+  'branch_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers'],
+  'technical_staff': ['dashboard', 'pos', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders'],
+  'purchase_staff': ['dashboard', 'finance', 'branch-inventory', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'master-settings']
 };
 
 // Thai Role Mapping Helper
@@ -33,18 +33,9 @@ function formatRoleThai(roleKey) {
   return roles[roleKey] || roleKey;
 }
 
-// Auto SKU Code Generator Helper
+// Helper to generate auto name
 function generateAutoSKU(brand = '', model = '', capacity = '') {
-  let bCode = brand ? brand.substring(0, 3).toUpperCase() : 'SKU';
-  let mCode = model ? model.replace(/[^a-zA-Z0-9]/g, '').substring(0, 5).toUpperCase() : '';
-  let cCode = capacity ? capacity.replace(/\s+/g, '').toUpperCase() : '';
-  
-  if (!mCode) {
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    return `SKU-${bCode}-${randomNum}`;
-  }
-  
-  return `${bCode}-${mCode}${cCode ? '-' + cCode : ''}`;
+  return '';
 }
 
 // Auto Full Product Name Generator Helper
@@ -212,6 +203,11 @@ function navigateTo(viewName) {
       heading.innerText = 'รับสินค้าเข้าสต็อก';
       subheading.innerText = 'บันทึกรายการนำเข้าสินค้าโดยระบุตัวเลือกยี่ห้อ รุ่น ความจุ สี และ IMEI ประจำเครื่อง';
       renderGoodsReceiptView();
+      break;
+    case 'purchase-orders':
+      heading.innerText = 'สั่งซื้อสินค้าลงสาขา';
+      subheading.innerText = 'สั่งซื้อสินค้าจากส่วนกลางลงสาขา หักเงินจากวงเงินสาขาอัตโนมัติ';
+      renderBranchPurchaseOrdersView();
       break;
     case 'receipt-verification':
       heading.innerText = 'ตรวจสอบรายการรับสินค้าเข้าสต็อก';
@@ -458,7 +454,7 @@ async function renderDashboardView() {
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:rgba(248,113,113,0.08); border-radius:6px; margin-bottom:0.4rem; border:1px solid rgba(248,113,113,0.2);">
                   <div>
                     <strong style="color:#fff;">${item.productName}</strong>
-                    <div style="font-size:0.73rem; color:var(--text-muted);">${item.branchName} • SKU: ${item.sku}</div>
+                    <div style="font-size:0.73rem; color:var(--text-muted);">${item.branchName}</div>
                   </div>
                   <span class="badge badge-red" style="font-weight:800; font-size:0.82rem;">เหลือ ${item.quantity} เครื่อง</span>
                 </div>
@@ -481,7 +477,7 @@ async function renderDashboardView() {
               <div class="audit-header">
                 <div>
                   <div class="branch-name">${b.branch.name}</div>
-                  <div class="branch-code">${b.branch.code} • เบอร์โทร: ${b.branch.phone}</div>
+                  <div class="branch-code">เบอร์โทร: ${b.branch.phone}</div>
                 </div>
                 <span class="badge badge-${b.colorCode}">${b.status}</span>
               </div>
@@ -725,7 +721,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
               <thead>
                 <tr>
                   <th style="width:50px; text-align:center;">อันดับ</th>
-                  <th>รหัส SKU / ชื่อสินค้า</th>
+                  <th>ชื่อสินค้า</th>
                   <th>จำนวนที่ขายได้</th>
                   <th>ยอดขายรวม (บาท)</th>
                   <th>กำไรรวม (บาท)</th>
@@ -736,7 +732,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
                 ${topProducts.map((p, idx) => `
                   <tr>
                     <td style="text-align:center;"><span class="badge badge-${idx < 3 ? 'gold' : 'gray'}" style="font-weight:800;">${idx + 1}</span></td>
-                    <td><strong>${p.productName}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(SKU: ${p.sku})</span></td>
+                    <td><strong>${p.productName}</strong></td>
                     <td><strong style="color:#38bdf8; font-size:0.95rem;">${p.quantity} เครื่อง</strong></td>
                     <td><strong style="color:#34d399;">฿${p.revenue.toLocaleString()}</strong></td>
                     <td><strong style="color:#818cf8;">฿${p.profit.toLocaleString()}</strong></td>
@@ -809,12 +805,12 @@ function triggerCustomReportModal() {
    ========================================================================== */
 async function renderBranchInventoryView(selectedBranchId = null) {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการสินค้าประจำสาขา...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
 
   try {
     const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
-    const stockList = res.stock || [];
+    const activeStockList = (res.stock || []).filter(st => st.status === 'in_stock');
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
     const isAdminOrHq = ['admin', 'hq_stock_staff'].includes(state.user.role);
@@ -825,20 +821,20 @@ async function renderBranchInventoryView(selectedBranchId = null) {
           <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงรายการสินค้าที่มีอยู่จริง พร้อมจำนวนและหมายเลขซีเรียล/IMEI ในสาขานี้เท่านั้น</p>
+          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้าพร้อมขายรายชิ้น (1 เครื่อง 1 IMEI) ในสาขานี้เท่านั้น (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
-          <button class="btn btn-success" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          <button class="btn btn-success btn-sm" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
-              <select id="bi-branch-select" class="form-select" style="width:auto;" onchange="renderBranchInventoryView(this.value)">
+              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value)">
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
             </div>
           ` : ''}
-          <input type="text" id="bi-search-input" class="form-control" placeholder="ค้นหา SKU, ชื่อสินค้า หรือ IMEI..." style="width:240px;" onkeyup="filterBranchInventoryTable()">
+          <input type="text" id="bi-search-input" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า, สี..." style="width:220px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterBranchInventoryTable()">
         </div>
       </div>
 
@@ -846,51 +842,35 @@ async function renderBranchInventoryView(selectedBranchId = null) {
         <table class="data-table" id="bi-table">
           <thead>
             <tr>
-              <th style="width:60px; text-align:center;">ไอคอน</th>
-              <th>รหัส SKU</th>
+              <th style="width:50px; text-align:center;">#</th>
+              <th>หมายเลข IMEI</th>
               <th>รายการสินค้า</th>
               <th>ยี่ห้อ / ชื่อรุ่น</th>
               <th>ความจุ / สีสินค้า</th>
               <th>ราคาขาย</th>
-              <th>จำนวนคงเหลือ</th>
-              <th>รายการหมายเลขซีเรียล / IMEI ที่มีในสต็อก</th>
+              <th style="text-align:center;">สถานะสต็อก</th>
             </tr>
           </thead>
           <tbody>
-            ${stockList.length === 0 ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าคงเหลือในคลังสาขานี้</td></tr>` : ''}
-            ${stockList.map(st => {
+            ${activeStockList.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าคงเหลือในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.map((st, idx) => {
               const p = st.product || {};
-              const activeImeis = st.imei_serials
-                ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-                : [];
+              const imeiStr = st.imei;
+              const prodName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`;
+              const brandStr = st.brand || p.brand || '-';
+              const modelStr = st.model || p.model || '';
+              const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
+              const priceNum = st.selling_price || p.selling_price || 0;
 
               return `
-                <tr class="bi-row" data-search="${(st.sku + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.model || '') + ' ' + activeImeis.join(' ')).toLowerCase()}">
-                  <td style="text-align:center; font-size:1.4rem; color:var(--accent-primary);">
-                    <i class="fa-solid fa-mobile-screen-button"></i>
-                  </td>
-                  <td><strong>${st.sku}</strong></td>
-                  <td><strong>${p.name || st.sku}</strong></td>
-                  <td><span class="badge badge-gray">${p.brand || '-'}</span> ${p.model || ''}</td>
-                  <td>${p.variation || (p.capacity + ' ' + p.color) || '-'}</td>
-                  <td><strong style="color:#34d399;">฿${(p.selling_price || 0).toLocaleString()}</strong></td>
-                  <td>
-                    <span class="badge badge-${st.quantity > 0 ? 'green' : 'red'}" style="font-size:0.9rem;">
-                      ${st.quantity > 0 ? 'มีสินค้า ' + st.quantity + ' ชิ้น' : 'สินค้าหมด'}
-                    </span>
-                  </td>
-                  <td style="font-size:0.82rem;">
-                    ${activeImeis.length > 0 ? `
-                      <details>
-                        <summary style="cursor:pointer; color:var(--accent-secondary); font-weight:600;">
-                          ดู IMEI ทั้งหมด (${activeImeis.length} เครื่อง)
-                        </summary>
-                        <div style="margin-top:0.4rem; max-height:100px; overflow-y:auto; background:rgba(0,0,0,0.3); padding:0.5rem; border-radius:6px;">
-                          ${activeImeis.map(i => `<div style="font-family:monospace; color:#38bdf8;">• ${i}</div>`).join('')}
-                        </div>
-                      </details>
-                    ` : '<span style="color:var(--text-muted);">-</span>'}
-                  </td>
+                <tr class="bi-row" data-search="${(imeiStr + ' ' + prodName + ' ' + brandStr + ' ' + modelStr + ' ' + specStr).toLowerCase()}">
+                  <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
+                  <td><strong style="color:#fbbf24; font-family:monospace; font-size:0.95rem;">${imeiStr}</strong></td>
+                  <td><strong>${prodName}</strong></td>
+                  <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
+                  <td>${specStr}</td>
+                  <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
+                  <td style="text-align:center;"><span class="badge badge-green">1 เครื่อง (พร้อมขาย)</span></td>
                 </tr>
               `;
             }).join('')}
@@ -925,7 +905,7 @@ async function renderPosView(selectedBranchId = null) {
   try {
     const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
-    const stockList = (res.stock || []).filter(st => st.quantity > 0);
+    const stockList = (res.stock || []).filter(st => st.status === 'in_stock');
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
     const isAdminOrHq = ['admin', 'hq_stock_staff'].includes(state.user.role);
@@ -940,7 +920,7 @@ async function renderPosView(selectedBranchId = null) {
                 <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
                   <i class="fa-solid fa-cash-register" style="color:var(--accent-primary);"></i> รายการสินค้าในสต็อก: ${currentBranch.name}
                 </h3>
-                <p style="font-size:0.8rem; color:var(--text-muted);">เลือกสินค้า และเลือกหมายเลข IMEI เพื่อเพิ่มลงตะกร้าขาย</p>
+                <p style="font-size:0.8rem; color:var(--text-muted);">เลือกสินค้าตามหมายเลข IMEI เพื่อเพิ่มลงตะกร้าขาย</p>
               </div>
 
               ${isAdminOrHq ? `
@@ -958,21 +938,21 @@ async function renderPosView(selectedBranchId = null) {
               <label style="font-size:0.8rem; font-weight:700; color:var(--accent-secondary);">
                 <i class="fa-solid fa-barcode"></i> ยิงสแกน IMEI / บาร์โค้ด สินค้าเพื่อเพิ่มลงตะกร้ารวดเร็ว
               </label>
-              <input type="text" id="pos-barcode-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล แล้วกด Enter..." style="margin-top:0.4rem;" autofocus>
+              <input type="text" id="pos-barcode-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." style="margin-top:0.4rem;" autofocus>
             </div>
 
-            <input type="text" id="pos-search-input" class="form-control" placeholder="ค้นหาชื่อสินค้า, SKU, ยี่ห้อ หรือ รุ่น..." onkeyup="filterPosCatalogTable()" style="margin-bottom:1rem;">
+            <input type="text" id="pos-search-input" class="form-control" placeholder="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." onkeyup="filterPosCatalogTable()" style="margin-bottom:1rem;">
 
             <!-- Stock Product Table -->
             <div class="table-container" style="max-height:450px; overflow-y:auto;">
               <table class="data-table" id="pos-catalog-table">
                 <thead>
                   <tr>
-                    <th style="width:50px; text-align:center;">ไอคอน</th>
-                    <th>รายการสินค้า / SKU</th>
+                    <th style="width:40px; text-align:center;">ไอคอน</th>
+                    <th>รายการสินค้า</th>
+                    <th>หมายเลข IMEI</th>
                     <th>ราคาขาย</th>
-                    <th>สต็อก</th>
-                    <th>เลือก IMEI เครื่องที่ขาย</th>
+                    <th>สถานะ</th>
                     <th style="text-align:center;">ดำเนินการ</th>
                   </tr>
                 </thead>
@@ -980,36 +960,30 @@ async function renderPosView(selectedBranchId = null) {
                   ${stockList.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบสินค้าพร้อมขายในสาขานี้</td></tr>` : ''}
                   ${stockList.map((st, idx) => {
                     const p = st.product || {};
-                    const activeImeis = st.imei_serials
-                      ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-                      : [];
-
-                    const inStock = st.quantity > 0;
+                    const imei = st.imei;
+                    const productName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`.trim() || 'สินค้าสมาร์ทโฟน';
+                    const sellingPrice = st.selling_price || p.selling_price || 0;
+                    const brandStr = st.brand || p.brand || '-';
+                    const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ');
 
                     return `
-                      <tr class="pos-item-row" data-search="${(st.sku + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.model || '') + ' ' + activeImeis.join(' ')).toLowerCase()}">
+                      <tr class="pos-item-row" data-search="${(imei + ' ' + productName + ' ' + brandStr + ' ' + specStr).toLowerCase()}">
                         <td style="text-align:center; font-size:1.3rem; color:var(--accent-primary);">
                           <i class="fa-solid fa-mobile-screen-button"></i>
                         </td>
                         <td>
-                          <strong>${p.name || st.sku}</strong><br>
-                          <span style="font-size:0.75rem; color:var(--text-muted);">SKU: ${st.sku}</span>
+                          <strong>${productName}</strong><br>
+                          <span style="font-size:0.75rem; color:var(--text-muted);">${brandStr} ${specStr ? '• ' + specStr : ''}</span>
                         </td>
-                        <td><strong style="color:#34d399;">฿${(p.selling_price || 0).toLocaleString()}</strong></td>
+                        <td><strong style="color:#fbbf24; font-family:monospace; font-size:0.92rem;">${imei}</strong></td>
+                        <td><strong style="color:#34d399;">฿${sellingPrice.toLocaleString()}</strong></td>
                         <td>
-                          <span class="badge badge-${inStock ? 'green' : 'red'}">
-                            ${st.quantity} เครื่อง
+                          <span class="badge badge-green">
+                            <i class="fa-solid fa-circle-check"></i> พร้อมขาย
                           </span>
                         </td>
-                        <td>
-                          ${activeImeis.length > 0 ? `
-                            <select id="pos-imei-select-${idx}" class="form-select" style="padding:0.3rem 0.5rem; font-size:0.8rem;">
-                              ${activeImeis.map(i => `<option value="${i}">${i}</option>`).join('')}
-                            </select>
-                          ` : `<span style="font-size:0.8rem; color:var(--text-muted);">- ไม่ระบุ IMEI -</span>`}
-                        </td>
                         <td style="text-align:center;">
-                          <button class="btn btn-primary btn-sm" ${!inStock ? 'disabled' : ''} onclick="addToPosCart('${st.product ? st.product._id : ''}', '${st.sku}', '${(p.name || st.sku).replace(/'/g, "\\'")}', ${p.selling_price || 0}, ${idx})">
+                          <button class="btn btn-primary btn-sm" onclick="addToPosCart('${p._id || ''}', '${productName.replace(/'/g, "\\'")}', ${sellingPrice}, null, '${imei}')">
                             <i class="fa-solid fa-cart-plus"></i> เพิ่ม
                           </button>
                         </td>
@@ -1141,60 +1115,51 @@ function filterPosCatalogTable() {
 }
 
 function processPosScannedImei(scannedImei, stockList) {
-  let foundItem = null;
-  let matchedImei = '';
-
-  stockList.forEach(st => {
-    if (st.imei_serials) {
-      const match = st.imei_serials.find(i => i.imei === scannedImei && i.status === 'in_stock');
-      if (match) {
-        foundItem = st;
-        matchedImei = match.imei;
-      }
-    }
-  });
+  const foundItem = stockList.find(st => st.imei === scannedImei && st.status === 'in_stock');
 
   if (foundItem) {
+    const p = foundItem.product || {};
+    const prodName = foundItem.productName || p.name || 'สินค้า';
+    const price = foundItem.selling_price || p.selling_price || 0;
+
     addToPosCart(
-      foundItem.product ? foundItem.product._id : '',
-      foundItem.sku,
-      foundItem.product ? foundItem.product.name : foundItem.sku,
-      foundItem.product ? foundItem.product.selling_price : 0,
+      p._id || '',
+      prodName,
+      price,
       null,
-      matchedImei
+      foundItem.imei
     );
-    showToast(`สแกนแมตช์สำเร็จ: เพิ่ม IMEI ${matchedImei} ลงตะกร้าเรียบร้อยแล้ว`);
+    showToast(`สแกนแมตช์สำเร็จ: เพิ่ม IMEI ${foundItem.imei} ลงตะกร้าเรียบร้อยแล้ว`);
   } else {
     showToast(`ไม่พบหมายเลข IMEI ${scannedImei} ที่พร้อมขายในคลังสาขานี้`, 'error');
   }
 }
 
-function addToPosCart(productId, sku, productName, unitPrice, selectIdx = null, customImei = null) {
-  let imei = customImei;
-  if (!imei && selectIdx !== null) {
+function addToPosCart(productId, productName, unitPrice, selectIdx = null, customImei = null) {
+  let targetImei = customImei;
+  if (!targetImei && selectIdx !== null) {
     const selectEl = document.getElementById(`pos-imei-select-${selectIdx}`);
-    if (selectEl) imei = selectEl.value;
+    if (selectEl) targetImei = selectEl.value;
   }
 
-  // Check if item with same SKU & IMEI already in cart
-  const existing = state.posCart.find(item => item.sku === sku && item.imei === imei);
+  // Check if item with same IMEI already in cart
+  const existing = state.posCart.find(item => item.imei === targetImei);
   if (existing) {
-    showToast(`รายการสินค้า IMEI ${imei || sku} อยู่ในตะกร้าเรียบร้อยแล้ว`, 'error');
+    showToast(`รายการสินค้า IMEI ${targetImei} อยู่ในตะกร้าเรียบร้อยแล้ว`, 'error');
     return;
   }
 
   state.posCart.push({
     productId,
-    sku,
     productName,
-    imei: imei || '',
+    imei: targetImei || '',
     unitPrice: Number(unitPrice),
     quantity: 1,
     discount: 0,
     totalPrice: Number(unitPrice)
   });
 
-  showToast(`เพิ่ม "${productName}" ลงตะกร้าสำเร็จ`);
+  showToast(`เพิ่ม "${productName}" (IMEI: ${targetImei}) ลงตะกร้าสำเร็จ`);
   renderPosCartUI();
 }
 
@@ -1219,7 +1184,7 @@ function renderPosCartUI() {
       <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem;">
         <div style="flex:1;">
           <strong>${item.productName}</strong><br>
-          <span style="font-size:0.75rem; color:var(--text-muted);">SKU: ${item.sku} ${item.imei ? '• IMEI: ' + item.imei : ''}</span>
+          <span style="font-size:0.75rem; color:var(--text-muted);">IMEI: ${item.imei || '-'}</span>
         </div>
         <div style="text-align:right; margin-right:0.6rem;">
           <strong style="color:#34d399;">฿${item.unitPrice.toLocaleString()}</strong>
@@ -1378,7 +1343,7 @@ function openReceiptVoucherModal(sale) {
             <tr style="border-bottom:1px dashed #eee;">
               <td style="padding:5px 0;">
                 <strong style="color:#000;">${i.productName}</strong><br>
-                <span style="font-size:0.72rem; color:#555;">SKU: ${i.sku} ${i.imei ? ' | IMEI: ' + i.imei : ''}</span>
+                <span style="font-size:0.72rem; color:#555;">IMEI: ${i.imei}</span>
               </td>
               <td style="padding:5px 0; text-align:center; vertical-align:top;">${i.quantity}</td>
               <td style="padding:5px 0; text-align:right; vertical-align:top;">฿${i.totalPrice.toLocaleString()}</td>
@@ -1706,7 +1671,7 @@ async function renderMasterSettingsView() {
           <i class="fa-solid fa-plus-circle" style="color:var(--accent-primary);"></i> เพิ่มตัวเลือก Master Data ใหม่
         </h3>
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.2rem;">
-          เมื่อเพิ่มแล้ว ตัวเลือกจะประกอบเป็น <strong>ชื่อสินค้าแบบเต็ม</strong> และ <strong>รหัส SKU อัตโนมัติ</strong> ให้ทันที
+          เมื่อเพิ่มแล้ว ตัวเลือกจะประกอบเป็น <strong>ชื่อสินค้าแบบเต็ม</strong> ให้ทันที
         </p>
 
         <form id="add-master-form" style="display:grid; grid-template-columns: 1.2fr 2fr 1fr auto; gap:1rem; align-items:end;">
@@ -1953,7 +1918,6 @@ async function loadHqAuditGrid(dateStr) {
         <div class="audit-header">
           <div>
             <div class="branch-name">${b.branch.name}</div>
-            <div class="branch-code">รหัสสาขา: ${b.branch.code}</div>
           </div>
           <span class="badge badge-${b.colorCode}">
             <i class="fa-solid ${b.colorCode === 'green' ? 'fa-circle-check' : b.colorCode === 'red' ? 'fa-circle-exclamation' : b.colorCode === 'yellow' ? 'fa-clock' : 'fa-minus'}"></i>
@@ -2062,7 +2026,7 @@ async function inspectBranchAudit(targetId) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัส SKU / ชื่อสินค้า</th>
+              <th>ชื่อสินค้า</th>
               <th>จำนวนสินค้า</th>
               <th>จำนวนนับจริง</th>
               <th>ยอดที่ขาด/เกิน</th>
@@ -2078,7 +2042,7 @@ async function inspectBranchAudit(targetId) {
               return `
                 <tr>
                   <td>
-                    <strong style="color:#38bdf8;">${item.sku}</strong><br>
+                    <strong style="color:#38bdf8;">${item.productName}</strong><br>
                     <span style="font-size:0.8rem; color:var(--text-muted);">${item.productName}</span>
                   </td>
                   <td><strong style="font-size:1.1rem;">${item.expectedCount}</strong></td>
@@ -2111,7 +2075,7 @@ async function inspectBranchAudit(targetId) {
                               </div>
 
                               <div>
-                                <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${item.sku}')" style="font-size:0.75rem; padding:0.35rem 0.75rem;">
+                                <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.35rem 0.75rem;">
                                   <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
                                 </button>
                               </div>
@@ -2131,13 +2095,47 @@ async function inspectBranchAudit(targetId) {
       </div>
     `;
 
+    const isHqUser = ['admin', 'hq_stock_staff'].includes(state.user ? state.user.role : '');
+    const auditId = branchItem.auditId;
+
     const footerHtml = `
+      ${isHqUser && auditId ? `
+        <button class="btn btn-danger" onclick="submitHqAuditDecision('${auditId}', 'Reject')" style="margin-right:auto;">
+          <i class="fa-solid fa-xmark"></i> ปฏิเสธรายงาน (ข้อมูลไม่ตรง)
+        </button>
+        <button class="btn btn-success" onclick="submitHqAuditDecision('${auditId}', 'Verify')">
+          <i class="fa-solid fa-check-double"></i> อนุมัติรายงานการนับสต็อก (Verify)
+        </button>
+      ` : ''}
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
     `;
 
     openModal(`ตรวจสอบการนับสต็อก - ${branchItem.branch.name}`, bodyHtml, footerHtml);
   } catch (err) {
     openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+async function submitHqAuditDecision(auditId, action) {
+  if (!auditId) {
+    showToast('สาขานี้ยังไม่ได้ส่งรายงานการนับสต็อก', 'warning');
+    return;
+  }
+
+  const comments = prompt(action === 'Verify' ? 'ระบุหมายเหตุการอนุมัติ (ถ้ามี):' : 'ระบุเหตุผลการปฏิเสธ / ข้อมูลไม่ตรง:');
+  if (comments === null) return;
+
+  try {
+    const res = await apiRequest(`/audit/verify/${auditId}`, 'POST', { action, comments });
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      const datePicker = document.getElementById('hq-audit-date-picker');
+      const dateStr = datePicker ? datePicker.value : new Date().toISOString().split('T')[0];
+      loadHqAuditGrid(dateStr);
+    }
+  } catch (err) {
+    // Handled
   }
 }
 
@@ -2163,7 +2161,7 @@ function resolveDriveImageUrl(imgObj) {
   return String(imgObj || '');
 }
 
-function openImeiInspectionModal(imei, sku) {
+function openImeiInspectionModal(imei) {
   if (window.hqAuditInspectionState) {
     window.hqAuditInspectionState.viewedPhotos.add(imei);
   }
@@ -2172,9 +2170,9 @@ function openImeiInspectionModal(imei, sku) {
   let imgObj = null;
 
   if (window.hqAuditInspectionState && window.hqAuditInspectionState.items) {
-    const matchedItem = window.hqAuditInspectionState.items.find(i => i.sku === sku);
+    const matchedItem = window.hqAuditInspectionState.items.find(i => i.scannedImeis.includes(imei));
     if (matchedItem) {
-      productName = matchedItem.productName || sku;
+      productName = matchedItem.productName;
       imgObj = (matchedItem.imeiImages || []).find(img => img.imei === imei);
     }
   }
@@ -2197,7 +2195,7 @@ function openImeiInspectionModal(imei, sku) {
         <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#fbbf24; font-family:monospace;">${imei}</span>
       </div>
       <div style="font-size:0.88rem; color:#fff;">
-        สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (SKU: ${sku || imei})
+        สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (IMEI: ${imei})
       </div>
     </div>
 
@@ -2245,28 +2243,6 @@ function openImeiInspectionModal(imei, sku) {
   openModal(`ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}`, bodyHtml, `<button class="btn btn-secondary" onclick="inspectBranchAudit('${window.currentInspectedAuditId}')">ย้อนกลับ</button>`);
 }
 
-function openFullscreenImageModal(imgUrl, imei, productName, sku) {
-  const lightboxHtml = `
-    <div style="text-align:center; padding:0.5rem;">
-      <div style="margin-bottom:0.8rem; font-weight:800; color:#38bdf8; font-size:1.15rem;">
-        <i class="fa-solid fa-expand"></i> รูปถ่ายขยายใหญ่ IMEI: <span style="color:#fbbf24; font-family:monospace;">${imei}</span>
-      </div>
-      <div style="font-size:0.88rem; color:#fff; margin-bottom:1rem;">
-        สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (SKU: ${sku || imei})
-      </div>
-
-      <div style="max-height:75vh; overflow:auto; display:flex; justify-content:center; align-items:center; background:#000; padding:1rem; border-radius:10px; border:2px solid var(--accent-gold); box-shadow:0 0 30px rgba(0,0,0,0.8);">
-        <img src="${imgUrl}" style="max-width:100%; max-height:70vh; object-fit:contain; border-radius:6px;" title="รูปถ่ายต้นฉบับเต็มตา">
-      </div>
-      <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.8rem;">
-        <i class="fa-solid fa-info-circle"></i> กดปุ่มย้อนกลับด้านล่างเพื่อกลับไปยังหน้าลงความเห็น
-      </p>
-    </div>
-  `;
-
-  openModal(`ขยายรูปถ่ายสินค้า - IMEI: ${imei}`, lightboxHtml, `<button class="btn btn-secondary" onclick="openImeiInspectionModal('${imei}', '${imgUrl.replace(/'/g, "\\'")}', '${(productName || '').replace(/'/g, "\\'")}', '${sku}')"><i class="fa-solid fa-arrow-left"></i> ย้อนกลับไปลงความเห็น</button>`);
-}
-
 async function setItemDecision(imei, decision) {
   if (!window.hqAuditInspectionState) return;
 
@@ -2307,39 +2283,6 @@ async function setItemDecision(imei, decision) {
   }
 }
 
-async function submitHqAuditAction(auditId, action) {
-  const comments = document.getElementById('hq-audit-comments').value;
-
-  if (action === 'Verify' && window.hqAuditInspectionState) {
-    const requiredPhotos = Array.from(window.hqAuditInspectionState.requiredPhotoImeis);
-    const unviewedPhotos = requiredPhotos.filter(imei => !window.hqAuditInspectionState.viewedPhotos.has(imei));
-
-    if (unviewedPhotos.length > 0) {
-      showToast(`⚠️ บังคับ: คุณยังไม่ได้เปิดดูรูปถ่าย Google Drive ของ IMEI: ${unviewedPhotos.join(', ')} กรุณากดดูรูปถ่ายให้ครบถ้วนก่อนอนุมัติ`, 'error');
-      return;
-    }
-
-    const totalRequired = window.hqAuditInspectionState.allScannedImeis.size;
-    const totalVerified = window.hqAuditInspectionState.verifiedImeis.size;
-
-    if (totalRequired > 0 && totalVerified < totalRequired) {
-      showToast(`⚠️ บังคับ: กรุณากดปุ่ม "กดยืนยันผ่านรายการนี้" ให้ครบทุกเครื่อง (${totalVerified}/${totalRequired} ชิ้น) ก่อนกดยืนยันอนุมัติส่วนกลาง`, 'error');
-      return;
-    }
-  }
-
-  try {
-    const res = await apiRequest(`/audit/verify/${auditId}`, 'POST', { action, comments });
-    if (res.success) {
-      showToast(action === 'Verify' ? 'อนุมัติการตรวจสอบสต็อกเรียบร้อยแล้ว' : 'ปฏิเสธการตรวจสอบสต็อกเรียบร้อยแล้ว');
-      closeModal();
-      renderHqAuditView();
-    }
-  } catch (err) {
-    // Handled
-  }
-}
-
 /* ==========================================================================
    VIEW 3: BRANCH DAILY STOCK CHECK
    ========================================================================== */
@@ -2348,7 +2291,6 @@ async function renderBranchAuditView() {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังดึงรายการสินค้าคงคลังสาขา...</div>`;
 
   const userBranchId = state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null);
-  window.stagedGoodsReceiptItems = window.stagedGoodsReceiptItems || [];
   
   try {
     const res = await apiRequest(`/audit/expected?branchId=${userBranchId}`);
@@ -2375,7 +2317,7 @@ async function renderBranchAuditView() {
             <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล แล้วกด Enter..." style="margin-top:0.3rem;" autofocus>
           </div>
           <div style="font-size:0.85rem; color:var(--text-muted);">
-            <i class="fa-solid fa-circle-info" style="color:var(--accent-primary);"></i> ซีเรียลที่สแกนจะถูกแมตช์เข้า SKU และเพิ่มจำนวนนับจริงให้อัตโนมัติ
+            <i class="fa-solid fa-circle-info" style="color:var(--accent-primary);"></i> สแกนหมายเลข IMEI เพื่อตรวจนับสินค้าคงเหลือในสาขา
           </div>
         </div>
       </div>
@@ -2384,7 +2326,7 @@ async function renderBranchAuditView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัส SKU / ชื่อสินค้า</th>
+              <th>ชื่อสินค้า</th>
               <th>จำนวนสินค้า</th>
               <th>จำนวนนับได้จริง</th>
               <th>ยอดที่ขาด/เกิน</th>
@@ -2394,15 +2336,13 @@ async function renderBranchAuditView() {
             ${state.expectedStockCache.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
             ${state.expectedStockCache.map((item, idx) => {
               const scannedImeis = item.scannedImeis || [];
-              item.scannedImeis = scannedImeis;
-              item.imeiImages = item.imeiImages || [];
               const actual = scannedImeis.length;
               const diff = actual - item.expectedCount;
 
               return `
                 <tr id="audit-row-${idx}">
                   <td>
-                    <strong style="color:#38bdf8;">${item.sku}</strong><br>
+                    <strong style="color:#38bdf8;">${item.productName}</strong><br>
                     <span style="font-size:0.8rem; color:var(--text-muted);">${item.productName}</span>
                   </td>
                   <td><strong class="expected-val" id="expected-${idx}">${item.expectedCount}</strong></td>
@@ -2470,7 +2410,7 @@ function processScannedSerial(serial) {
   let matchedIdx = -1;
 
   state.expectedStockCache.forEach((item, idx) => {
-    if (item.sku === serial || (item.expectedImeis && item.expectedImeis.includes(serial))) {
+    if (item.expectedImeis && item.expectedImeis.includes(serial)) {
       matchedIdx = idx;
     }
   });
@@ -2484,7 +2424,6 @@ function processScannedSerial(serial) {
       return;
     }
 
-    // Open POP-UP Modal to attach image for this IMEI
     openUploadImeiImageModal(serial, matchedIdx);
   } else {
     showToast(`ไม่พบหมายเลข IMEI/SKU ${serial} ในรายการสต็อกสาขานี้`, 'error');
@@ -2501,7 +2440,7 @@ function openUploadImeiImageModal(serial, matchedIdx) {
         <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#fbbf24;">${serial}</span>
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:#fff;">
-        สินค้า: ${item ? item.productName : 'สินค้าในสต็อก'} (SKU: ${item.sku})
+        สินค้า: ${item ? item.productName : 'สินค้าในสต็อก'} (IMEI: ${serial})
       </div>
       <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.4rem; line-height:1.4;">
         <i class="fa-brands fa-google-drive" style="color:#34d399;"></i> รูปถ่ายจะถูกบันทึกลง Google Drive โฟลเดอร์: <br>
@@ -2651,7 +2590,8 @@ async function submitBranchAuditFormSilent() {
     const imeiImages = item.imeiImages || [];
 
     return {
-      sku: item.sku,
+      product: item.product,
+      productName: item.productName,
       actualCount,
       scannedImeis,
       imeiImages
@@ -2666,6 +2606,793 @@ async function submitBranchAuditFormSilent() {
     });
   } catch (err) {
     // Silent auto sync
+  }
+}
+
+/* ==========================================================================
+   VIEW: BRANCH PURCHASE ORDERS (สั่งซื้อสินค้าลงสาขา)
+   ========================================================================== */
+async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
+  const container = document.getElementById('content-container');
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการสั่งซื้อสินค้าลงสาขาและแดชบอร์ดฝ่ายจัดซื้อ...</div>`;
+
+  try {
+    await loadMasterOptions();
+    const isHqOrAdmin = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user ? state.user.role : '');
+    const branches = state.masterOptions.branches || [];
+
+    let branchId = selectedBranchId;
+    if (!branchId && state.user && state.user.branch && !isHqOrAdmin) {
+      branchId = state.user.branch._id || state.user.branch;
+    }
+
+    // Fetch stock list for inventory count per branch
+    let stockList = [];
+    try {
+      const stockRes = await apiRequest('/stock/all');
+      if (stockRes.success) stockList = stockRes.stock || [];
+    } catch (e) {
+      console.warn('Unable to fetch stock list for branch cards:', e);
+    }
+
+    // Fetch all POs for cards calculation
+    let allOrders = [];
+    try {
+      const allRes = await apiRequest('/purchase-orders');
+      if (allRes.success) allOrders = allRes.orders || [];
+    } catch (e) {
+      console.warn('Unable to fetch all POs:', e);
+    }
+
+    // Filter displayed table orders
+    const displayedOrders = branchId ? allOrders.filter(o => String(o.branch ? (o.branch._id || o.branch) : '') === String(branchId)) : allOrders;
+
+    container.innerHTML = `
+      ${isHqOrAdmin && branches.length > 0 ? `
+        <!-- Branch Purchasing Overview Cards Grid -->
+        <div style="margin-bottom:2rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+            <div>
+              <h3 style="font-size:1.15rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
+                <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ (Purchasing Overview)
+              </h3>
+              <p style="font-size:0.8rem; color:var(--text-muted);">วงเงินคงเหลือ, สต็อกพร้อมขายในสาขา, รายการสั่งซื้อค้างส่ง และปุ่มทางด่วนสั่งซื้อ</p>
+            </div>
+            ${selectedBranchId ? `
+              <button class="btn btn-secondary btn-sm" onclick="renderBranchPurchaseOrdersView(null)">
+                <i class="fa-solid fa-rotate-left"></i> แสดงทุกสาขา
+              </button>
+            ` : ''}
+          </div>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1.2rem;">
+            ${branches.map(b => {
+              const bLimit = b.creditLimit || 0;
+              const bUsed = b.usedCredit || 0;
+              const bRem = Math.max(0, bLimit - bUsed);
+              const bPct = bLimit > 0 ? Math.min(100, Math.round((bUsed / bLimit) * 100)) : 0;
+
+              const bOrders = allOrders.filter(o => String(o.branch ? (o.branch._id || o.branch) : '') === String(b._id));
+              const pendingCount = bOrders.filter(o => o.status === 'pending_imei').length;
+              const receivedCount = bOrders.filter(o => o.status === 'received').length;
+              const totalOrderVal = bOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+              const inStockCount = stockList.filter(s => String(s.branch ? (s.branch._id || s.branch) : '') === String(b._id) && s.status === 'in_stock').length;
+              const isSelected = selectedBranchId && String(selectedBranchId) === String(b._id);
+
+              return `
+                <div class="card" style="background:rgba(255,255,255,0.03); border:${isSelected ? '2px solid var(--accent-gold)' : '1px solid rgba(255,255,255,0.12)'}; border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between; box-shadow:${isSelected ? '0 0 15px rgba(251,191,36,0.2)' : 'none'};">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
+                      <div>
+                        <strong style="font-size:1.1rem; color:#fff; font-weight:800; display:block;">${b.name}</strong>
+                        <span style="font-size:0.78rem; color:var(--text-muted); font-family:monospace;">รหัสสาขา: ${b.code || '-'}</span>
+                      </div>
+                      <span class="badge badge-${bRem > 0 ? 'green' : 'red'}" style="font-size:0.75rem;">
+                        <i class="fa-solid fa-${bRem > 0 ? 'circle-check' : 'ban'}"></i> ${bRem > 0 ? 'พร้อมสั่งซื้อ' : 'วงเงินเต็ม'}
+                      </span>
+                    </div>
+
+                    <!-- Credit Limit Bar -->
+                    <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:0.8rem; margin-bottom:1rem; border:1px solid rgba(255,255,255,0.06);">
+                      <div style="display:flex; justify-content:space-between; font-size:0.78rem; margin-bottom:0.3rem;">
+                        <span style="color:var(--text-muted);">ใช้วงเงินไปแล้ว:</span>
+                        <strong style="color:${bPct >= 90 ? '#f87171' : '#34d399'};">${bPct}%</strong>
+                      </div>
+                      <div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden; margin-bottom:0.6rem;">
+                        <div style="width:${bPct}%; background:${bPct >= 90 ? '#ef4444' : bPct >= 70 ? '#fbbf24' : '#34d399'}; height:100%; border-radius:4px;"></div>
+                      </div>
+                      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.4rem; font-size:0.75rem; text-align:center;">
+                        <div>
+                          <div style="color:var(--text-muted); font-size:0.7rem;">วงเงินอนุมัติ</div>
+                          <div style="font-weight:700; color:#818cf8;">฿${bLimit.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div style="color:var(--text-muted); font-size:0.7rem;">ใช้ไปแล้ว</div>
+                          <div style="font-weight:700; color:#fbbf24;">฿${bUsed.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div style="color:var(--text-muted); font-size:0.7rem;">สั่งซื้อได้อีก</div>
+                          <div style="font-weight:700; color:#34d399;">฿${bRem.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Key Purchasing & Inventory Metrics -->
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem; margin-bottom:1rem; font-size:0.8rem;">
+                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                        <div style="color:var(--text-muted); font-size:0.73rem;">📦 สต็อกพร้อมขายในสาขา</div>
+                        <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.2rem;">
+                          <strong style="font-size:1.15rem; color:${inStockCount < 5 ? '#f87171' : '#38bdf8'};">${inStockCount} เครื่อง</strong>
+                          ${inStockCount < 5 ? '<span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.35rem;">⚠️ สต็อกต่ำ</span>' : ''}
+                        </div>
+                      </div>
+
+                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                        <div style="color:var(--text-muted); font-size:0.73rem;">🟡 รอสาขาเติม IMEI</div>
+                        <div style="margin-top:0.2rem;">
+                          <strong style="font-size:1.15rem; color:${pendingCount > 0 ? '#fbbf24' : '#a1a1aa'};">${pendingCount} ใบ</strong>
+                        </div>
+                      </div>
+
+                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                        <div style="color:var(--text-muted); font-size:0.73rem;">🟢 รับเข้าสต็อกแล้ว</div>
+                        <div style="margin-top:0.2rem;">
+                          <strong style="font-size:1.1rem; color:#34d399;">${receivedCount} ใบ</strong>
+                        </div>
+                      </div>
+
+                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                        <div style="color:var(--text-muted); font-size:0.73rem;">💰 ยอดสั่งซื้อสะสม</div>
+                        <div style="margin-top:0.2rem;">
+                          <strong style="font-size:0.92rem; color:#34d399;">฿${totalOrderVal.toLocaleString()}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Quick Action Buttons -->
+                  <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                    <button class="btn btn-primary btn-sm" style="flex:1; font-size:0.8rem; font-weight:700;" onclick="openCreatePurchaseOrderModal('${b._id}')">
+                      <i class="fa-solid fa-cart-plus"></i> + สั่งซื้อลงสาขานี้
+                    </button>
+                    <button class="btn btn-secondary btn-sm" style="font-size:0.8rem; font-weight:700;" onclick="renderBranchPurchaseOrdersView('${b._id}')">
+                      <i class="fa-solid fa-list-check"></i> ดูใบสั่งซื้อ
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Action Bar & Filter -->
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-cart-flatbed" style="color:var(--accent-primary);"></i> รายการใบสั่งซื้อสินค้าลงสาขา (${displayedOrders.length} รายการ)
+          </h3>
+          <p style="font-size:0.82rem; color:var(--text-muted);">ประวัติและสถานะใบสั่งซื้อสินค้าลงสาขาแบบละเอียด</p>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="openCreatePurchaseOrderModal(${selectedBranchId ? `'${selectedBranchId}'` : ''})"><i class="fa-solid fa-plus"></i> สั่งซื้อสินค้าลงสาขาใหม่</button>
+          ${isHqOrAdmin && branches.length > 0 ? `
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ตัวกรองสาขา:</label>
+              <select class="form-select" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem; font-weight:700;" onchange="renderBranchPurchaseOrdersView(this.value || null)">
+                <option value="">-- แสดงทุกสาขา --</option>
+                ${branches.map(b => `<option value="${b._id}" ${String(selectedBranchId) === String(b._id) ? 'selected' : ''}>${b.name}</option>`).join('')}
+              </select>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- PO Data Table -->
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>เลขที่ใบสั่งซื้อ / วันเวลา</th>
+              <th>สาขา</th>
+              <th>รายการสินค้าสั่งซื้อ</th>
+              <th>จำนวนรวม</th>
+              <th>มูลค่ารวม (บาท)</th>
+              <th>ผู้สั่งซื้อ</th>
+              <th style="text-align:center;">สถานะ & ดำเนินการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${displayedOrders.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีรายการสั่งซื้อสินค้าลงสาขา</td></tr>` : ''}
+            ${displayedOrders.map(order => {
+              const isPending = order.status === 'pending_imei';
+              const itemsList = order.items || [];
+              const totalQty = itemsList.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+              let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเข้าสต็อกแล้ว</span>';
+              if (isPending) {
+                statusBadge = '<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอสาขาเติม IMEI</span>';
+              } else if (order.status === 'cancelled') {
+                statusBadge = '<span class="badge badge-red"><i class="fa-solid fa-ban"></i> ยกเลิก</span>';
+              }
+
+              return `
+                <tr>
+                  <td>
+                    <strong style="color:var(--accent-secondary); font-size:0.92rem;">${order.orderNumber}</strong><br>
+                    <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(order.createdAt).toLocaleString('th-TH')}</span>
+                  </td>
+                  <td><strong>${order.branchName || 'สาขา'}</strong></td>
+                  <td>
+                    ${itemsList.map(it => `<div style="font-size:0.83rem;">• <strong>${it.productName}</strong> x${it.quantity} (฿${(it.unitPrice || 0).toLocaleString()}/ชิ้น)</div>`).join('')}
+                  </td>
+                  <td><strong style="color:#38bdf8;">${totalQty} เครื่อง</strong></td>
+                  <td><strong style="color:#34d399; font-size:0.95rem;">฿${(order.totalAmount || 0).toLocaleString()}</strong></td>
+                  <td><span style="font-size:0.83rem;">${order.orderedByName || 'พนักงาน'}</span></td>
+                  <td style="text-align:center;">
+                    ${statusBadge}<br>
+                    ${isPending ? `
+                      <div style="display:flex; flex-direction:column; gap:0.3rem; margin-top:0.4rem; align-items:center;">
+                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; width:100%; font-weight:700;" onclick="openFillImeiAndReceiveModal('${order._id}')">
+                          <i class="fa-solid fa-barcode"></i> สแกนเติม IMEI & รับเข้าสต็อก
+                        </button>
+                        <div style="display:flex; gap:0.3rem; width:100%;">
+                          <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.4rem; font-size:0.75rem; flex:1; font-weight:700;" onclick="openEditPurchaseOrderModal('${order._id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                          </button>
+                          <button class="btn btn-danger btn-sm" style="padding:0.25rem 0.4rem; font-size:0.75rem; flex:1; font-weight:700;" onclick="cancelPurchaseOrderAction('${order._id}')">
+                            <i class="fa-solid fa-ban"></i> ยกเลิก
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดใบสั่งซื้อ: ${err.message}</div>`;
+  }
+}
+
+function openCreatePurchaseOrderModal(preselectedBranchId = null) {
+  const branches = state.masterOptions.branches || [];
+  const bodyHtml = `
+    <form id="create-po-form" onsubmit="event.preventDefault(); submitCreatePurchaseOrder();">
+      <div class="form-group" style="margin-bottom:1.2rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); padding:1rem; border-radius:8px;">
+        <label for="po-branch" style="font-weight:700; color:#fff; font-size:0.95rem;">
+          <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> เลือกสาขาที่สั่งซื้อสินค้าลง <span style="color:#ef4444;">*</span>
+        </label>
+        <select id="po-branch" class="form-select" style="margin-top:0.4rem; font-weight:700;" onchange="updatePoBranchCreditPreview(this.value)" required>
+          ${branches.map(b => `<option value="${b._id}" ${preselectedBranchId && String(b._id) === String(preselectedBranchId) ? 'selected' : ''}>${b.name} (วงเงินคงเหลือ: ฿${Math.max(0, (b.creditLimit || 0) - (b.usedCredit || 0)).toLocaleString()})</option>`).join('')}
+        </select>
+        <div id="po-credit-preview" style="font-size:0.83rem; margin-top:0.5rem;"></div>
+      </div>
+
+      <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:#38bdf8; display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fa-solid fa-boxes-packing"></i> ระบุรายการสินค้าที่สั่งซื้อลงสาขา</span>
+        <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
+          <i class="fa-solid fa-plus"></i> + เพิ่มรายการสินค้า
+        </button>
+      </div>
+
+      <div id="po-items-container" style="display:flex; flex-direction:column; gap:1rem; max-height:360px; overflow-y:auto; margin-bottom:1.2rem; padding-right:0.4rem;">
+        <!-- Dynamic PO Item Rows -->
+      </div>
+
+      <div id="po-total-card" style="background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); padding:1rem 1.2rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:0.82rem; color:var(--text-muted);">ราคารวมทั้งใบสั่งซื้อ</div>
+          <div style="font-size:0.78rem; color:#a1a1aa;">(จะถูกหักจากวงเงินคงเหลือของสาขา)</div>
+        </div>
+        <div style="text-align:right;">
+          <strong id="po-total-amount" style="font-size:1.4rem; color:#34d399;">฿0</strong>
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-primary" id="po-submit-btn" onclick="submitCreatePurchaseOrder()" style="padding:0.65rem 1.5rem; font-weight:700;">
+      <i class="fa-solid fa-check-double"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา
+    </button>
+  `;
+
+  openModal('📦 สร้างรายการสั่งซื้อสินค้าลงสาขา', bodyHtml, footerHtml);
+
+  window.poItemsState = [];
+  addPoItemRow();
+  updatePoBranchCreditPreview(document.getElementById('po-branch') ? document.getElementById('po-branch').value : '');
+}
+
+function updatePoBranchCreditPreview(branchId) {
+  const branches = state.masterOptions.branches || [];
+  const b = branches.find(item => String(item._id) === String(branchId));
+  const el = document.getElementById('po-credit-preview');
+  window.currentSelectedPoBranch = b;
+
+  if (el && b) {
+    const rem = Math.max(0, (b.creditLimit || 0) - (b.usedCredit || 0));
+    el.innerHTML = `
+      <div style="background:rgba(0,0,0,0.25); padding:0.6rem 0.8rem; border-radius:6px; display:flex; gap:1.2rem; align-items:center; border:1px solid rgba(255,255,255,0.08);">
+        <div><span style="color:var(--text-muted);">วงเงินอนุมัติ:</span> <strong>฿${(b.creditLimit || 0).toLocaleString()}</strong></div>
+        <div><span style="color:var(--text-muted);">ใช้ไปแล้ว:</span> <span style="color:#fbbf24; font-weight:700;">฿${(b.usedCredit || 0).toLocaleString()}</span></div>
+        <div><span style="color:var(--text-muted);">วงเงินคงเหลือสั่งซื้อได้:</span> <strong style="color:#34d399; font-size:0.95rem;">฿${rem.toLocaleString()}</strong></div>
+      </div>
+    `;
+  }
+  calculatePoTotal();
+}
+
+function addPoItemRow() {
+  window.poItemsState = window.poItemsState || [];
+
+  window.poItemsState.push({
+    brand: '',
+    model: '',
+    capacity: '',
+    color: '',
+    quantity: 1,
+    unitPrice: 0
+  });
+
+  renderPoItemRowsUI();
+}
+
+function removePoItemRow(idx) {
+  if (window.poItemsState && window.poItemsState.length > 1) {
+    window.poItemsState.splice(idx, 1);
+    renderPoItemRowsUI();
+  } else {
+    showToast('ต้องมีรายการสินค้าอย่างน้อย 1 รายการ', 'error');
+  }
+}
+
+function renderPoItemRowsUI() {
+  const container = document.getElementById('po-items-container');
+  if (!container) return;
+
+  const { brands = [], models = [], capacities = [], colors = [] } = state.masterOptions;
+
+  container.innerHTML = (window.poItemsState || []).map((item, idx) => {
+    const fullName = [item.brand, item.model, item.capacity, item.color].filter(Boolean).join(' ');
+    const rowSubtotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+
+    return `
+      <div class="po-item-card" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.12); padding:1rem; border-radius:8px; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; gap:0.5rem; flex-wrap:wrap;">
+          <div style="font-weight:700; color:#38bdf8; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
+            <span class="badge badge-gold" style="font-size:0.75rem;">รายการที่ ${idx + 1}</span>
+            <span style="color:${fullName ? '#34d399' : '#f87171'}; font-size:0.95rem; font-weight:800;">${fullName || '⚠️ ยังไม่ได้เลือกข้อมูลสินค้า'}</span>
+          </div>
+          ${(window.poItemsState || []).length > 1 ? `
+            <button type="button" class="btn btn-danger btn-sm" onclick="removePoItemRow(${idx})" style="padding:0.2rem 0.6rem; font-size:0.75rem;">
+              <i class="fa-solid fa-trash"></i> ลบรายการนี้
+            </button>
+          ` : ''}
+        </div>
+
+        <!-- Specs Grid (Mandatory Selection) -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:0.6rem; margin-bottom:0.8rem;">
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ยี่ห้อ <span style="color:#ef4444;">*</span></label>
+            <select class="form-select" style="font-size:0.82rem; padding:0.35rem 0.4rem;" onchange="onPoItemDropdownChange(${idx}, 'brand', this.value)">
+              <option value="">-- เลือกยี่ห้อ --</option>
+              ${brands.map(b => `<option value="${b.value}" ${b.value === item.brand ? 'selected' : ''}>${b.value}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ชื่อรุ่น <span style="color:#ef4444;">*</span></label>
+            <select class="form-select" style="font-size:0.82rem; padding:0.35rem 0.4rem;" onchange="onPoItemDropdownChange(${idx}, 'model', this.value)">
+              <option value="">-- เลือกชื่อรุ่น --</option>
+              ${models.map(m => `<option value="${m.value}" ${m.value === item.model ? 'selected' : ''}>${m.value}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted);">ความจุ</label>
+            <select class="form-select" style="font-size:0.82rem; padding:0.35rem 0.4rem;" onchange="onPoItemDropdownChange(${idx}, 'capacity', this.value)">
+              <option value="">-- เลือกความจุ --</option>
+              ${capacities.map(c => `<option value="${c.value}" ${c.value === item.capacity ? 'selected' : ''}>${c.value}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted);">สีสินค้า</label>
+            <select class="form-select" style="font-size:0.82rem; padding:0.35rem 0.4rem;" onchange="onPoItemDropdownChange(${idx}, 'color', this.value)">
+              <option value="">-- เลือกสีสินค้า --</option>
+              ${colors.map(co => `<option value="${co.value}" ${co.value === item.color ? 'selected' : ''}>${co.value}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <!-- Quantity & Price Inputs -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:0.6rem; background:rgba(0,0,0,0.15); padding:0.65rem; border-radius:6px; align-items:center;">
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">จำนวน (เครื่อง) <span style="color:#ef4444;">*</span></label>
+            <input type="number" class="form-control po-qty-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#38bdf8;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ราคาสั่งซื้อ/ชิ้น (บาท) <span style="color:#ef4444;">*</span></label>
+            <input type="number" class="form-control po-price-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#34d399;" min="0" placeholder="ระบุราคาสั่งซื้อ" value="${item.unitPrice || ''}" oninput="onPoNumericInput(${idx})">
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.72rem; color:var(--text-muted);">รวมรายการนี้</div>
+            <strong id="po-row-subtotal-${idx}" style="font-size:1.05rem; color:#fbbf24;">฿${rowSubtotal.toLocaleString()}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  calculatePoTotal();
+}
+
+function onPoItemDropdownChange(idx, field, value) {
+  if (!window.poItemsState || !window.poItemsState[idx]) return;
+  window.poItemsState[idx][field] = value;
+  renderPoItemRowsUI();
+}
+
+function onPoNumericInput(idx) {
+  if (!window.poItemsState || !window.poItemsState[idx]) return;
+
+  const qtyInp = document.querySelector(`.po-qty-input[data-idx="${idx}"]`);
+  const priceInp = document.querySelector(`.po-price-input[data-idx="${idx}"]`);
+
+  const qty = qtyInp ? (Math.max(1, parseInt(qtyInp.value) || 1)) : 1;
+  const price = priceInp ? (Math.max(0, parseFloat(priceInp.value) || 0)) : 0;
+
+  window.poItemsState[idx].quantity = qty;
+  window.poItemsState[idx].unitPrice = price;
+
+  const rowSubtotalEl = document.getElementById(`po-row-subtotal-${idx}`);
+  if (rowSubtotalEl) {
+    rowSubtotalEl.innerText = `฿${(qty * price).toLocaleString()}`;
+  }
+
+  calculatePoTotal();
+}
+
+function calculatePoTotal() {
+  const items = window.poItemsState || [];
+  const total = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
+
+  const totalEl = document.getElementById('po-total-amount');
+  if (totalEl) {
+    totalEl.innerText = `฿${total.toLocaleString()}`;
+  }
+
+  // Check against remaining branch credit
+  const branch = window.currentSelectedPoBranch;
+  const submitBtn = document.getElementById('po-submit-btn');
+
+  if (branch) {
+    const rem = Math.max(0, (branch.creditLimit || 0) - (branch.usedCredit || 0));
+    if (total > rem) {
+      if (totalEl) totalEl.style.color = '#ef4444';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ยอดซื้อเกินวงเงินสาขา (เกิน ฿${(total - rem).toLocaleString()})`;
+        submitBtn.className = 'btn btn-danger';
+      }
+    } else {
+      if (totalEl) totalEl.style.color = '#34d399';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา`;
+        submitBtn.className = 'btn btn-primary';
+      }
+    }
+  }
+
+  return total;
+}
+
+async function submitCreatePurchaseOrder() {
+  const branchId = document.getElementById('po-branch') ? document.getElementById('po-branch').value : null;
+  const items = window.poItemsState || [];
+
+  if (!branchId) {
+    showToast('กรุณาเลือกสาขาที่สั่งซื้อสินค้าลง', 'error');
+    return;
+  }
+
+  if (items.length === 0) {
+    showToast('กรุณาเพิ่มรายการสินค้าสั่งซื้ออย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  // Strict validation: every item must have brand, model, and unitPrice > 0
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (!it.brand || !it.model) {
+      showToast(`กรุณาเลือก "ยี่ห้อ" และ "ชื่อรุ่น" ให้ครบถ้วนสำหรับรายการที่ ${i + 1}`, 'error');
+      return;
+    }
+    if (!it.unitPrice || Number(it.unitPrice) <= 0) {
+      showToast(`กรุณาระบุ "ราคาสั่งซื้อ/ชิ้น" ให้มากกว่า 0 สำหรับรายการที่ ${i + 1}`, 'error');
+      return;
+    }
+  }
+
+  const payloadItems = items.map(item => ({
+    brand: item.brand,
+    model: item.model,
+    capacity: item.capacity,
+    color: item.color,
+    productName: [item.brand, item.model, item.capacity, item.color].filter(Boolean).join(' '),
+    quantity: Number(item.quantity) || 1,
+    unitPrice: Number(item.unitPrice) || 0
+  }));
+
+  try {
+    const res = await apiRequest('/purchase-orders', 'POST', {
+      branchId,
+      items: payloadItems
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderBranchPurchaseOrdersView(branchId);
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function openEditPurchaseOrderModal(orderId) {
+  openModal('กำลังโหลดรายละเอียดใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}`);
+    if (!res.success || !res.order) {
+      showToast('ไม่พบข้อมูลใบสั่งซื้อ', 'error');
+      return;
+    }
+
+    const order = res.order;
+    if (order.status !== 'pending_imei') {
+      showToast('ไม่สามารถแก้ไขได้ เนื่องจากรายการนี้ไม่ได้อยู่ในสถานะรอเติม IMEI', 'error');
+      closeModal();
+      return;
+    }
+
+    window.currentEditingPo = order;
+    const branches = state.masterOptions.branches || [];
+    window.currentSelectedPoBranch = branches.find(b => String(b._id) === String(order.branch ? (order.branch._id || order.branch) : '')) || order.branch;
+
+    window.poItemsState = (order.items || []).map(it => ({
+      brand: it.brand || '',
+      model: it.model || '',
+      capacity: it.capacity || '',
+      color: it.color || '',
+      quantity: it.quantity || 1,
+      unitPrice: it.unitPrice || 0
+    }));
+
+    const bodyHtml = `
+      <form id="edit-po-form" onsubmit="event.preventDefault(); submitEditPurchaseOrder('${order._id}');">
+        <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:0.8rem 1rem; border-radius:6px; margin-bottom:1rem;">
+          <div style="font-weight:700; color:var(--accent-primary); font-size:0.95rem;">
+            แก้ไขใบสั่งซื้อเลขที่: <strong>${order.orderNumber}</strong>
+          </div>
+          <div style="font-size:0.83rem; color:var(--text-muted); margin-top:0.2rem;">
+            สาขา: <strong>${order.branchName}</strong> | ผู้สั่งซื้อ: ${order.orderedByName || '-'}
+          </div>
+        </div>
+
+        <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:#38bdf8; display:flex; justify-content:space-between; align-items:center;">
+          <span><i class="fa-solid fa-boxes-packing"></i> รายการสินค้าที่ต้องการสั่งซื้อ (ระบุสเปกและราคา)</span>
+          <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
+            <i class="fa-solid fa-plus"></i> + เพิ่มรายการสินค้า
+          </button>
+        </div>
+
+        <div id="po-items-container" style="display:flex; flex-direction:column; gap:1rem; max-height:360px; overflow-y:auto; margin-bottom:1.2rem; padding-right:0.4rem;">
+          <!-- Dynamic PO Item Rows -->
+        </div>
+
+        <div id="po-total-card" style="background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); padding:1rem 1.2rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.82rem; color:var(--text-muted);">ราคารวมใหม่ทั้งใบสั่งซื้อ</div>
+            <div style="font-size:0.78rem; color:#a1a1aa;">(ส่วนต่างราคาจะถูกปรับกับวงเงินคงเหลือของสาขาโดยอัตโนมัติ)</div>
+          </div>
+          <div style="text-align:right;">
+            <strong id="po-total-amount" style="font-size:1.4rem; color:#34d399;">฿0</strong>
+          </div>
+        </div>
+      </form>
+    `;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" id="po-submit-btn" onclick="submitEditPurchaseOrder('${order._id}')" style="padding:0.65rem 1.5rem; font-weight:700;">
+        <i class="fa-solid fa-save"></i> บันทึกการแก้ไขใบสั่งซื้อ
+      </button>
+    `;
+
+    openModal(`✏️ แก้ไขใบสั่งซื้อสินค้า: ${order.orderNumber}`, bodyHtml, footerHtml);
+    renderPoItemRowsUI();
+
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+async function submitEditPurchaseOrder(orderId) {
+  const items = window.poItemsState || [];
+
+  if (items.length === 0) {
+    showToast('กรุณาเพิ่มรายการสินค้าสั่งซื้ออย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (!it.brand || !it.model) {
+      showToast(`กรุณาเลือก "ยี่ห้อ" และ "ชื่อรุ่น" ให้ครบถ้วนสำหรับรายการที่ ${i + 1}`, 'error');
+      return;
+    }
+    if (!it.unitPrice || Number(it.unitPrice) <= 0) {
+      showToast(`กรุณาระบุ "ราคาสั่งซื้อ/ชิ้น" ให้มากกว่า 0 สำหรับรายการที่ ${i + 1}`, 'error');
+      return;
+    }
+  }
+
+  const payloadItems = items.map(item => ({
+    brand: item.brand,
+    model: item.model,
+    capacity: item.capacity,
+    color: item.color,
+    productName: [item.brand, item.model, item.capacity, item.color].filter(Boolean).join(' '),
+    quantity: Number(item.quantity) || 1,
+    unitPrice: Number(item.unitPrice) || 0
+  }));
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}`, 'PUT', {
+      items: payloadItems
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderBranchPurchaseOrdersView();
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function cancelPurchaseOrderAction(orderId) {
+  if (!confirm('คุณยืนยันที่จะ "ยกเลิก" ใบสั่งซื้อนี้ใช่หรือไม่?\n\n* ระบบจะทำการ คืนวงเงินสั่งซื้อ ให้กับสาขาโดยอัตโนมัติ *')) {
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}/cancel`, 'POST');
+    if (res.success) {
+      showToast(res.message);
+      renderBranchPurchaseOrdersView();
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function openFillImeiAndReceiveModal(orderId) {
+  openModal('📱 สแกนเติม IMEI สินค้าจากใบสั่งซื้อ', `<div style="padding:2rem; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายละเอียดใบสั่งซื้อ...</div>`);
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}`);
+    const order = res.order;
+    window.currentFillingPo = order;
+
+    let bodyHtml = `
+      <div style="background:rgba(0,0,0,0.25); padding:0.8rem 1rem; border-radius:6px; margin-bottom:1rem; border:1px solid rgba(255,255,255,0.1);">
+        <div style="font-weight:700; color:var(--accent-primary); font-size:0.9rem;">
+          ใบสั่งซื้อเลขที่: <strong>${order.orderNumber}</strong> (${order.branchName})
+        </div>
+        <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.2rem;">
+          กรุณาสแกนหรือพิมพ์หมายเลข IMEI สำหรับสินค้าทุกชิ้นตามจำนวนที่สั่งซื้อ
+        </div>
+      </div>
+
+      <form id="fill-imei-form" onsubmit="event.preventDefault(); submitFillImeiAndReceive('${order._id}');">
+    `;
+
+    (order.items || []).forEach((item, itemIdx) => {
+      bodyHtml += `
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); padding:0.8rem; border-radius:6px; margin-bottom:0.8rem;">
+          <div style="font-weight:800; font-size:0.92rem; color:#38bdf8; margin-bottom:0.4rem;">
+            ${itemIdx + 1}. ${item.productName}
+          </div>
+          <div style="font-size:0.8rem; color:#fbbf24; margin-bottom:0.6rem; font-weight:700;">
+            จำนวนที่ต้องกรอก: ${item.quantity} เครื่อง
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:0.4rem;">
+      `;
+
+      for (let i = 0; i < item.quantity; i++) {
+        bodyHtml += `
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span style="font-size:0.78rem; color:var(--text-muted); width:70px;">เครื่องที่ ${i + 1}:</span>
+            <input type="text" class="form-control po-imei-input" data-item-idx="${itemIdx}" data-sub-idx="${i}" placeholder="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" required style="font-family:monospace; font-size:0.85rem; font-weight:700;">
+          </div>
+        `;
+      }
+
+      bodyHtml += `</div></div>`;
+    });
+
+    bodyHtml += `</form>`;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-success" onclick="submitFillImeiAndReceive('${order._id}')"><i class="fa-solid fa-check"></i> ยืนยันเติม IMEI & รับเข้าสต็อกสาขา</button>
+    `;
+
+    openModal(`📱 สแกนเติม IMEI สินค้า: ${order.orderNumber}`, bodyHtml, footerHtml);
+
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+async function submitFillImeiAndReceive(orderId) {
+  const order = window.currentFillingPo;
+  if (!order) return;
+
+  const allImeis = [];
+  const itemPayloads = [];
+
+  for (let idx = 0; idx < (order.items || []).length; idx++) {
+    const inputs = document.querySelectorAll(`.po-imei-input[data-item-idx="${idx}"]`);
+    const imeis = Array.from(inputs).map(inp => inp.value.trim()).filter(Boolean);
+
+    if (imeis.length < order.items[idx].quantity) {
+      showToast(`กรุณากรอก IMEI ให้ครบทุกเครื่องสำหรับ ${order.items[idx].productName}`, 'error');
+      return;
+    }
+
+    allImeis.push(...imeis);
+    itemPayloads.push({
+      itemIndex: idx,
+      productId: order.items[idx].product,
+      imeis
+    });
+  }
+
+  const uniqueSet = new Set(allImeis);
+  if (uniqueSet.size !== allImeis.length) {
+    showToast('พบหมายเลข IMEI ซ้ำกันในรายการที่สแกนกรอก', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}/receive`, 'POST', {
+      items: itemPayloads
+    });
+
+    if (res.success) {
+      showToast('สแกนเติม IMEI เรียบร้อย! ส่งรายการไปยัง "ตรวจสอบรายการรับสินค้าเข้าสต็อก" รอฝ่ายสต็อกกดยืนยันเข้าสต็อกจริง');
+      closeModal();
+      if (state.currentView === 'goods-receipt') {
+        renderGoodsReceiptView();
+      } else {
+        renderBranchPurchaseOrdersView();
+      }
+    }
+  } catch (err) {
+    // Handled
   }
 }
 
@@ -2711,10 +3438,84 @@ async function renderGoodsReceiptView() {
     const initialCapacity = capacities[0] ? capacities[0].value : '';
     const initialColor = colors[0] ? colors[0].value : '';
 
-    const initialSKU = generateAutoSKU(initialBrand, initialModel, initialCapacity);
     const initialName = generateAutoName(initialBrand, initialModel, initialCapacity, initialColor);
 
+    // Fetch pending_imei purchase orders for quick IMEI fill
+    let pendingPoOrders = [];
+    try {
+      const poRes = await apiRequest('/purchase-orders');
+      if (poRes.success) {
+        pendingPoOrders = (poRes.orders || []).filter(o => o.status === 'pending_imei');
+        // If branch_staff / technical_staff, filter to own branch only
+        if (state.user && state.user.branch && ['branch_staff', 'technical_staff'].includes(state.user.role)) {
+          const userBranchId = String(state.user.branch._id || state.user.branch);
+          pendingPoOrders = pendingPoOrders.filter(o => {
+            const oBranchId = o.branch ? String(o.branch._id || o.branch) : '';
+            return oBranchId === userBranchId;
+          });
+        }
+      }
+    } catch (poErr) {
+      console.warn('Unable to load purchase orders for goods-receipt view:', poErr);
+    }
+
+    // Build pending PO quick-receive section HTML
+    let pendingPoSectionHtml = '';
+    if (pendingPoOrders.length > 0) {
+      const poRows = pendingPoOrders.map(order => {
+        const totalQty = (order.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+        const itemNames = (order.items || []).map(it => it.productName).join(', ');
+        const dateStr = new Date(order.createdAt).toLocaleDateString('th-TH');
+        return `
+          <tr>
+            <td>
+              <strong style="color:#38bdf8;">${order.orderNumber}</strong><br>
+              <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
+            </td>
+            <td><strong>${order.branchName || '-'}</strong></td>
+            <td style="font-size:0.82rem; max-width:260px; word-break:break-word;">${itemNames}</td>
+            <td style="text-align:center;">
+              <span class="badge badge-yellow" style="font-size:0.78rem;">${totalQty} เครื่อง</span>
+            </td>
+            <td style="text-align:center;">
+              <button class="btn btn-success btn-sm" style="white-space:nowrap; font-size:0.8rem; padding:0.35rem 0.85rem; font-weight:700;" onclick="openFillImeiAndReceiveModal('${order._id}')">
+                <i class="fa-solid fa-barcode"></i> สแกนเติม IMEI & รับเข้าสต็อก
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      pendingPoSectionHtml = `
+        <div class="card" style="max-width:950px; margin:0 auto 1.5rem auto; border:1px solid rgba(251,191,36,0.35); background:rgba(251,191,36,0.05);">
+          <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.8rem;">
+            <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;"></i>
+            <h4 style="font-size:1.05rem; font-weight:800; color:#fbbf24; margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
+            <span class="badge badge-yellow" style="font-size:0.82rem;">${pendingPoOrders.length} ใบ</span>
+          </div>
+          <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:0.8rem;">
+            ใบสั่งซื้อเหล่านี้ได้รับการอนุมัติและหักวงเงินแล้ว กรุณากดปุ่ม <strong style="color:#34d399;">สแกนเติม IMEI</strong> เพื่อบันทึกสินค้าเข้าสต็อก
+          </p>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>เลขที่ใบสั่งซื้อ</th>
+                  <th>สาขา</th>
+                  <th>รายการสินค้า</th>
+                  <th style="text-align:center;">จำนวน</th>
+                  <th style="text-align:center;">ดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody>${poRows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
     container.innerHTML = `
+      ${pendingPoSectionHtml}
       <!-- Entry Card -->
       <div class="card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
         <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
@@ -2863,7 +3664,7 @@ async function renderGoodsReceiptView() {
                 <th>เลขที่ใบรับ / วันเวลา</th>
                 <th>สาขา & ผู้รับสินค้า</th>
                 <th>รายละเอียดสินค้า</th>
-                <th>รหัส SKU (IMEI)</th>
+                <th>หมายเลข IMEI</th>
                 <th>สถานะการรับเข้า</th>
                 <th style="text-align:center;">จัดการ</th>
               </tr>
@@ -2891,7 +3692,7 @@ async function renderGoodsReceiptView() {
                       <span style="font-size:0.78rem; color:var(--text-muted);">${p.brand || ''} | ${p.model || ''} (${p.category || ''})</span>
                     </td>
                     <td>
-                      <span style="font-family:monospace; font-weight:700; color:#fbbf24;">${p.sku || (r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
+                      <span style="font-family:monospace; font-weight:700; color:#fbbf24;">${(r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
                     </td>
                     <td>
                       ${isPending ? '<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
@@ -2935,7 +3736,7 @@ function openEditGoodsReceiptModal(receiptId) {
 
   const { brands = [], models = [], capacities = [], colors = [], categories = [] } = state.masterOptions || {};
   const p = receipt.productInfo || {};
-  const currentImei = p.sku || (receipt.imeiSerials && receipt.imeiSerials[0]) || '';
+  const currentImei = (receipt.imeiSerials && receipt.imeiSerials[0]) || '';
 
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.2); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
@@ -2995,7 +3796,7 @@ function openEditGoodsReceiptModal(receiptId) {
       </div>
 
       <div class="form-group">
-        <label for="edit-gr-imei">หมายเลขซีเรียล / IMEI (SKU)</label>
+        <label for="edit-gr-imei">หมายเลขซีเรียล / IMEI</label>
         <input type="text" id="edit-gr-imei" class="form-control" value="${currentImei}" style="font-family:monospace; font-weight:700; color:#fbbf24;" required>
       </div>
     </form>
@@ -3100,7 +3901,7 @@ function renderStagedItemsTable() {
         <strong style="color:#34d399;">${it.name}</strong><br>
         <span style="font-size:0.78rem; color:var(--text-muted);">${it.brand} | ${it.model} ${it.capacity ? '| ' + it.capacity : ''} ${it.color ? '| ' + it.color : ''}</span>
       </td>
-      <td><span class="badge badge-gray">${it.category}</span></td>
+      <td><span class="badge badge-gray" style="font-size:0.7rem;">${it.category}</span></td>
       <td><span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.95rem;">${it.imei}</span></td>
       <td style="text-align:center; white-space:nowrap;">
         <button type="button" class="btn btn-sm btn-warning" onclick="openEditStagedItemModal(${idx})" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-right:0.3rem;">
@@ -3397,49 +4198,9 @@ function recalculateGrAutoFields() {
   const capacity = capacityEl ? capacityEl.value : '';
   const color = colorEl ? colorEl.value : '';
 
-  const skuInput = document.getElementById('gr-sku');
   const nameInput = document.getElementById('gr-name');
-
-  if (skuInput) skuInput.value = generateAutoSKU(brand, model, capacity);
-  if (nameInput) nameInput.value = generateAutoName(brand, model, capacity, color);
-}
-
-function generateImeiInputs() {
-  const qtyInput = document.getElementById('gr-quantity');
-  const container = document.getElementById('gr-imei-inputs-container');
-  const badge = document.getElementById('gr-imei-count-badge');
-
-  if (!qtyInput || !container) return;
-
-  let qty = parseInt(qtyInput.value) || 1;
-  if (qty < 1) qty = 1;
-  if (qty > 100) qty = 100;
-
-  if (badge) badge.innerText = `${qty} เครื่อง`;
-
-  const existingValues = Array.from(document.querySelectorAll('.gr-imei-input')).map(inp => inp.value);
-
-  let html = '';
-  for (let i = 0; i < qty; i++) {
-    const val = existingValues[i] || '';
-    html += `
-      <div style="display:flex; align-items:center; gap:0.6rem;">
-        <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); width:80px; flex-shrink:0;">เครื่องที่ ${i + 1}:</span>
-        <input type="text" class="form-control gr-imei-input" placeholder="สแกนบาร์โค้ด หรือ พิมพ์หมายเลข IMEI เครื่องที่ ${i + 1}" value="${val}" required onkeydown="handleImeiInputKeydown(event, ${i})">
-      </div>
-    `;
-  }
-
-  container.innerHTML = html;
-}
-
-function handleImeiInputKeydown(event, currentIndex) {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    const inputs = document.querySelectorAll('.gr-imei-input');
-    if (inputs[currentIndex + 1]) {
-      inputs[currentIndex + 1].focus();
-    }
+  if (nameInput) {
+    nameInput.value = generateAutoName(brand, model, capacity, color);
   }
 }
 
@@ -3463,7 +4224,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
         <div>
           <h3 style="font-size:1.1rem; font-weight:700;">ตรวจสอบรายการรับสินค้าเข้าสต็อก (Stock Receipt Verification)</h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">
-            ฝ่ายสต็อกและจัดซื้อจะเข้ามาตรวจสอบ ใส่ราคาทุนและราคาขาย (1 รายการ ต่อ 1 IMEI / SKU) และกดยืนยันเข้าสต็อก
+            ฝ่ายสต็อกและจัดซื้อจะเข้ามาตรวจสอบ ใส่ราคาทุนและราคาขาย (1 รายการ ต่อ 1 IMEI) และกดยืนยันเข้าสต็อก
           </p>
         </div>
 
@@ -3491,7 +4252,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
               <th>เลขที่ใบรับ / วันเวลา</th>
               <th>สาขา & ผู้รับสินค้า</th>
               <th>รายละเอียดสินค้า</th>
-              <th>รหัส SKU (IMEI)</th>
+              <th>หมายเลข IMEI</th>
               <th>ราคาทุน (บาท)</th>
               <th>ราคาขาย (บาท)</th>
               <th style="text-align:center;">สถานะ & การยืนยัน</th>
@@ -3523,7 +4284,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                     <span style="font-size:0.78rem; color:var(--text-muted);">หมวดหมู่: ${p.category}</span>
                   </td>
                   <td>
-                    <strong style="color:#38bdf8; font-size:0.9rem;">SKU: ${p.sku}</strong><br>
+                    <strong style="color:#38bdf8; font-size:0.9rem;">IMEI: ${(r.imeiSerials && r.imeiSerials[0]) || '-'}</strong><br>
                     <span class="badge badge-gold" style="font-size:0.7rem;">1 เครื่อง</span>
                   </td>
                   <td>${r.purchase_price ? '฿' + r.purchase_price.toLocaleString() : '<span style="color:#fbbf24;">ยังไม่ได้ตั้ง</span>'}</td>
@@ -3532,7 +4293,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                     ${isPending ? `
                       <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา & ยืนยัน</span><br>
                       ${isHqOrPurchasing ? `
-                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', '${p.sku}')">
+                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}')">
                           <i class="fa-solid fa-check"></i> ใส่ราคา & ยืนยัน
                         </button>
                       ` : ''}
@@ -3633,14 +4394,14 @@ async function submitBatchConfirmReceipt(receiptIds) {
   }
 }
 
-function openConfirmReceiptModal(receiptId, receiptNumber, productName, sku) {
+function openConfirmReceiptModal(receiptId, receiptNumber, productName) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="font-weight:700; font-size:0.9rem; color:var(--accent-primary); margin-bottom:0.3rem;">
         เลขที่ใบรับสินค้า: ${receiptNumber}
       </div>
       <div style="font-size:1rem; font-weight:800; color:#fff;">
-        ${productName} (SKU: ${sku})
+        ${productName}
       </div>
     </div>
 
@@ -3789,8 +4550,8 @@ async function openCreateTransferModal() {
       </div>
 
       <div class="form-group">
-        <label for="tr-sku">รหัสสินค้า SKU</label>
-        <input type="text" id="tr-sku" class="form-control" placeholder="เช่น APL-IP15P-256NT" required>
+        <label for="tr-imei">หมายเลข IMEI สินค้าที่ต้องการโอน</label>
+        <input type="text" id="tr-imei" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI 15 หลัก" required>
       </div>
 
       <div class="form-group">
@@ -3816,15 +4577,21 @@ async function openCreateTransferModal() {
 async function submitTransferRequest() {
   const fromBranchId = document.getElementById('tr-from').value;
   const toBranchId = document.getElementById('tr-to').value;
-  const sku = document.getElementById('tr-sku').value.trim();
-  const quantity = parseInt(document.getElementById('tr-qty').value);
+  const imeiInput = document.getElementById('tr-imei');
+  const imei = imeiInput ? imeiInput.value.trim() : '';
+  const quantity = parseInt(document.getElementById('tr-qty').value) || 1;
   const remarks = document.getElementById('tr-remarks').value;
+
+  if (!imei) {
+    showToast('กรุณาระบุหมายเลข IMEI สินค้าที่ต้องการโอนย้าย', 'error');
+    return;
+  }
 
   try {
     const res = await apiRequest('/stock/transfers', 'POST', {
       fromBranchId,
       toBranchId,
-      items: [{ sku, quantity }],
+      items: [{ imei, quantity }],
       remarks
     });
 
@@ -3888,19 +4655,22 @@ async function printTransferDoc(transferId) {
         <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.2rem;">
           <thead>
             <tr style="background:#e5e7eb; color:#000;">
-              <th style="padding:8px; border:1px solid #ccc; text-align:left;">รหัสสินค้า (SKU)</th>
               <th style="padding:8px; border:1px solid #ccc; text-align:left;">รายการสินค้า</th>
+              <th style="padding:8px; border:1px solid #ccc; text-align:left;">หมายเลข IMEI / ซีเรียล</th>
               <th style="padding:8px; border:1px solid #ccc; text-align:right;">จำนวนโอน (ชิ้น)</th>
             </tr>
           </thead>
           <tbody>
-            ${doc.items.map(item => `
-              <tr style="color:#000;">
-                <td style="padding:8px; border:1px solid #ccc;"><strong>${item.sku}</strong></td>
-                <td style="padding:8px; border:1px solid #ccc;">${item.productName || (item.product ? item.product.name : 'สินค้าทั่วไป')}</td>
-                <td style="padding:8px; border:1px solid #ccc; text-align:right;"><strong>${item.quantity}</strong></td>
-              </tr>
-            `).join('')}
+            ${doc.items.map(item => {
+              const imeiText = (item.imei_serials && item.imei_serials.length > 0) ? item.imei_serials.join(', ') : (item.imei || '-');
+              return `
+                <tr style="color:#000;">
+                  <td style="padding:8px; border:1px solid #ccc;">${item.productName || (item.product ? item.product.name : 'สินค้าทั่วไป')}</td>
+                  <td style="padding:8px; border:1px solid #ccc; font-family:monospace; font-weight:700;">${imeiText}</td>
+                  <td style="padding:8px; border:1px solid #ccc; text-align:right;"><strong>${item.quantity}</strong></td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
 
@@ -3933,7 +4703,7 @@ async function printTransferDoc(transferId) {
 }
 
 /* ==========================================================================
-   VIEW 6: PRODUCT MASTER CATALOG (AUTO SKU & AUTO FULL PRODUCT NAME)
+   VIEW 6: PRODUCT MASTER CATALOG (AUTO FULL PRODUCT NAME)
    ========================================================================== */
 async function renderProductMasterView() {
   const container = document.getElementById('content-container');
@@ -3949,12 +4719,12 @@ async function renderProductMasterView() {
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="font-size:1.1rem; font-weight:700;">ข้อมูลหลักสินค้า (Product Master Catalog)</h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">ระบบจะประกอบ <strong>ชื่อสินค้าแบบเต็ม</strong> และ <strong>รหัส SKU</strong> ให้อัตโนมัติจากตัวเลือก Master Data</p>
+          <p style="font-size:0.85rem; color:var(--text-muted);">ระบบประกอบ <strong>ชื่อสินค้าแบบเต็ม</strong> ให้อัตโนมัติจากตัวเลือก Master Data (การระบุ IMEI จะสแกนรับเข้าเมื่อมีสินค้าจริง)</p>
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
           <button class="btn btn-success btn-sm" onclick="exportProductsMasterToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
           ${canAddProduct ? `
-            <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus"></i> เพิ่ม Master SKU ใหม่</button>
+            <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus"></i> เพิ่ม Master Product ใหม่</button>
           ` : ''}
         </div>
       </div>
@@ -3964,7 +4734,6 @@ async function renderProductMasterView() {
           <thead>
             <tr>
               <th style="width:60px; text-align:center;">ไอคอน</th>
-              <th>รหัส SKU (อัตโนมัติ)</th>
               <th>ชื่อสินค้าแบบเต็ม (อัตโนมัติ)</th>
               <th>ยี่ห้อ / ชื่อรุ่น</th>
               <th>ความจุ / สีสินค้า</th>
@@ -3975,19 +4744,18 @@ async function renderProductMasterView() {
             </tr>
           </thead>
           <tbody>
-            ${products.length === 0 ? `<tr><td colspan="${canAddProduct ? 9 : 8}" style="text-align:center; color:var(--text-muted);">ยังไม่มีการลงทะเบียนสินค้าในระบบ</td></tr>` : ''}
+            ${products.length === 0 ? `<tr><td colspan="${canAddProduct ? 8 : 7}" style="text-align:center; color:var(--text-muted);">ยังไม่มีการลงทะเบียนสินค้าในระบบ</td></tr>` : ''}
             ${products.map(p => `
               <tr class="product-master-row">
                 <td style="text-align:center; font-size:1.4rem; color:var(--accent-primary);">
                   <i class="fa-solid fa-mobile-screen-button"></i>
                 </td>
-                <td><strong>${p.sku}</strong></td>
                 <td><strong>${p.name}</strong></td>
                 <td><span class="badge badge-gray">${p.brand}</span> ${p.model}</td>
                 <td>${p.capacity ? `<span class="badge badge-gold">${p.capacity}</span> ` : ''}${p.color || p.variation}</td>
                 <td>${p.category}</td>
-                <td>฿${p.purchase_price.toLocaleString()}</td>
-                <td><strong style="color:#34d399;">฿${p.selling_price.toLocaleString()}</strong></td>
+                <td>฿${(p.purchase_price || 0).toLocaleString()}</td>
+                <td><strong style="color:#34d399;">฿${(p.selling_price || 0).toLocaleString()}</strong></td>
                 ${canAddProduct ? `
                   <td style="text-align:center;">
                     <button class="btn btn-secondary btn-sm" onclick="openEditProductModal('${p._id}')">
@@ -4022,7 +4790,6 @@ function openCreateProductModal() {
   const initialCapacity = capacities[0] ? capacities[0].value : '';
   const initialColor = colors[0] ? colors[0].value : '';
 
-  const initialSKU = generateAutoSKU(initialBrand, initialModel, initialCapacity);
   const initialName = generateAutoName(initialBrand, initialModel, initialCapacity, initialColor);
 
   const bodyHtml = `
@@ -4077,16 +4844,6 @@ function openCreateProductModal() {
         <span style="font-size:0.75rem; color:var(--text-muted);">ระบบประกอบชื่อสินค้าแบบเต็มให้อัตโนมัติจากตัวเลือกด้านบน</span>
       </div>
 
-      <div class="form-group">
-        <label for="prod-sku">รหัสสินค้า SKU (รันให้อัตโนมัติ)</label>
-        <div style="display:flex; gap:0.5rem;">
-          <input type="text" id="prod-sku" class="form-control" value="${initialSKU}" style="font-weight:700; color:#38bdf8; background:rgba(0,0,0,0.3);" required readonly>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="recalculateAutoFields()" title="สร้างรหัส SKU และชื่อสินค้าใหม่">
-            <i class="fa-solid fa-rotate"></i>
-          </button>
-        </div>
-      </div>
-
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
         <div class="form-group">
           <label for="prod-pprice">ราคาทุน (บาท)</label>
@@ -4105,7 +4862,7 @@ function openCreateProductModal() {
     <button class="btn btn-primary" onclick="submitCreateProduct()"><i class="fa-solid fa-plus"></i> บันทึก Master Product</button>
   `;
 
-  openModal('เพิ่มรหัสสินค้า Master SKU ใหม่ (สร้างชื่อสินค้าอัตโนมัติ)', bodyHtml, footerHtml);
+  openModal('เพิ่มข้อมูลหลักสินค้า Master Product ใหม่ (สร้างชื่อสินค้าอัตโนมัติ)', bodyHtml, footerHtml);
 }
 
 async function openEditProductModal(productId) {
@@ -4173,16 +4930,6 @@ async function openEditProductModal(productId) {
           <input type="text" id="prod-name" class="form-control" value="${product.name}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required>
         </div>
 
-        <div class="form-group">
-          <label for="prod-sku">รหัสสินค้า SKU</label>
-          <div style="display:flex; gap:0.5rem;">
-            <input type="text" id="prod-sku" class="form-control" value="${product.sku}" style="font-weight:700; color:#38bdf8; background:rgba(0,0,0,0.3);" required>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="recalculateAutoFields()" title="คำนวณ SKU ใหม่">
-              <i class="fa-solid fa-rotate"></i>
-            </button>
-          </div>
-        </div>
-
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
           <div class="form-group">
             <label for="prod-pprice">ราคาทุน (บาท)</label>
@@ -4201,7 +4948,7 @@ async function openEditProductModal(productId) {
       <button class="btn btn-primary" onclick="submitEditProduct('${product._id}')"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข Master Product</button>
     `;
 
-    openModal(`แก้ไขข้อมูลหลักสินค้า SKU: ${product.sku}`, bodyHtml, footerHtml);
+    openModal(`แก้ไขข้อมูลหลักสินค้า: ${product.name}`, bodyHtml, footerHtml);
   } catch (err) {
     openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
   }
@@ -4215,21 +4962,17 @@ async function submitEditProduct(productId) {
   const category = document.getElementById('prod-category').value;
   const purchase_price = document.getElementById('prod-pprice').value;
   const selling_price = document.getElementById('prod-sprice').value;
-
-  const skuInput = document.getElementById('prod-sku');
   const nameInput = document.getElementById('prod-name');
 
-  const sku = skuInput && skuInput.value ? skuInput.value.trim() : '';
   const name = nameInput && nameInput.value ? nameInput.value.trim() : '';
 
-  if (!sku || !name || !brand || !model || !category || purchase_price === undefined || selling_price === undefined) {
+  if (!name || !brand || !model || !category || purchase_price === undefined || selling_price === undefined) {
     showToast('กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง', 'error');
     return;
   }
 
   try {
     const res = await apiRequest(`/products/${productId}`, 'PUT', {
-      sku,
       name,
       brand,
       model,
@@ -4262,12 +5005,7 @@ function recalculateAutoFields() {
   const capacity = capacityEl ? capacityEl.value : '';
   const color = colorEl ? colorEl.value : '';
 
-  const skuInput = document.getElementById('prod-sku');
   const nameInput = document.getElementById('prod-name');
-
-  if (skuInput) {
-    skuInput.value = generateAutoSKU(brand, model, capacity);
-  }
 
   if (nameInput) {
     nameInput.value = generateAutoName(brand, model, capacity, color);
@@ -4282,11 +5020,8 @@ async function submitCreateProduct() {
   const category = document.getElementById('prod-category').value;
   const purchase_price = document.getElementById('prod-pprice').value;
   const selling_price = document.getElementById('prod-sprice').value;
-
-  const skuInput = document.getElementById('prod-sku');
   const nameInput = document.getElementById('prod-name');
 
-  const sku = skuInput && skuInput.value ? skuInput.value : generateAutoSKU(brand, model, capacity);
   const name = nameInput && nameInput.value ? nameInput.value : generateAutoName(brand, model, capacity, color);
 
   if (!brand || !model || !category || !purchase_price || !selling_price) {
@@ -4296,7 +5031,6 @@ async function submitCreateProduct() {
 
   try {
     const res = await apiRequest('/products', 'POST', {
-      sku,
       name,
       brand,
       model,
@@ -4309,7 +5043,7 @@ async function submitCreateProduct() {
     });
 
     if (res.success) {
-      showToast(`บันทึกรหัสสินค้า Master SKU ${res.product.sku} เรียบร้อยแล้ว`);
+      showToast(`บันทึกสินค้า Master Product ${res.product.name} เรียบร้อยแล้ว`);
       closeModal();
       renderProductMasterView();
     }

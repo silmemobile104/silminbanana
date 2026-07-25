@@ -23,7 +23,6 @@ const saleSchema = new mongoose.Schema({
   },
   items: [{
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-    sku: { type: String, required: true },
     productName: { type: String, required: true },
     imei: { type: String, default: '' },
     costPrice: { type: Number, default: 0 },

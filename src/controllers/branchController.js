@@ -15,7 +15,7 @@ const getAllBranches = async (req, res, next) => {
 
 const createBranch = async (req, res, next) => {
   try {
-    const { branchCode, code, branchName, name, address, phone, contactInfo } = req.body;
+    const { branchCode, code, branchName, name, address, phone, contactInfo, creditLimit } = req.body;
 
     const finalCode = (branchCode || code || '').trim().toUpperCase();
     const finalName = (branchName || name || '').trim();
@@ -35,6 +35,7 @@ const createBranch = async (req, res, next) => {
       name: finalName,
       address: finalAddress,
       phone: phone || '',
+      creditLimit: Number(creditLimit) || 0,
       isActive: true
     });
 
@@ -46,7 +47,7 @@ const createBranch = async (req, res, next) => {
         action: 'CREATE_BRANCH',
         entity: 'Branch',
         entityId: branch._id.toString(),
-        details: { code: branch.code, name: branch.name }
+        details: { code: branch.code, name: branch.name, creditLimit: branch.creditLimit }
       });
     }
 
@@ -63,7 +64,7 @@ const createBranch = async (req, res, next) => {
 const updateBranch = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { branchName, name, address, phone, contactInfo, isActive } = req.body;
+    const { branchName, name, address, phone, contactInfo, creditLimit, isActive } = req.body;
 
     const branch = await Branch.findById(id);
     if (!branch) {
@@ -74,6 +75,7 @@ const updateBranch = async (req, res, next) => {
     if (address !== undefined) branch.address = address;
     if (phone !== undefined) branch.phone = phone;
     if (contactInfo !== undefined && !address) branch.address = contactInfo;
+    if (creditLimit !== undefined) branch.creditLimit = Number(creditLimit) || 0;
     if (isActive !== undefined) branch.isActive = Boolean(isActive);
 
     await branch.save();

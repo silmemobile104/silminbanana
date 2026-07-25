@@ -17,7 +17,6 @@ const goodsReceiptSchema = new mongoose.Schema({
     required: true
   },
   productInfo: {
-    sku: { type: String, required: true },
     name: { type: String, required: true },
     brand: { type: String, required: true },
     model: { type: String, required: true },

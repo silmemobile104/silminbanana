@@ -28,21 +28,27 @@ const createTransfer = async (req, res, next) => {
     // Validate available stock in fromBranch
     const preparedItems = [];
     for (const item of items) {
-      const stock = await Stock.findOne({ branch: fromBranchId, sku: item.sku }).populate('product');
-      if (!stock || stock.quantity < item.quantity) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `จำนวนสินค้าคงเหลือไม่เพียงพอสำหรับ รหัส SKU "${item.sku}" ที่ ${fromBranch.name} (คงเหลือ: ${stock ? stock.quantity : 0}, ร้องขอ: ${item.quantity})` 
-        });
+      const imeiList = item.imei_serials || (item.imei ? [item.imei] : []);
+      if (imeiList.length === 0) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI ที่ต้องการโอนย้าย' });
       }
 
-      preparedItems.push({
-        product: stock.product._id,
-        sku: item.sku,
-        productName: stock.product.name,
-        quantity: item.quantity,
-        imei_serials: item.imei_serials || []
-      });
+      for (const targetImei of imeiList) {
+        const stock = await Stock.findOne({ branch: fromBranchId, imei: targetImei, status: 'in_stock' }).populate('product');
+        if (!stock) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `ไม่พบสินค้า IMEI "${targetImei}" ที่ ${fromBranch.name} หรือไม่ได้อยู่ในสถานะพร้อมโอน` 
+          });
+        }
+
+        preparedItems.push({
+          product: stock.product ? stock.product._id : null,
+          productName: stock.productName || (stock.product ? stock.product.name : 'สินค้าไม่ระบุชื่อ'),
+          quantity: 1,
+          imei_serials: [targetImei]
+        });
+      }
     }
 
     const transferCount = await StockTransfer.countDocuments();
@@ -121,38 +127,15 @@ const updateTransferStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `รายการนี้อยู่ในสถานะ ${transfer.status} แล้ว ไม่สามารถเปลี่ยนแปลงได้` });
     }
 
-    // Process completion -> deduct stock from Source, add stock to Destination
+    // Process completion -> migrate stock documents directly by IMEI from fromBranch to toBranch
     if (status === 'completed') {
       for (const item of transfer.items) {
-        // Source branch stock reduction
-        const sourceStock = await Stock.findOne({ branch: transfer.fromBranch._id, sku: item.sku });
-        if (sourceStock) {
-          sourceStock.quantity = Math.max(0, sourceStock.quantity - item.quantity);
-          if (item.imei_serials && item.imei_serials.length > 0) {
-            sourceStock.imei_serials = sourceStock.imei_serials.filter(i => !item.imei_serials.includes(i.imei));
-          }
-          await sourceStock.save();
-        }
-
-        // Destination branch stock addition
-        let destStock = await Stock.findOne({ branch: transfer.toBranch._id, sku: item.sku });
-        const importDate = new Date();
-        if (destStock) {
-          destStock.quantity += item.quantity;
-          if (item.imei_serials && item.imei_serials.length > 0) {
-            destStock.imei_serials.push(...item.imei_serials.map(s => ({ imei: s, status: 'in_stock', received_date: importDate })));
-          }
-          destStock.import_date = importDate;
-          await destStock.save();
-        } else {
-          await Stock.create({
-            branch: transfer.toBranch._id,
-            product: item.product,
-            sku: item.sku,
-            quantity: item.quantity,
-            imei_serials: (item.imei_serials || []).map(s => ({ imei: s, status: 'in_stock', received_date: importDate })),
-            import_date: importDate
-          });
+        const targetImeis = item.imei_serials || [];
+        for (const im of targetImeis) {
+          await Stock.updateOne(
+            { imei: im },
+            { $set: { branch: transfer.toBranch._id, status: 'in_stock', import_date: new Date() } }
+          );
         }
       }
     }

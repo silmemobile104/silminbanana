@@ -1,22 +1,5 @@
 const mongoose = require('mongoose');
 
-const imeiItemSchema = new mongoose.Schema({
-  imei: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['in_stock', 'transferred', 'sold', 'missing'],
-    default: 'in_stock'
-  },
-  received_date: {
-    type: Date,
-    default: Date.now
-  }
-}, { _id: false });
-
 const stockSchema = new mongoose.Schema({
   branch: {
     type: mongoose.Schema.Types.ObjectId,
@@ -28,24 +11,67 @@ const stockSchema = new mongoose.Schema({
     ref: 'Product',
     required: true
   },
-  sku: {
+  imei: {
     type: String,
     required: true,
     trim: true
   },
-  quantity: {
-    type: Number,
+  productName: {
+    type: String,
     required: true,
-    default: 0
+    trim: true
   },
-  imei_serials: [imeiItemSchema],
+  brand: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  model: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  capacity: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  color: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  category: {
+    type: String,
+    default: 'Smartphones',
+    trim: true
+  },
+  purchase_price: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  selling_price: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  status: {
+    type: String,
+    enum: ['in_stock', 'transferred', 'sold', 'missing'],
+    default: 'in_stock'
+  },
   import_date: {
     type: Date,
     default: Date.now
+  },
+  sold_date: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
 
-// Ensure unique combination per SKU + Branch
-stockSchema.index({ branch: 1, sku: 1 }, { unique: true });
+stockSchema.index({ branch: 1, status: 1 });
+stockSchema.index({ imei: 1 });
 
 module.exports = mongoose.model('Stock', stockSchema);

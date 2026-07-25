@@ -13,42 +13,58 @@ const getBranchExpectedStock = async (req, res, next) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const existingAudit = await DailyAudit.findOne({ auditDate: todayStr, branch: branchId });
 
-    const stocks = await Stock.find({ branch: branchId, quantity: { $gt: 0 } }).populate('product');
+    // Fetch all active stock items (1 per device IMEI)
+    const stocks = await Stock.find({ branch: branchId, status: 'in_stock' }).populate('product');
     
-    const items = stocks
-      .filter(st => st.product && st.quantity > 0)
-      .map(st => {
-        const activeImeis = st.imei_serials
-          ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-          : [];
-        
-        const existingItem = existingAudit && existingAudit.items ? existingAudit.items.find(i => i.sku === st.sku) : null;
+    // Group stocks by Product catalog
+    const productGroupMap = new Map();
 
-        let scannedImeis = existingItem ? existingItem.scannedImeis || [] : [];
-        let imeiImages = existingItem ? existingItem.imeiImages || [] : [];
+    stocks.forEach(st => {
+      if (!st.product) return;
+      const pIdStr = st.product._id.toString();
 
-        // Exclude IMEIs marked as 'resubmit' by HQ so staff count resets
-        if (existingItem && existingItem.imeiDecisions && existingItem.imeiDecisions.length > 0) {
-          const resubmitImeis = existingItem.imeiDecisions
-            .filter(d => d.decision === 'resubmit')
-            .map(d => d.imei);
-          
-          if (resubmitImeis.length > 0) {
-            scannedImeis = scannedImeis.filter(im => !resubmitImeis.includes(im));
-            imeiImages = imeiImages.filter(img => !resubmitImeis.includes(img.imei));
-          }
-        }
-
-        return {
+      if (!productGroupMap.has(pIdStr)) {
+        productGroupMap.set(pIdStr, {
           product: st.product._id,
-          sku: st.sku,
-          productName: st.product.name,
-          expectedCount: st.quantity,
-          expectedImeis: activeImeis,
-          scannedImeis,
-          imeiImages
-        };
-      });
+          productName: st.product.name || st.productName,
+          expectedImeis: []
+        });
+      }
+
+      if (st.imei) {
+        productGroupMap.get(pIdStr).expectedImeis.push(st.imei);
+      }
+    });
+
+    const items = Array.from(productGroupMap.values()).map(grp => {
+      const existingItem = existingAudit && existingAudit.items 
+        ? existingAudit.items.find(i => i.product && i.product.toString() === grp.product.toString()) 
+        : null;
+
+      let scannedImeis = existingItem ? existingItem.scannedImeis || [] : [];
+      let imeiImages = existingItem ? existingItem.imeiImages || [] : [];
+
+      // Exclude IMEIs marked as 'resubmit' by HQ
+      if (existingItem && existingItem.imeiDecisions && existingItem.imeiDecisions.length > 0) {
+        const resubmitImeis = existingItem.imeiDecisions
+          .filter(d => d.decision === 'resubmit')
+          .map(d => d.imei);
+        
+        if (resubmitImeis.length > 0) {
+          scannedImeis = scannedImeis.filter(im => !resubmitImeis.includes(im));
+          imeiImages = imeiImages.filter(img => !resubmitImeis.includes(img.imei));
+        }
+      }
+
+      return {
+        product: grp.product,
+        productName: grp.productName,
+        expectedCount: grp.expectedImeis.length,
+        expectedImeis: grp.expectedImeis,
+        scannedImeis,
+        imeiImages
+      };
+    });
 
     res.json({
       success: true,
@@ -74,10 +90,20 @@ const submitBranchAudit = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลสาขา' });
     }
 
-    const stocks = await Stock.find({ branch: targetBranchId }).populate('product');
-    const stockMap = new Map();
+    const stocks = await Stock.find({ branch: targetBranchId, status: 'in_stock' }).populate('product');
+    const productMap = new Map();
+
     stocks.forEach(st => {
-      stockMap.set(st.sku, st);
+      if (!st.product) return;
+      const pIdStr = st.product._id.toString();
+      if (!productMap.has(pIdStr)) {
+        productMap.set(pIdStr, {
+          product: st.product._id,
+          productName: st.product.name || st.productName,
+          imeis: []
+        });
+      }
+      if (st.imei) productMap.get(pIdStr).imeis.push(st.imei);
     });
 
     let totalExpected = 0;
@@ -85,23 +111,19 @@ const submitBranchAudit = async (req, res, next) => {
     let totalVariance = 0;
 
     const auditedItems = [];
-    const allSkus = new Set([...stockMap.keys(), ...scannedItems.map(si => si.sku)]);
+    const processedProductIds = new Set();
 
-    for (const sku of allSkus) {
-      const stock = stockMap.get(sku);
-      const scanned = scannedItems.find(si => si.sku === sku) || { actualCount: 0, scannedImeis: [] };
+    // Process scanned items
+    for (const scanned of scannedItems) {
+      const pIdStr = scanned.product ? scanned.product.toString() : null;
+      const stockGrp = pIdStr ? productMap.get(pIdStr) : null;
+      if (pIdStr) processedProductIds.add(pIdStr);
 
-      const expectedCount = stock ? stock.quantity : 0;
-      const actualCount = Number(scanned.actualCount) || (scanned.scannedImeis ? scanned.scannedImeis.length : 0);
-      
-      // AUTOMATED VARIANCE CALCULATION
-      const variance = actualCount - expectedCount;
-
-      const expectedImeis = stock && stock.imei_serials
-        ? stock.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-        : [];
-      
+      const expectedImeis = stockGrp ? stockGrp.imeis : (scanned.expectedImeis || []);
+      const expectedCount = expectedImeis.length;
       const scannedImeis = scanned.scannedImeis || [];
+      const actualCount = scannedImeis.length;
+      const variance = actualCount - expectedCount;
 
       const missingImeis = expectedImeis.filter(i => !scannedImeis.includes(i));
       const unexpectedImeis = scannedImeis.filter(i => !expectedImeis.includes(i));
@@ -111,9 +133,8 @@ const submitBranchAudit = async (req, res, next) => {
       totalVariance += Math.abs(variance);
 
       auditedItems.push({
-        product: stock ? stock.product._id : null,
-        sku,
-        productName: stock ? stock.product.name : sku,
+        product: scanned.product || (stockGrp ? stockGrp.product : null),
+        productName: scanned.productName || (stockGrp ? stockGrp.productName : 'สินค้าไม่ระบุชื่อ'),
         expectedCount,
         actualCount,
         variance,
@@ -123,6 +144,33 @@ const submitBranchAudit = async (req, res, next) => {
         unexpectedImeis,
         imeiImages: scanned.imeiImages || []
       });
+    }
+
+    // Process any products in stock that were not in scannedItems
+    for (const [pIdStr, stockGrp] of productMap.entries()) {
+      if (!processedProductIds.has(pIdStr)) {
+        const expectedImeis = stockGrp.imeis;
+        const expectedCount = expectedImeis.length;
+        const actualCount = 0;
+        const variance = -expectedCount;
+
+        totalExpected += expectedCount;
+        totalActual += 0;
+        totalVariance += Math.abs(variance);
+
+        auditedItems.push({
+          product: stockGrp.product,
+          productName: stockGrp.productName,
+          expectedCount,
+          actualCount,
+          variance,
+          expectedImeis,
+          scannedImeis: [],
+          missingImeis: expectedImeis,
+          unexpectedImeis: [],
+          imeiImages: []
+        });
+      }
     }
 
     let audit = await DailyAudit.findOne({ auditDate, branch: targetBranchId });
@@ -198,7 +246,7 @@ const getHqDashboard = async (req, res, next) => {
     });
 
     // Fetch real-time expected stocks from Stock collection for fallback calculations
-    const allStocks = await Stock.find({ quantity: { $gt: 0 } }).populate('product');
+    const allStocks = await Stock.find({ status: 'in_stock' }).populate('product');
     const branchStocksMap = new Map();
     allStocks.forEach(st => {
       if (st.branch && st.product) {
@@ -206,22 +254,7 @@ const getHqDashboard = async (req, res, next) => {
         if (!branchStocksMap.has(bId)) {
           branchStocksMap.set(bId, []);
         }
-        const activeImeis = st.imei_serials
-          ? st.imei_serials.filter(i => i.status === 'in_stock').map(i => i.imei)
-          : [];
-        branchStocksMap.get(bId).push({
-          product: st.product._id,
-          sku: st.sku,
-          productName: st.product.name,
-          expectedCount: st.quantity,
-          actualCount: 0,
-          variance: -st.quantity,
-          expectedImeis: activeImeis,
-          scannedImeis: [],
-          missingImeis: activeImeis,
-          unexpectedImeis: [],
-          imeiImages: []
-        });
+        branchStocksMap.get(bId).push(st.imei);
       }
     });
 
@@ -256,14 +289,14 @@ const getHqDashboard = async (req, res, next) => {
           colorCode = hasVariance ? 'red' : 'green';
         }
       } else {
-        const fallbackItems = branchStocksMap.get(bIdStr) || [];
-        totalExpected = fallbackItems.reduce((sum, i) => sum + i.expectedCount, 0);
+        const fallbackImeis = branchStocksMap.get(bIdStr) || [];
+        totalExpected = fallbackImeis.length;
         totalActual = 0;
         totalVariance = totalExpected;
         hasVariance = totalExpected > 0;
         status = 'ยังไม่ได้ส่งรายงาน';
         colorCode = 'yellow';
-        items = fallbackItems;
+        items = [];
       }
 
       return {
@@ -472,8 +505,7 @@ const saveImeiDecision = async (req, res, next) => {
 
     let foundItem = false;
     for (const item of audit.items) {
-      const hasImei = item.sku === imei ||
-        (item.scannedImeis && item.scannedImeis.includes(imei)) ||
+      const hasImei = (item.scannedImeis && item.scannedImeis.includes(imei)) ||
         (item.expectedImeis && item.expectedImeis.includes(imei));
       if (hasImei) {
         foundItem = true;
@@ -485,7 +517,7 @@ const saveImeiDecision = async (req, res, next) => {
         } else {
           item.imeiDecisions.push({ imei, decision, updatedAt: new Date() });
         }
-        // If decision is 'resubmit', reset/remove this imei from scannedImeis & imeiImages, and recalculate actualCount & variance!
+
         if (decision === 'resubmit') {
           if (item.scannedImeis && item.scannedImeis.includes(imei)) {
             item.scannedImeis = item.scannedImeis.filter(im => im !== imei);
@@ -504,8 +536,7 @@ const saveImeiDecision = async (req, res, next) => {
     if (!foundItem) {
       audit.items.push({
         product: req.user._id,
-        sku: imei,
-        productName: imei,
+        productName: `IMEI: ${imei}`,
         expectedCount: 1,
         actualCount: decision === 'resubmit' ? 0 : 1,
         variance: decision === 'resubmit' ? -1 : 0,

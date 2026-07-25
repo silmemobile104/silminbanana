@@ -17,13 +17,17 @@ const auditRoutes = require('./routes/auditRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const userRoutes = require('./routes/userRoutes');
 const posRoutes = require('./routes/posRoutes');
+const purchaseOrderRoutes = require('./routes/purchaseOrderRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const repairData = require('./scripts/repairData');
+
 // Connect to MongoDB & Auto-Seed Default Accounts if empty
 connectDB().then(() => {
   autoSeedIfEmpty();
+  repairData();
 }).catch((err) => {
   console.error('🔴 เกิดข้อผิดพลาดขณะเริ่มเชื่อมต่อฐานข้อมูล:', err.message);
 });
@@ -46,6 +50,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/pos', posRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
 
 // Health Check API
 app.get('/api/health', (req, res) => {

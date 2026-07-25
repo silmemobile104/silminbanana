@@ -1,13 +1,6 @@
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
-  sku: {
-    type: String,
-    required: true,
-    unique: true,
-    uppercase: true,
-    trim: true
-  },
   name: {
     type: String,
     required: true,
@@ -33,22 +26,22 @@ const productSchema = new mongoose.Schema({
   },
   variation: {
     type: String,
-    required: true,
+    default: 'Standard',
     trim: true
   },
   category: {
     type: String,
-    required: true,
+    default: 'Smartphones',
     trim: true
   },
   purchase_price: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   selling_price: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   images: [{
@@ -62,6 +55,20 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   }
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+productSchema.virtual('fullName').get(function() {
+  return this.name || [this.brand, this.model, this.capacity, this.color].filter(Boolean).join(' ');
+});
+productSchema.virtual('costPrice').get(function() {
+  return this.purchase_price !== undefined ? this.purchase_price : 0;
+});
+productSchema.virtual('sellingPrice').get(function() {
+  return this.selling_price !== undefined ? this.selling_price : 0;
+});
 
 module.exports = mongoose.model('Product', productSchema);

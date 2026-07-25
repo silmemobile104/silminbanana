@@ -81,7 +81,6 @@ const autoSeedIfEmpty = async () => {
     // 4. Create Master Products
     const productsData = [
       {
-        sku: 'APL-IP15P-256NT',
         name: 'Apple iPhone 15 Pro 256GB ไทเทเนียมธรรมชาติ',
         brand: 'Apple',
         model: 'iPhone 15 Pro',
@@ -95,7 +94,6 @@ const autoSeedIfEmpty = async () => {
         hasImei: true
       },
       {
-        sku: 'SAM-S24U-256TG',
         name: 'Samsung Galaxy S24 Ultra 256GB ไทเทเนียมเทา',
         brand: 'Samsung',
         model: 'Galaxy S24 Ultra',
@@ -111,34 +109,86 @@ const autoSeedIfEmpty = async () => {
     ];
 
     const products = await Product.insertMany(productsData);
-    const prodMap = {};
-    products.forEach(p => prodMap[p.sku] = p);
+    const iphoneProd = products.find(p => p.brand === 'Apple');
+    const samsungProd = products.find(p => p.brand === 'Samsung');
 
-    // 5. Initial Stock with unique IMEIs
+    // 5. Initial Stock with 1 document per physical device IMEI
     const now = new Date();
     const stockEntries = [
       {
         branch: branchMap['BR-HQ01'],
-        product: prodMap['APL-IP15P-256NT']._id,
-        sku: 'APL-IP15P-256NT',
-        quantity: 3,
-        import_date: now,
-        imei_serials: [
-          { imei: '358912345678901', status: 'in_stock', received_date: now },
-          { imei: '358912345678902', status: 'in_stock', received_date: now },
-          { imei: '358912345678903', status: 'in_stock', received_date: now }
-        ]
+        product: iphoneProd._id,
+        imei: '358912345678901',
+        productName: iphoneProd.name,
+        brand: iphoneProd.brand,
+        model: iphoneProd.model,
+        capacity: iphoneProd.capacity,
+        color: iphoneProd.color,
+        category: iphoneProd.category,
+        purchase_price: iphoneProd.purchase_price,
+        selling_price: iphoneProd.selling_price,
+        status: 'in_stock',
+        import_date: now
+      },
+      {
+        branch: branchMap['BR-HQ01'],
+        product: iphoneProd._id,
+        imei: '358912345678902',
+        productName: iphoneProd.name,
+        brand: iphoneProd.brand,
+        model: iphoneProd.model,
+        capacity: iphoneProd.capacity,
+        color: iphoneProd.color,
+        category: iphoneProd.category,
+        purchase_price: iphoneProd.purchase_price,
+        selling_price: iphoneProd.selling_price,
+        status: 'in_stock',
+        import_date: now
+      },
+      {
+        branch: branchMap['BR-HQ01'],
+        product: iphoneProd._id,
+        imei: '358912345678903',
+        productName: iphoneProd.name,
+        brand: iphoneProd.brand,
+        model: iphoneProd.model,
+        capacity: iphoneProd.capacity,
+        color: iphoneProd.color,
+        category: iphoneProd.category,
+        purchase_price: iphoneProd.purchase_price,
+        selling_price: iphoneProd.selling_price,
+        status: 'in_stock',
+        import_date: now
       },
       {
         branch: branchMap['BR-N002'],
-        product: prodMap['APL-IP15P-256NT']._id,
-        sku: 'APL-IP15P-256NT',
-        quantity: 2,
-        import_date: now,
-        imei_serials: [
-          { imei: '358912345678904', status: 'in_stock', received_date: now },
-          { imei: '358912345678905', status: 'in_stock', received_date: now }
-        ]
+        product: iphoneProd._id,
+        imei: '358912345678904',
+        productName: iphoneProd.name,
+        brand: iphoneProd.brand,
+        model: iphoneProd.model,
+        capacity: iphoneProd.capacity,
+        color: iphoneProd.color,
+        category: iphoneProd.category,
+        purchase_price: iphoneProd.purchase_price,
+        selling_price: iphoneProd.selling_price,
+        status: 'in_stock',
+        import_date: now
+      },
+      {
+        branch: branchMap['BR-N002'],
+        product: iphoneProd._id,
+        imei: '358912345678905',
+        productName: iphoneProd.name,
+        brand: iphoneProd.brand,
+        model: iphoneProd.model,
+        capacity: iphoneProd.capacity,
+        color: iphoneProd.color,
+        category: iphoneProd.category,
+        purchase_price: iphoneProd.purchase_price,
+        selling_price: iphoneProd.selling_price,
+        status: 'in_stock',
+        import_date: now
       }
     ];
 
@@ -155,9 +205,8 @@ const autoSeedIfEmpty = async () => {
       status: 'Pending Verification',
       items: [
         {
-          product: prodMap['APL-IP15P-256NT']._id,
-          sku: 'APL-IP15P-256NT',
-          productName: prodMap['APL-IP15P-256NT'].name,
+          product: iphoneProd._id,
+          productName: iphoneProd.name,
           expectedCount: 3,
           actualCount: 3,
           variance: 0,
@@ -178,7 +227,7 @@ const autoSeedIfEmpty = async () => {
       }]
     });
 
-    console.log('[AutoSeed] Auto-seeding completed with separated Capacity & Color options!');
+    console.log('[AutoSeed] Auto-seeding completed with IMEI-based stock documents!');
   } catch (err) {
     console.error('[AutoSeed Error]', err.message);
   }

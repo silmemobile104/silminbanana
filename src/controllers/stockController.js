@@ -10,7 +10,7 @@ function generateAutoName(brand = '', model = '', capacity = '', color = '') {
   return parts.join(' ');
 }
 
-// Goods Receipt - Direct Product Info Entry by Branch Staff (Creates GoodsReceipt using IMEI as SKU for each unit)
+// Goods Receipt - Direct Product Info Entry by Branch Staff (Creates GoodsReceipt using IMEI for each unit)
 const receiveStock = async (req, res, next) => {
   try {
     let { branchId, items, brand, model, capacity, color, category, quantity, imeiSerials } = req.body;
@@ -75,40 +75,23 @@ const receiveStock = async (req, res, next) => {
     }
 
     if (normalizedItems.length === 0) {
-      return res.status(400).json({ success: false, message: 'กรุณาระบุรายการสินค้าและหมายเลข IMEI/ซีเรียลอย่างน้อย 1 รายการ' });
+      return res.status(400).json({ success: false, message: 'กรุณาระบุรายการสินค้าและหมายเลข IMEI อย่างน้อย 1 รายการ' });
     }
 
     const allSerials = normalizedItems.map(it => it.imei);
     const uniqueInputSerials = new Set(allSerials);
     if (uniqueInputSerials.size !== allSerials.length) {
-      return res.status(400).json({ success: false, message: 'พบหมายเลขซีเรียล/IMEI ซ้ำซ้อนในรายการที่กรอกเข้ามา' });
+      return res.status(400).json({ success: false, message: 'พบหมายเลข IMEI ซ้ำซ้อนในรายการที่กรอกเข้ามา' });
     }
 
-    // Check existing stock IMEIs or SKUs in database
-    const existingStockWithSerials = await Stock.find({ 
-      $or: [
-        { 'imei_serials.imei': { $in: allSerials } },
-        { 'sku': { $in: allSerials } }
-      ]
-    });
+    // Check existing stock IMEIs in database
+    const existingStockWithSerials = await Stock.find({ imei: { $in: allSerials } });
     
-    let duplicateIMEIs = [];
-    existingStockWithSerials.forEach(st => {
-      if (allSerials.includes(st.sku)) {
-        duplicateIMEIs.push(st.sku);
-      }
-      st.imei_serials.forEach(item => {
-        if (allSerials.includes(item.imei) && item.status === 'in_stock') {
-          duplicateIMEIs.push(item.imei);
-        }
-      });
-    });
-
-    if (duplicateIMEIs.length > 0) {
-      const uniqueDupes = [...new Set(duplicateIMEIs)];
+    if (existingStockWithSerials.length > 0) {
+      const uniqueDupes = existingStockWithSerials.map(st => st.imei);
       return res.status(400).json({ 
         success: false, 
-        message: `พบหมายเลขซีเรียล/IMEI (SKU) มีอยู่ในระบบคลังสินค้าแล้ว: ${uniqueDupes.join(', ')}` 
+        message: `พบหมายเลข IMEI มีอยู่ในระบบคลังสินค้าแล้ว: ${uniqueDupes.join(', ')}` 
       });
     }
 
@@ -127,7 +110,6 @@ const receiveStock = async (req, res, next) => {
         branch: branch._id,
         receivedBy: req.user._id,
         productInfo: {
-          sku: currentImei,
           name: generatedName,
           brand: item.brand.trim(),
           model: item.model.trim(),
@@ -147,7 +129,7 @@ const receiveStock = async (req, res, next) => {
         action: 'SUBMIT_GOODS_RECEIPT',
         entity: 'GoodsReceipt',
         entityId: receipt._id.toString(),
-        details: { receiptNumber: receipt.receiptNumber, branch: branch.name, sku: currentImei, imei: currentImei }
+        details: { receiptNumber: receipt.receiptNumber, branch: branch.name, imei: currentImei }
       });
 
       createdReceipts.push(receipt);
@@ -155,7 +137,7 @@ const receiveStock = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: `บันทึกรับสินค้าเข้าสต็อกสำเร็จ ${createdReceipts.length} รายการ (สร้าง SKU อัตโนมัติจากเลข IMEI เรียบร้อยแล้ว รอฝ่ายจัดซื้อตั้งราคา)`,
+      message: `บันทึกรับสินค้าเข้าสต็อกสำเร็จ ${createdReceipts.length} รายการ (บันทึก IMEI เรียบร้อยแล้ว รอฝ่ายจัดซื้อตั้งราคา)`,
       count: createdReceipts.length
     });
   } catch (err) {
@@ -216,34 +198,35 @@ const confirmGoodsReceipt = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'รายการรับสินค้านี้ได้รับการยืนยันเข้าสต็อกไปแล้ว' });
     }
 
-    const { sku, name, brand, model, capacity, color, category } = receipt.productInfo;
+    const { name, brand, model, capacity, color, category } = receipt.productInfo;
     const pPrice = Number(purchase_price);
     const sPrice = Number(selling_price);
 
-    // 1. Create or Update Product Master using IMEI as SKU
-    let product = await Product.findOne({ sku });
+    // 1. Find or Create Product Master by exact (brand, model, capacity, color)
+    let product = await Product.findOne({
+      brand: brand.trim(),
+      model: model.trim(),
+      capacity: (capacity || '').trim(),
+      color: (color || '').trim()
+    });
+
     let finalVariation = `${capacity} ${color}`.trim() || 'มาตรฐาน';
 
     if (product) {
       product.name = name;
-      product.brand = brand;
-      product.model = model;
-      product.capacity = capacity;
-      product.color = color;
-      product.category = category;
       product.purchase_price = pPrice;
       product.selling_price = sPrice;
+      if (category) product.category = category;
       await product.save();
     } else {
       product = await Product.create({
-        sku, // IMEI as SKU
         name,
-        brand,
-        model,
-        capacity,
-        color,
+        brand: brand.trim(),
+        model: model.trim(),
+        capacity: (capacity || '').trim(),
+        color: (color || '').trim(),
         variation: finalVariation,
-        category,
+        category: category || 'Smartphones',
         purchase_price: pPrice,
         selling_price: sPrice,
         images: [],
@@ -251,32 +234,42 @@ const confirmGoodsReceipt = async (req, res, next) => {
       });
     }
 
-    // 2. Add Stock to the target Branch
-    const newImeis = (receipt.imeiSerials || []).map(s => ({
-      imei: s,
-      status: 'in_stock',
-      received_date: new Date()
-    }));
+    // 2. Add 1 Stock Document per physical device IMEI to the target Branch
+    const targetImeis = (receipt.imeiSerials && receipt.imeiSerials.length > 0) ? receipt.imeiSerials : [];
 
-    let stock = await Stock.findOne({ branch: receipt.branch._id, sku });
-    const importTimestamp = new Date();
-
-    if (stock) {
-      stock.quantity += Number(receipt.quantity);
-      if (newImeis.length > 0) {
-        stock.imei_serials.push(...newImeis);
+    for (const itemImei of targetImeis) {
+      const cleanImei = String(itemImei).trim();
+      let stockDoc = await Stock.findOne({ imei: cleanImei });
+      if (stockDoc) {
+        stockDoc.branch = receipt.branch._id;
+        stockDoc.product = product._id;
+        stockDoc.productName = name;
+        stockDoc.brand = brand.trim();
+        stockDoc.model = model.trim();
+        stockDoc.capacity = (capacity || '').trim();
+        stockDoc.color = (color || '').trim();
+        stockDoc.category = category || 'Smartphones';
+        stockDoc.purchase_price = pPrice;
+        stockDoc.selling_price = sPrice;
+        stockDoc.status = 'in_stock';
+        await stockDoc.save();
+      } else {
+        await Stock.create({
+          branch: receipt.branch._id,
+          product: product._id,
+          imei: cleanImei,
+          productName: name,
+          brand: brand.trim(),
+          model: model.trim(),
+          capacity: (capacity || '').trim(),
+          color: (color || '').trim(),
+          category: category || 'Smartphones',
+          purchase_price: pPrice,
+          selling_price: sPrice,
+          status: 'in_stock',
+          import_date: new Date()
+        });
       }
-      stock.import_date = importTimestamp;
-      await stock.save();
-    } else {
-      stock = await Stock.create({
-        branch: receipt.branch._id,
-        product: product._id,
-        sku,
-        quantity: Number(receipt.quantity),
-        imei_serials: newImeis,
-        import_date: importTimestamp
-      });
     }
 
     // 3. Update GoodsReceipt Status
@@ -295,12 +288,12 @@ const confirmGoodsReceipt = async (req, res, next) => {
       action: 'CONFIRM_GOODS_RECEIPT',
       entity: 'GoodsReceipt',
       entityId: receipt._id.toString(),
-      details: { receiptNumber: receipt.receiptNumber, sku, quantity: receipt.quantity, purchase_price: pPrice, selling_price: sPrice }
+      details: { receiptNumber: receipt.receiptNumber, imeis: targetImeis, quantity: receipt.quantity, purchase_price: pPrice, selling_price: sPrice }
     });
 
     res.json({
       success: true,
-      message: `ยืนยันรายการรับสินค้า SKU: ${sku} สำเร็จ สินค้าพร้อมขายหน้าร้านแล้ว`,
+      message: `ยืนยันรายการรับสินค้า IMEI: ${targetImeis.join(', ')} สำเร็จ สินค้าพร้อมขายหน้าร้านแล้ว`,
       receipt
     });
   } catch (err) {
@@ -331,30 +324,31 @@ const confirmBatchGoodsReceipts = async (req, res, next) => {
     const sPrice = Number(selling_price);
 
     for (const receipt of receipts) {
-      const { sku, name, brand, model, capacity, color, category } = receipt.productInfo;
+      const { name, brand, model, capacity, color, category } = receipt.productInfo;
       let finalVariation = `${capacity} ${color}`.trim() || 'มาตรฐาน';
 
-      let product = await Product.findOne({ sku });
+      let product = await Product.findOne({
+        brand: brand.trim(),
+        model: model.trim(),
+        capacity: (capacity || '').trim(),
+        color: (color || '').trim()
+      });
+
       if (product) {
         product.name = name;
-        product.brand = brand;
-        product.model = model;
-        product.capacity = capacity;
-        product.color = color;
-        product.category = category;
         product.purchase_price = pPrice;
         product.selling_price = sPrice;
+        if (category) product.category = category;
         await product.save();
       } else {
         product = await Product.create({
-          sku,
           name,
-          brand,
-          model,
-          capacity,
-          color,
+          brand: brand.trim(),
+          model: model.trim(),
+          capacity: (capacity || '').trim(),
+          color: (color || '').trim(),
           variation: finalVariation,
-          category,
+          category: category || 'Smartphones',
           purchase_price: pPrice,
           selling_price: sPrice,
           images: [],
@@ -362,26 +356,41 @@ const confirmBatchGoodsReceipts = async (req, res, next) => {
         });
       }
 
-      const newImeis = (receipt.imeiSerials || []).map(s => ({
-        imei: s,
-        status: 'in_stock',
-        received_date: new Date()
-      }));
+      const targetImeis = (receipt.imeiSerials && receipt.imeiSerials.length > 0) ? receipt.imeiSerials : [];
 
-      let stock = await Stock.findOne({ branch: receipt.branch._id, sku });
-      if (stock) {
-        stock.quantity += Number(receipt.quantity);
-        if (newImeis.length > 0) stock.imei_serials.push(...newImeis);
-        await stock.save();
-      } else {
-        stock = await Stock.create({
-          branch: receipt.branch._id,
-          product: product._id,
-          sku,
-          quantity: Number(receipt.quantity),
-          imei_serials: newImeis,
-          import_date: new Date()
-        });
+      for (const itemImei of targetImeis) {
+        const cleanImei = String(itemImei).trim();
+        let stockDoc = await Stock.findOne({ imei: cleanImei });
+        if (stockDoc) {
+          stockDoc.branch = receipt.branch._id;
+          stockDoc.product = product._id;
+          stockDoc.productName = name;
+          stockDoc.brand = brand.trim();
+          stockDoc.model = model.trim();
+          stockDoc.capacity = (capacity || '').trim();
+          stockDoc.color = (color || '').trim();
+          stockDoc.category = category || 'Smartphones';
+          stockDoc.purchase_price = pPrice;
+          stockDoc.selling_price = sPrice;
+          stockDoc.status = 'in_stock';
+          await stockDoc.save();
+        } else {
+          await Stock.create({
+            branch: receipt.branch._id,
+            product: product._id,
+            imei: cleanImei,
+            productName: name,
+            brand: brand.trim(),
+            model: model.trim(),
+            capacity: (capacity || '').trim(),
+            color: (color || '').trim(),
+            category: category || 'Smartphones',
+            purchase_price: pPrice,
+            selling_price: sPrice,
+            status: 'in_stock',
+            import_date: new Date()
+          });
+        }
       }
 
       receipt.status = 'confirmed';
@@ -453,7 +462,7 @@ const getBranchStock = async (req, res, next) => {
 
 const getAllBranchStock = async (req, res, next) => {
   try {
-    const stockList = await Stock.find().populate('branch product').sort({ 'branch': 1, 'sku': 1 });
+    const stockList = await Stock.find().populate('branch product').sort({ 'branch': 1, 'imei': 1 });
 
     res.json({
       success: true,
@@ -487,20 +496,16 @@ const updateGoodsReceipt = async (req, res, next) => {
       }
     }
 
-    const newImei = imei ? String(imei).trim() : (receipt.productInfo.sku || (receipt.imeiSerials && receipt.imeiSerials[0]));
+    const currentImei = receipt.imeiSerials && receipt.imeiSerials[0] ? receipt.imeiSerials[0] : '';
+    const newImei = imei ? String(imei).trim() : currentImei;
     
-    if (newImei && newImei !== receipt.productInfo.sku) {
-      const existingStock = await Stock.findOne({
-        $or: [
-          { 'imei_serials.imei': newImei },
-          { 'sku': newImei }
-        ]
-      });
+    if (newImei && newImei !== currentImei) {
+      const existingStock = await Stock.findOne({ imei: newImei });
 
       if (existingStock) {
         return res.status(400).json({
           success: false,
-          message: `หมายเลขซีเรียล/IMEI (${newImei}) นี้มีอยู่ในระบบคลังสินค้าแล้ว`
+          message: `หมายเลข IMEI (${newImei}) นี้มีอยู่ในระบบคลังสินค้าแล้ว`
         });
       }
     }
@@ -514,7 +519,6 @@ const updateGoodsReceipt = async (req, res, next) => {
     const generatedName = generateAutoName(updatedBrand, updatedModel, updatedCapacity, updatedColor);
 
     receipt.productInfo = {
-      sku: newImei,
       name: generatedName,
       brand: updatedBrand,
       model: updatedModel,
@@ -533,7 +537,7 @@ const updateGoodsReceipt = async (req, res, next) => {
       action: 'UPDATE_GOODS_RECEIPT',
       entity: 'GoodsReceipt',
       entityId: receipt._id.toString(),
-      details: { receiptNumber: receipt.receiptNumber, sku: newImei, imei: newImei }
+      details: { receiptNumber: receipt.receiptNumber, imei: newImei }
     });
 
     res.json({

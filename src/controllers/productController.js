@@ -5,7 +5,7 @@ const { uploadToCloudinary } = require('../config/cloudinary');
 
 const getAllProducts = async (req, res, next) => {
   try {
-    const products = await Product.find({ isActive: true }).sort({ sku: 1 });
+    const products = await Product.find({ isActive: true }).sort({ brand: 1, name: 1 });
     res.json({
       success: true,
       count: products.length,
@@ -30,15 +30,20 @@ const getProductById = async (req, res, next) => {
 
 const createProduct = async (req, res, next) => {
   try {
-    const { sku, name, brand, model, capacity, color, variation, category, purchase_price, selling_price, hasImei } = req.body;
+    const { name, brand, model, capacity, color, variation, category, purchase_price, selling_price, hasImei } = req.body;
 
-    if (!sku || !name || !brand || !model || !category || purchase_price === undefined || selling_price === undefined) {
+    if (!name || !brand || !model || !category || purchase_price === undefined || selling_price === undefined) {
       return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลสินค้า Master ให้ครบถ้วน' });
     }
 
-    const existingSKU = await Product.findOne({ sku: sku.trim().toUpperCase() });
-    if (existingSKU) {
-      return res.status(400).json({ success: false, message: `รหัส SKU "${sku}" มีในระบบอยู่แล้ว` });
+    const existingCatalog = await Product.findOne({ 
+      brand: brand.trim(), 
+      model: model.trim(), 
+      capacity: (capacity || '').trim(), 
+      color: (color || '').trim() 
+    });
+    if (existingCatalog) {
+      return res.status(400).json({ success: false, message: `มีแคตตาล็อกสินค้า (${brand} ${model} ${capacity} ${color}) ในระบบอยู่แล้ว` });
     }
 
     let imageUrls = [];
@@ -57,7 +62,6 @@ const createProduct = async (req, res, next) => {
     }
 
     const product = await Product.create({
-      sku: sku.trim().toUpperCase(),
       name: name.trim(),
       brand: brand.trim(),
       model: model.trim(),
@@ -78,12 +82,12 @@ const createProduct = async (req, res, next) => {
       action: 'CREATE_PRODUCT_MASTER',
       entity: 'Product',
       entityId: product._id.toString(),
-      details: { sku: product.sku, name: product.name }
+      details: { name: product.name, brand: product.brand, model: product.model }
     });
 
     res.status(201).json({
       success: true,
-      message: `บันทึกข้อมูลหลักสินค้า Master SKU "${product.sku}" สำเร็จ`,
+      message: `บันทึกข้อมูลหลักสินค้า Master "${product.name}" สำเร็จ`,
       product
     });
   } catch (err) {
@@ -94,24 +98,11 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { sku, name, brand, model, capacity, color, variation, category, purchase_price, selling_price, hasImei } = req.body;
+    const { name, brand, model, capacity, color, variation, category, purchase_price, selling_price, hasImei } = req.body;
 
     const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลหลักสินค้าที่ต้องการแก้ไข' });
-    }
-
-    const newSku = sku ? sku.trim().toUpperCase() : product.sku;
-
-    // Check SKU duplicate if changed
-    if (newSku !== product.sku) {
-      const existingSKU = await Product.findOne({ sku: newSku, _id: { $ne: id } });
-      if (existingSKU) {
-        return res.status(400).json({ success: false, message: `รหัส SKU "${newSku}" มีในระบบอยู่แล้ว` });
-      }
-
-      // Update Stock records matching old SKU
-      await Stock.updateMany({ product: id }, { sku: newSku });
     }
 
     let finalVariation = variation || '';
@@ -125,7 +116,6 @@ const updateProduct = async (req, res, next) => {
       finalVariation = product.variation;
     }
 
-    product.sku = newSku;
     if (name) product.name = name.trim();
     if (brand) product.brand = brand.trim();
     if (model) product.model = model.trim();
@@ -146,12 +136,12 @@ const updateProduct = async (req, res, next) => {
       action: 'UPDATE_PRODUCT_MASTER',
       entity: 'Product',
       entityId: product._id.toString(),
-      details: { sku: product.sku, name: product.name }
+      details: { name: product.name, brand: product.brand, model: product.model }
     });
 
     res.json({
       success: true,
-      message: `แก้ไขข้อมูลหลักสินค้า Master SKU "${product.sku}" สำเร็จ`,
+      message: `แก้ไขข้อมูลหลักสินค้า Master "${product.name}" สำเร็จ`,
       product
     });
   } catch (err) {
