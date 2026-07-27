@@ -1,6 +1,17 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Role = require('../models/Role');
 const AuditLog = require('../models/AuditLog');
+const { SYSTEM_MENUS } = require('./roleController');
+
+const getRoleAllowedMenus = async (userRoleCode) => {
+  const allMenuKeys = SYSTEM_MENUS.map(m => m.key);
+  const roleDoc = await Role.findOne({ code: userRoleCode });
+  if (roleDoc && Array.isArray(roleDoc.allowedMenus)) {
+    return roleDoc.allowedMenus;
+  }
+  return allMenuKeys;
+};
 
 const login = async (req, res, next) => {
   try {
@@ -55,6 +66,8 @@ const login = async (req, res, next) => {
       details: { username: user.username, email: user.email }
     });
 
+    const allowedMenus = await getRoleAllowedMenus(user.role);
+
     res.json({
       success: true,
       message: 'เข้าสู่ระบบสำเร็จ',
@@ -65,6 +78,7 @@ const login = async (req, res, next) => {
         fullName: user.fullName || user.username,
         email: user.email,
         role: user.role,
+        allowedMenus,
         branch: user.branch
       }
     });
@@ -75,6 +89,8 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
+    const allowedMenus = await getRoleAllowedMenus(req.user.role);
+
     res.json({
       success: true,
       user: {
@@ -83,6 +99,7 @@ const getMe = async (req, res, next) => {
         fullName: req.user.fullName || req.user.username,
         email: req.user.email,
         role: req.user.role,
+        allowedMenus,
         branch: req.user.branch
       }
     });

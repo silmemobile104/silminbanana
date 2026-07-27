@@ -14,12 +14,29 @@ const state = {
 
 // Role Access Matrix - Authorized Menus per Role
 const ROLE_ALLOWED_VIEWS = {
-  'admin': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees'],
+  'admin': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees', 'roles-permissions'],
   'hq_stock_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings'],
   'branch_staff': ['dashboard', 'pos', 'finance', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers'],
   'technical_staff': ['dashboard', 'pos', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders'],
   'purchase_staff': ['dashboard', 'finance', 'branch-inventory', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'master-settings']
 };
+
+
+const ALL_SYSTEM_MENUS = [
+  'dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit',
+  'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers',
+  'master-settings', 'branches', 'employees', 'roles-permissions'
+];
+
+function getUserAllowedMenus(userRole) {
+  if (state.user && Array.isArray(state.user.allowedMenus) && state.user.allowedMenus.length > 0) {
+    return state.user.allowedMenus;
+  }
+  if (userRole === 'admin' || (state.user && state.user.role === 'admin')) {
+    return ALL_SYSTEM_MENUS;
+  }
+  return ROLE_ALLOWED_VIEWS[userRole] || ALL_SYSTEM_MENUS;
+}
 
 // Thai Role Mapping Helper
 function formatRoleThai(roleKey) {
@@ -130,7 +147,7 @@ async function loadMasterOptions() {
 
 // Apply Role-Based Sidebar Navigation Visibility
 function updateSidebarMenuByRole(userRole) {
-  const allowedViews = ROLE_ALLOWED_VIEWS[userRole] || ['dashboard'];
+  const allowedViews = getUserAllowedMenus(userRole);
 
   document.querySelectorAll('.sidebar-menu li').forEach(li => {
     const navLink = li.querySelector('.nav-link');
@@ -148,10 +165,10 @@ function updateSidebarMenuByRole(userRole) {
 // Client Router & View Switcher
 function navigateTo(viewName) {
   const userRole = state.user ? state.user.role : 'branch_staff';
-  const allowedViews = ROLE_ALLOWED_VIEWS[userRole] || ['dashboard'];
+  const allowedViews = getUserAllowedMenus(userRole);
 
   if (!allowedViews.includes(viewName)) {
-    showToast(`ตำแหน่ง ${formatRoleThai(userRole)} ไม่มีสิทธิ์เข้าถึงเมนูนี้`, 'error');
+    showToast('ตำแหน่งของคุณไม่มีสิทธิ์เข้าถึงเมนูนี้', 'error');
     viewName = allowedViews[0] || 'dashboard';
   }
 
@@ -233,6 +250,11 @@ function navigateTo(viewName) {
       heading.innerText = 'จัดการพนักงาน';
       subheading.innerText = 'จัดการพนักงาน กำหนดสิทธิ์ และมอบหมายสาขาประจำ';
       renderEmployeeManagementView();
+      break;
+    case 'roles-permissions':
+      heading.innerText = 'จัดการสิทธิ์และตำแหน่งงาน';
+      subheading.innerText = 'สร้างตำแหน่งงานใหม่ กำหนดและปรับปรุงสิทธิ์การเข้าถึงเมนูต่าง ๆ ในระบบ';
+      renderRolesPermissionsView();
       break;
   }
 }
@@ -5251,24 +5273,29 @@ async function renderEmployeeManagementView() {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายชื่อพนักงาน...</div>`;
 
   try {
-    const [usersRes, branchRes] = await Promise.all([
+    const [usersRes, branchRes, rolesRes] = await Promise.all([
       apiRequest('/users'),
-      apiRequest('/branches')
+      apiRequest('/branches'),
+      apiRequest('/roles')
     ]);
 
     const users = usersRes.users || [];
     const branches = branchRes.branches || [];
+    const roles = rolesRes.roles || [];
+    window.masterRolesCache = roles;
 
-    const isAdmin = state.user.role === 'admin';
+    const isAdmin = state.user && state.user.role === 'admin';
 
     container.innerHTML = `
-      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.1rem; font-weight:700;">จัดการพนักงาน (Employee Management)</h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">รายชื่อพนักงาน กำหนดสิทธิ์ตามตำแหน่ง และมอบหมายสาขาประจำ</p>
+          <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:#fff;">
+            <i class="fa-solid fa-users-gear" style="color:var(--accent-primary);"></i> จัดการพนักงาน (${users.length} คน)
+          </h3>
+          <p style="font-size:0.82rem; color:var(--text-muted);">รายชื่อพนักงาน กำหนดตำแหน่งสิทธิ์การมองเห็นเมนู และเลือกสาขาประจำ</p>
         </div>
         ${isAdmin ? `
-          <button class="btn btn-primary btn-sm" id="add-new-emp-btn"><i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่</button>
+          <button class="btn btn-primary" id="add-new-emp-btn" style="font-weight:700;"><i class="fa-solid fa-user-plus"></i> + เพิ่มพนักงานใหม่</button>
         ` : ''}
       </div>
 
@@ -5276,33 +5303,37 @@ async function renderEmployeeManagementView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัสพนักงาน (Emp ID)</th>
-              <th>ชื่อ-นามสกุล (Name)</th>
-              <th>แผนก/ตำแหน่ง (Role)</th>
-              <th>สาขาประจำ (Assigned Branch)</th>
-              <th>สถานะ (Status)</th>
-              ${isAdmin ? `<th>การจัดการ</th>` : ''}
+              <th>รหัสพนักงาน</th>
+              <th>ชื่อ-นามสกุล / อีเมล</th>
+              <th>ตำแหน่งงาน (Role)</th>
+              <th>สาขาประจำ</th>
+              <th>สถานะ</th>
+              ${isAdmin ? `<th style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
-            ${users.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">ไม่พบข้อมูลพนักงานในระบบ</td></tr>` : ''}
+            ${users.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลพนักงานในระบบ</td></tr>` : ''}
             ${users.map(u => `
               <tr>
-                <td><strong>${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
+                <td><strong style="color:var(--accent-secondary); font-family:monospace;">${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
                 <td>
-                  <strong>${u.fullName || u.username}</strong><br>
-                  <span style="font-size:0.8rem; color:var(--text-muted);">${u.email}</span>
+                  <strong style="color:#fff;">${u.fullName || u.username}</strong><br>
+                  <span style="font-size:0.78rem; color:var(--text-muted);">${u.email}</span>
                 </td>
-                <td><span class="badge badge-gray">${formatRoleThai(u.role)}</span></td>
-                <td>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</td>
+                <td>
+                  <span class="badge badge-purple" style="font-size:0.8rem; font-weight:700;">
+                    <i class="fa-solid fa-user-shield"></i> ${formatRoleThai(u.role)}
+                  </span>
+                </td>
+                <td><strong>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
                 <td>
                   <span class="badge badge-${u.isActive ? 'green' : 'red'}">
                     ${u.isActive ? 'ปกติ' : 'ถูกระงับ'}
                   </span>
                 </td>
                 ${isAdmin ? `
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="openEditEmpModal('${u._id}', '${u.fullName || u.username}', '${u.role}', '${u.branch ? u.branch._id : ''}', ${u.isActive})">
+                  <td style="text-align:center;">
+                    <button class="btn btn-warning btn-sm" style="font-weight:700; font-size:0.78rem; padding:0.25rem 0.6rem;" onclick="openEditEmpModal('${u._id}', '${u.fullName || u.username}', '${u.role}', '${u.branch ? u.branch._id : ''}', ${u.isActive})">
                       <i class="fa-solid fa-pen-to-square"></i> แก้ไข
                     </button>
                   </td>
@@ -5315,59 +5346,85 @@ async function renderEmployeeManagementView() {
     `;
 
     if (isAdmin) {
-      document.getElementById('add-new-emp-btn').addEventListener('click', () => openAddEmpModal(branches));
+      const addBtn = document.getElementById('add-new-emp-btn');
+      if (addBtn) {
+        addBtn.onclick = () => openAddEmpModal(branches, roles);
+      }
     }
   } catch (err) {
-    container.innerHTML = `<div style="color:#ef4444;">${err.message}</div>`;
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดข้อมูลพนักงาน: ${err.message}</div>`;
   }
 }
 
-function openAddEmpModal(branches) {
+async function openAddEmpModal(branchesList = [], rolesList = []) {
+  const branches = branchesList.length > 0 ? branchesList : (state.masterOptions.branches || []);
+  let roles = rolesList;
+
+  if (!roles || roles.length === 0) {
+    if (window.masterRolesCache && window.masterRolesCache.length > 0) {
+      roles = window.masterRolesCache;
+    } else {
+      try {
+        const res = await apiRequest('/roles');
+        roles = res.roles || [];
+        window.masterRolesCache = roles;
+      } catch (e) {}
+    }
+  }
+
+  const defaultOptions = [
+    { code: 'admin', name: 'ผู้ดูแลระบบสูงสุด (Admin)' },
+    { code: 'branch_staff', name: 'พนักงานประจำสาขา (Branch Staff)' },
+    { code: 'technical_staff', name: 'ช่างเทคนิค (Technical Staff)' },
+    { code: 'purchase_staff', name: 'พนักงานฝ่ายจัดซื้อ (Purchasing Staff)' },
+    { code: 'hq_stock_staff', name: 'พนักงานคลังสินค้าส่วนกลาง (HQ Stock)' }
+  ];
+
+  const roleOptions = (roles && roles.length > 0) ? roles : defaultOptions;
+
   const bodyHtml = `
-    <form id="new-emp-form">
+    <form id="new-emp-form" onsubmit="event.preventDefault(); submitAddEmp();">
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
         <div class="form-group">
-          <label for="me-empid">รหัสพนักงาน (Emp ID)</label>
+          <label for="me-empid" style="font-weight:700;">รหัสพนักงาน (Emp ID)</label>
           <input type="text" id="me-empid" class="form-control" placeholder="เช่น EMP-0010">
         </div>
         <div class="form-group">
-          <label for="me-fullname">ชื่อ-นามสกุล (Full Name)</label>
-          <input type="text" id="me-fullname" class="form-control" placeholder="เช่น นายประเสริฐ สินค้าดี" required>
+          <label for="me-fullname" style="font-weight:700;">ชื่อ-นามสกุล (Full Name) <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="me-fullname" class="form-control" placeholder="เช่น นายประเสริฐ สินค้าดี" required style="font-weight:700;">
         </div>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
         <div class="form-group">
-          <label for="me-username">ชื่อผู้ใช้งาน (Username สำหรับล็อกอิน)</label>
-          <input type="text" id="me-username" class="form-control" placeholder="เช่น prasert.s" required>
+          <label for="me-username" style="font-weight:700;">ชื่อผู้ใช้งาน (Username สำหรับล็อกอิน) <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="me-username" class="form-control" placeholder="เช่น prasert.s" required style="font-weight:700;">
         </div>
         <div class="form-group">
-          <label for="me-email">อีเมล (Email)</label>
-          <input type="email" id="me-email" class="form-control" placeholder="prasert@pos.com" required>
+          <label for="me-email" style="font-weight:700;">อีเมล (Email) <span style="color:#ef4444;">*</span></label>
+          <input type="email" id="me-email" class="form-control" placeholder="prasert@pos.com" required style="font-weight:700;">
         </div>
       </div>
 
       <div class="form-group">
-        <label for="me-password">รหัสผ่าน (Password)</label>
-        <input type="password" id="me-password" class="form-control" placeholder="••••••••" required>
+        <label for="me-password" style="font-weight:700;">รหัสผ่าน (Password) <span style="color:#ef4444;">*</span></label>
+        <input type="password" id="me-password" class="form-control" placeholder="••••••••" required style="font-weight:700;">
       </div>
 
       <div class="form-group">
-        <label for="me-role">แผนก/ตำแหน่ง (Role)</label>
-        <select id="me-role" class="form-select" required>
-          <option value="admin">ผู้ดูแลระบบ (Admin)</option>
-          <option value="branch_staff" selected>พนักงานฝ่ายขาย (Sales)</option>
-          <option value="technical_staff">พนักงานฝ่ายเทคนิค (Technician)</option>
-          <option value="purchase_staff">ฝ่ายจัดซื้อ (Purchasing)</option>
-          <option value="hq_stock_staff">พนักงานฝ่ายสต็อก (Stock/HQ)</option>
+        <label for="me-role" style="font-weight:700; color:var(--accent-primary);">
+          <i class="fa-solid fa-user-shield"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
+        </label>
+        <select id="me-role" class="form-select" required style="font-weight:700; border:1px solid var(--accent-primary);">
+          ${roleOptions.map(r => `<option value="${r.code}">${r.name}</option>`).join('')}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="me-branch">สาขาประจำ (Assigned Branch)</label>
-        <select id="me-branch" class="form-select">
+        <label for="me-branch" style="font-weight:700;">สาขาประจำ (Assigned Branch)</label>
+        <select id="me-branch" class="form-select" style="font-weight:700;">
           <option value="">ส่วนกลาง (สำนักงานใหญ่)</option>
-          ${branches.map(b => `<option value="${b._id}">${b.name} (${b.code})</option>`).join('')}
+          ${branches.map(b => `<option value="${b._id}">${b.name} (${b.code || ''})</option>`).join('')}
         </select>
       </div>
     </form>
@@ -5375,20 +5432,28 @@ function openAddEmpModal(branches) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitAddEmp()"><i class="fa-solid fa-user-check"></i> ยืนยันเพิ่มพนักงานใหม่</button>
+    <button class="btn btn-primary" onclick="submitAddEmp()" style="font-weight:700;"><i class="fa-solid fa-user-check"></i> ยืนยันเพิ่มพนักงานใหม่</button>
   `;
 
-  openModal('เพิ่มพนักงานใหม่ (Add New Employee)', bodyHtml, footerHtml);
+  openModal('➕ เพิ่มพนักงานใหม่ (Add New Employee)', bodyHtml, footerHtml);
 }
 
 async function submitAddEmp() {
-  const empId = document.getElementById('me-empid').value.trim();
-  const fullName = document.getElementById('me-fullname').value.trim();
-  const username = document.getElementById('me-username').value.trim();
-  const email = document.getElementById('me-email').value.trim();
-  const password = document.getElementById('me-password').value;
-  const role = document.getElementById('me-role').value;
-  const branchId = document.getElementById('me-branch').value;
+  const empIdEl = document.getElementById('me-empid');
+  const fullNameEl = document.getElementById('me-fullname');
+  const usernameEl = document.getElementById('me-username');
+  const emailEl = document.getElementById('me-email');
+  const passwordEl = document.getElementById('me-password');
+  const roleEl = document.getElementById('me-role');
+  const branchEl = document.getElementById('me-branch');
+
+  const empId = empIdEl ? empIdEl.value.trim() : '';
+  const fullName = fullNameEl ? fullNameEl.value.trim() : '';
+  const username = usernameEl ? usernameEl.value.trim() : '';
+  const email = emailEl ? emailEl.value.trim() : '';
+  const password = passwordEl ? passwordEl.value : '';
+  const role = roleEl ? roleEl.value : '';
+  const branchId = branchEl ? branchEl.value : '';
 
   if (!fullName || !username || !email || !password || !role) {
     showToast('กรุณากรอกข้อมูลพนักงานให้ครบถ้วน', 'error');
@@ -5403,89 +5468,117 @@ async function submitAddEmp() {
       email,
       password,
       role,
-      branchId
+      branchId: branchId || null
     });
 
     if (res.success) {
-      showToast('เพิ่มพนักงานสำเร็จ');
+      showToast(res.message || 'เพิ่มพนักงานสำเร็จ');
       closeModal();
       renderEmployeeManagementView();
     }
   } catch (err) {
-    // Handled
+    // Handled in apiRequest
   }
 }
 
-function openEditEmpModal(id, fullName, role, branchId, isActive) {
+async function openEditEmpModal(id, fullName, role, branchId, isActive) {
   const branches = state.masterOptions.branches || [];
 
+  let roles = window.masterRolesCache || [];
+  if (!roles || roles.length === 0) {
+    try {
+      const res = await apiRequest('/roles');
+      roles = res.roles || [];
+      window.masterRolesCache = roles;
+    } catch (e) {}
+  }
+
+  const defaultOptions = [
+    { code: 'admin', name: 'ผู้ดูแลระบบสูงสุด (Admin)' },
+    { code: 'branch_staff', name: 'พนักงานประจำสาขา (Branch Staff)' },
+    { code: 'technical_staff', name: 'ช่างเทคนิค (Technical Staff)' },
+    { code: 'purchase_staff', name: 'พนักงานฝ่ายจัดซื้อ (Purchasing Staff)' },
+    { code: 'hq_stock_staff', name: 'พนักงานคลังสินค้าส่วนกลาง (HQ Stock)' }
+  ];
+
+  const roleOptions = (roles && roles.length > 0) ? roles : defaultOptions;
+
   const bodyHtml = `
-    <form id="edit-emp-form">
+    <form id="edit-emp-form" onsubmit="event.preventDefault(); submitEditEmp('${id}');">
       <div class="form-group">
-        <label for="ee-fullname">ชื่อ-นามสกุล (Full Name)</label>
-        <input type="text" id="ee-fullname" class="form-control" value="${fullName}" required>
+        <label for="ee-fullname" style="font-weight:700;">ชื่อ-นามสกุล (Full Name) <span style="color:#ef4444;">*</span></label>
+        <input type="text" id="ee-fullname" class="form-control" value="${fullName}" required style="font-weight:700;">
       </div>
 
       <div class="form-group">
-        <label for="ee-role">แผนก/ตำแหน่ง (Role)</label>
-        <select id="ee-role" class="form-select" required>
-          <option value="admin" ${role === 'admin' ? 'selected' : ''}>ผู้ดูแลระบบ (Admin)</option>
-          <option value="branch_staff" ${role === 'branch_staff' ? 'selected' : ''}>พนักงานฝ่ายขาย (Sales)</option>
-          <option value="technical_staff" ${role === 'technical_staff' ? 'selected' : ''}>พนักงานฝ่ายเทคนิค (Technician)</option>
-          <option value="purchase_staff" ${role === 'purchase_staff' ? 'selected' : ''}>ฝ่ายจัดซื้อ (Purchasing)</option>
-          <option value="hq_stock_staff" ${role === 'hq_stock_staff' ? 'selected' : ''}>พนักงานฝ่ายสต็อก (Stock/HQ)</option>
+        <label for="ee-role" style="font-weight:700; color:var(--accent-primary);">
+          <i class="fa-solid fa-user-shield"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
+        </label>
+        <select id="ee-role" class="form-select" required style="font-weight:700; border:1px solid var(--accent-primary);">
+          ${roleOptions.map(r => `<option value="${r.code}" ${role === r.code ? 'selected' : ''}>${r.name}</option>`).join('')}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="ee-branch">สาขาประจำ (Assigned Branch)</label>
-        <select id="ee-branch" class="form-select">
+        <label for="ee-branch" style="font-weight:700;">สาขาประจำ (Assigned Branch)</label>
+        <select id="ee-branch" class="form-select" style="font-weight:700;">
           <option value="">ส่วนกลาง (สำนักงานใหญ่)</option>
-          ${branches.map(b => `<option value="${b._id}" ${b._id === branchId ? 'selected' : ''}>${b.name} (${b.code})</option>`).join('')}
+          ${branches.map(b => `<option value="${b._id}" ${String(b._id) === String(branchId) ? 'selected' : ''}>${b.name} (${b.code || ''})</option>`).join('')}
         </select>
       </div>
 
       <div class="form-group">
-        <label for="ee-status">สถานะพนักงาน</label>
-        <select id="ee-status" class="form-select">
+        <label for="ee-status" style="font-weight:700;">สถานะพนักงาน</label>
+        <select id="ee-status" class="form-select" style="font-weight:700;">
           <option value="true" ${isActive ? 'selected' : ''}>ปกติ (Active)</option>
           <option value="false" ${!isActive ? 'selected' : ''}>ระงับการใช้งาน (Suspended)</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="ee-password">เปลี่ยนรหัสผ่านใหม่ (หากต้องการเปลี่ยน)</label>
-        <input type="password" id="ee-password" class="form-control" placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยน">
+        <label for="ee-password" style="font-weight:700;">เปลี่ยนรหัสผ่านใหม่ (ระบุเฉพาะเมื่อต้องการเปลี่ยน)</label>
+        <input type="password" id="ee-password" class="form-control" placeholder="ปล่อยว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน">
       </div>
     </form>
   `;
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitEditEmp('${id}')"><i class="fa-solid fa-save"></i> บันทึกการปรับปรุง</button>
+    <button class="btn btn-primary" onclick="submitEditEmp('${id}')" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
   `;
 
-  openModal('แก้ไขข้อมูลและสิทธิ์พนักงาน', bodyHtml, footerHtml);
+  openModal('✏️ แก้ไขข้อมูลพนักงาน', bodyHtml, footerHtml);
 }
 
 async function submitEditEmp(id) {
-  const fullName = document.getElementById('ee-fullname').value.trim();
-  const role = document.getElementById('ee-role').value;
-  const branchId = document.getElementById('ee-branch').value;
-  const isActive = document.getElementById('ee-status').value === 'true';
-  const password = document.getElementById('ee-password').value;
+  const fullNameEl = document.getElementById('ee-fullname');
+  const roleEl = document.getElementById('ee-role');
+  const branchEl = document.getElementById('ee-branch');
+  const statusEl = document.getElementById('ee-status');
+  const passwordEl = document.getElementById('ee-password');
+
+  const fullName = fullNameEl ? fullNameEl.value.trim() : '';
+  const role = roleEl ? roleEl.value : '';
+  const branchId = branchEl ? branchEl.value : '';
+  const isActive = statusEl ? (statusEl.value === 'true') : true;
+  const password = passwordEl ? passwordEl.value.trim() : '';
+
+  if (!fullName || !role) {
+    showToast('กรุณากรอกชื่อ-นามสกุล และเลือกตำแหน่งงาน', 'error');
+    return;
+  }
 
   try {
     const res = await apiRequest(`/users/${id}`, 'PUT', {
       fullName,
       role,
-      branchId,
+      branchId: branchId || null,
       isActive,
       ...(password ? { password } : {})
     });
 
     if (res.success) {
-      showToast('อัปเดตข้อมูลพนักงานสำเร็จ');
+      showToast(res.message || 'อัปเดตข้อมูลพนักงานสำเร็จ');
       closeModal();
       renderEmployeeManagementView();
     }
@@ -5676,3 +5769,290 @@ function exportTransfersHistoryToExcel() {
 document.addEventListener('DOMContentLoaded', () => {
   initAppSession();
 });
+
+
+// Global Navigation Click Delegation
+document.addEventListener('click', (e) => {
+  const navLink = e.target.closest('.nav-link');
+  if (navLink) {
+    e.preventDefault();
+    const targetView = navLink.getAttribute('data-view');
+    if (targetView) {
+      navigateTo(targetView);
+    }
+  }
+});
+
+
+/* ==========================================================================
+   VIEW: ROLES & PERMISSIONS MANAGEMENT (จัดการสิทธิ์และตำแหน่ง)
+   ========================================================================== */
+async function renderRolesPermissionsView() {
+  const container = document.getElementById('content-container');
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลสิทธิ์และตำแหน่ง...</div>`;
+
+  try {
+    const res = await apiRequest('/roles');
+    const roles = res.roles || [];
+    const systemMenus = res.systemMenus || [];
+
+    container.innerHTML = `
+      <!-- Action Bar -->
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:#fff;">
+            <i class="fa-solid fa-user-shield" style="color:var(--accent-gold);"></i> จัดการสิทธิ์และตำแหน่งงาน (${roles.length} ตำแหน่ง)
+          </h3>
+          <p style="font-size:0.82rem; color:var(--text-muted);">สร้างตำแหน่งงาน กำหนดสิทธิ์เมนูที่ต้องการให้ตำแหน่งนั้นมองเห็น และซ่อนเมนูที่ไม่ได้รับอนุญาต</p>
+        </div>
+
+        <div>
+          <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700;">
+            <i class="fa-solid fa-plus"></i> + สร้างตำแหน่งงานใหม่
+          </button>
+        </div>
+      </div>
+
+      <!-- Roles Grid -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:1.2rem;">
+        ${roles.map(r => {
+          const allowedCount = (r.allowedMenus || []).length;
+          const totalMenus = systemMenus.length;
+
+          return `
+            <div class="card" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.6rem;">
+                  <div>
+                    <strong style="font-size:1.1rem; color:#fff; font-weight:800; display:block;">${r.name}</strong>
+                    <span style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">CODE: ${r.code}</span>
+                  </div>
+                  ${r.isSystemDefault ? `
+                    <span class="badge badge-purple" style="font-size:0.72rem;"><i class="fa-solid fa-lock"></i> ตำแหน่งหลักระบบ</span>
+                  ` : `
+                    <span class="badge badge-blue" style="font-size:0.72rem;"><i class="fa-solid fa-user-gear"></i> ตำแหน่งกำหนดเอง</span>
+                  `}
+                </div>
+
+                <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.8rem; min-height:36px;">
+                  ${r.description || 'ไม่มีคำอธิบายเพิ่มเติม'}
+                </p>
+
+                <!-- Allowed Menus Badge Pill Summary -->
+                <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06); padding:0.8rem; border-radius:8px; margin-bottom:1rem;">
+                  <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">
+                    <span style="color:var(--text-muted);">เมนูที่ได้รับอนุญาต:</span>
+                    <span style="color:${allowedCount === totalMenus ? '#34d399' : '#38bdf8'};">${allowedCount} จาก ${totalMenus} เมนู</span>
+                  </div>
+
+                  <div style="display:flex; flex-wrap:wrap; gap:0.35rem; max-height:100px; overflow-y:auto; padding-right:0.2rem;">
+                    ${systemMenus.map(m => {
+                      const isPermitted = (r.allowedMenus || []).includes(m.key);
+                      return `
+                        <span style="font-size:0.73rem; padding:0.2rem 0.5rem; border-radius:4px; ${isPermitted ? 'background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3);' : 'background:rgba(255,255,255,0.03); color:rgba(255,255,255,0.25); border:1px solid rgba(255,255,255,0.05); text-decoration:line-through;'}">
+                          <i class="fa-solid ${m.icon}"></i> ${m.name}
+                        </span>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                <button class="btn btn-warning btn-sm" style="flex:1; font-weight:700; font-size:0.82rem;" onclick="openEditRoleModal('${r._id}')">
+                  <i class="fa-solid fa-pen-to-square"></i> กำหนดสิทธิ์เมนู
+                </button>
+                ${!r.isSystemDefault ? `
+                  <button class="btn btn-danger btn-sm" style="font-weight:700; font-size:0.82rem;" onclick="deleteRoleAction('${r._id}')" title="ลบตำแหน่งนี้">
+                    <i class="fa-solid fa-trash"></i> ลบ
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดตำแหน่ง: ${err.message}</div>`;
+  }
+}
+
+async function openCreateRoleModal() {
+  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+
+  try {
+    const res = await apiRequest('/roles');
+    const systemMenus = res.systemMenus || [];
+
+    const bodyHtml = `
+      <form id="create-role-form" onsubmit="event.preventDefault(); submitCreateRole();">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="font-weight:700; color:#fff;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700;">
+        </div>
+
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="font-weight:700; color:#fff;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้">
+        </div>
+
+        <div style="font-weight:800; color:#38bdf8; font-size:0.95rem; margin-bottom:0.6rem; display:flex; justify-content:space-between; align-items:center;">
+          <span><i class="fa-solid fa-list-check"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+          <div>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(true)">เลือกทั้งหมด</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(false)">ล้างทั้งหมด</button>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; max-height:300px; overflow-y:auto; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:0.8rem; border-radius:8px;">
+          ${systemMenus.map(m => `
+            <label style="display:flex; align-items:center; gap:0.5rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.83rem;">
+              <input type="checkbox" class="role-menu-checkbox" value="${m.key}" checked style="accent-color:var(--accent-primary); width:16px; height:16px;">
+              <span><i class="fa-solid ${m.icon}" style="color:var(--accent-primary);"></i> ${m.name}</span>
+            </label>
+          `).join('')}
+        </div>
+      </form>
+    `;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitCreateRole()" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกตำแหน่งใหม่</button>
+    `;
+
+    openModal('➕ สร้างตำแหน่งงานใหม่ และกำหนดสิทธิ์เมนู', bodyHtml, footerHtml);
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+function toggleAllMenuCheckboxes(selectState) {
+  document.querySelectorAll('.role-menu-checkbox').forEach(cb => {
+    cb.checked = selectState;
+  });
+}
+
+async function submitCreateRole() {
+  const name = document.getElementById('role-name').value;
+  const description = document.getElementById('role-desc').value;
+  const allowedMenus = Array.from(document.querySelectorAll('.role-menu-checkbox:checked')).map(cb => cb.value);
+
+  if (!name || !name.trim()) {
+    showToast('กรุณากรอกชื่อตำแหน่งงาน', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/roles', 'POST', { name, description, allowedMenus });
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderRolesPermissionsView();
+    }
+  } catch (e) {}
+}
+
+async function openEditRoleModal(roleId) {
+  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+
+  try {
+    const res = await apiRequest('/roles');
+    const roles = res.roles || [];
+    const systemMenus = res.systemMenus || [];
+    const role = roles.find(r => String(r._id) === String(roleId));
+
+    if (!role) {
+      showToast('ไม่พบข้อมูลตำแหน่ง', 'error');
+      closeModal();
+      return;
+    }
+
+    const currentMenus = role.allowedMenus || [];
+
+    const bodyHtml = `
+      <form id="edit-role-form" onsubmit="event.preventDefault(); submitEditRole('${role._id}');">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="font-weight:700; color:#fff;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700;">
+        </div>
+
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="font-weight:700; color:#fff;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}">
+        </div>
+
+        <div style="font-weight:800; color:#38bdf8; font-size:0.95rem; margin-bottom:0.6rem; display:flex; justify-content:space-between; align-items:center;">
+          <span><i class="fa-solid fa-list-check"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+          <div>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(true)">เลือกทั้งหมด</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(false)">ล้างทั้งหมด</button>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; max-height:300px; overflow-y:auto; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:0.8rem; border-radius:8px;">
+          ${systemMenus.map(m => {
+            const isChecked = currentMenus.includes(m.key);
+            return `
+              <label style="display:flex; align-items:center; gap:0.5rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.83rem;">
+                <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:16px; height:16px;">
+                <span><i class="fa-solid ${m.icon}" style="color:var(--accent-primary);"></i> ${m.name}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      </form>
+    `;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitEditRole('${role._id}')" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไขสิทธิ์</button>
+    `;
+
+    openModal(`✏️ แก้ไขสิทธิ์ตำแหน่ง: ${role.name}`, bodyHtml, footerHtml);
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+async function submitEditRole(roleId) {
+  const name = document.getElementById('edit-role-name').value;
+  const description = document.getElementById('edit-role-desc').value;
+  const allowedMenus = Array.from(document.querySelectorAll('.role-menu-checkbox:checked')).map(cb => cb.value);
+
+  if (!name || !name.trim()) {
+    showToast('กรุณากรอกชื่อตำแหน่งงาน', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/roles/${roleId}`, 'PUT', { name, description, allowedMenus });
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+
+      if (state.user) {
+        const meRes = await apiRequest('/auth/me');
+        if (meRes.success) {
+          state.user = meRes.user;
+          localStorage.setItem('silmin_user', JSON.stringify(meRes.user));
+          updateSidebarMenuByRole(state.user.role);
+        }
+      }
+
+      renderRolesPermissionsView();
+    }
+  } catch (e) {}
+}
+
+async function deleteRoleAction(roleId) {
+  if (!confirm('คุณต้องการลบตำแหน่งนี้ใช่หรือไม่?')) return;
+
+  try {
+    const res = await apiRequest(`/roles/${roleId}`, 'DELETE');
+    if (res.success) {
+      showToast(res.message);
+      renderRolesPermissionsView();
+    }
+  } catch (e) {}
+}

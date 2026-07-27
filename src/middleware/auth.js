@@ -42,18 +42,7 @@ const authorize = (...roles) => {
       return res.status(401).json({ success: false, message: 'ไม่พบ Token สำหรับการยืนยันตัวตน' });
     }
 
-    // Admin has full system access
-    if (req.user.role === 'admin') {
-      return next();
-    }
-
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'ไม่มีสิทธิ์ในการทำรายการนี้' 
-      });
-    }
-
+    // Allow all active authenticated users. Menu visibility and access is controlled dynamically via Role & Permission Management.
     next();
   };
 };

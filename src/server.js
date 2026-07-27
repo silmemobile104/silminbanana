@@ -19,6 +19,9 @@ const userRoutes = require('./routes/userRoutes');
 const posRoutes = require('./routes/posRoutes');
 const purchaseOrderRoutes = require('./routes/purchaseOrderRoutes');
 
+const roleRoutes = require('./routes/roleRoutes');
+const { seedDefaultRolesIfEmpty } = require('./controllers/roleController');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -27,6 +30,7 @@ const repairData = require('./scripts/repairData');
 // Connect to MongoDB & Auto-Seed Default Accounts if empty
 connectDB().then(() => {
   autoSeedIfEmpty();
+  seedDefaultRolesIfEmpty();
   repairData();
 }).catch((err) => {
   console.error('🔴 เกิดข้อผิดพลาดขณะเริ่มเชื่อมต่อฐานข้อมูล:', err.message);
@@ -51,6 +55,7 @@ app.use('/api/branches', branchRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health Check API
 app.get('/api/health', (req, res) => {
