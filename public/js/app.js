@@ -39,15 +39,29 @@ function getUserAllowedMenus(userRole) {
 }
 
 // Thai Role Mapping Helper
-function formatRoleThai(roleKey) {
-  const roles = {
-    'admin': 'ผู้ดูแลระบบ (Admin)',
-    'branch_staff': 'พนักงานฝ่ายขาย (Sales)',
-    'technical_staff': 'พนักงานฝ่ายเทคนิค (Technician)',
-    'purchase_staff': 'ฝ่ายจัดซื้อ (Purchasing)',
-    'hq_stock_staff': 'พนักงานฝ่ายสต็อก (Stock/HQ)'
+// Role Name Resolver Helper (Code -> Name)
+function formatRoleName(roleKey, rolesList = []) {
+  if (!roleKey) return '-';
+  
+  const cache = (rolesList && rolesList.length > 0) ? rolesList : (window.masterRolesCache || []);
+  const found = cache.find(r => r.code === roleKey || String(r._id) === String(roleKey));
+  if (found && found.name) {
+    return found.name;
+  }
+
+  const defaultRoles = {
+    'admin': 'ผู้ดูแลระบบสูงสุด (Admin)',
+    'hq_stock_staff': 'พนักงานคลังสินค้าส่วนกลาง (HQ Stock)',
+    'branch_staff': 'พนักงานประจำสาขา (Branch Staff)',
+    'purchase_staff': 'พนักงานฝ่ายจัดซื้อ (Purchasing Staff)',
+    'technical_staff': 'ช่างเทคนิค (Technical Staff)'
   };
-  return roles[roleKey] || roleKey;
+
+  return defaultRoles[roleKey] || roleKey;
+}
+
+function formatRoleThai(roleKey) {
+  return formatRoleName(roleKey);
 }
 
 // Helper to generate auto name
@@ -5322,7 +5336,7 @@ async function renderEmployeeManagementView() {
                 </td>
                 <td>
                   <span class="badge badge-purple" style="font-size:0.8rem; font-weight:700;">
-                    <i class="fa-solid fa-user-shield"></i> ${formatRoleThai(u.role)}
+                    <i class="fa-solid fa-user-shield"></i> ${formatRoleName(u.role, roles)}
                   </span>
                 </td>
                 <td><strong>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
@@ -5785,72 +5799,137 @@ document.addEventListener('click', (e) => {
 
 
 /* ==========================================================================
-   VIEW: ROLES & PERMISSIONS MANAGEMENT (จัดการสิทธิ์และตำแหน่ง)
+   VIEW: ROLES & PERMISSIONS MANAGEMENT (จัดการสิทธิ์และตำแหน่ง - Beautiful UI)
    ========================================================================== */
 async function renderRolesPermissionsView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลสิทธิ์และตำแหน่ง...</div>`;
+  container.innerHTML = `
+    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+      <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;"></i>
+      <br><span style="font-size:1.05rem; font-weight:600; color:#fff;">กำลังโหลดข้อมูลตำแหน่งและสิทธิ์การใช้งาน...</span>
+    </div>
+  `;
 
   try {
     const res = await apiRequest('/roles');
     const roles = res.roles || [];
     const systemMenus = res.systemMenus || [];
 
+    const totalRoles = roles.length;
+    const systemRoles = roles.filter(r => r.isSystemDefault).length;
+    const customRoles = roles.filter(r => !r.isSystemDefault).length;
+
     container.innerHTML = `
-      <!-- Action Bar -->
-      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <!-- Top Overview Stat Cards -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(56,189,248,0.15); color:#38bdf8; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <div>
+            <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งทั้งหมด</span>
+            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${totalRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+          </div>
+        </div>
+
+        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(168,85,247,0.15); color:#c084fc; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="fa-solid fa-lock"></i>
+          </div>
+          <div>
+            <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งหลักของระบบ</span>
+            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${systemRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+          </div>
+        </div>
+
+        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(52,211,153,0.15); color:#34d399; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="fa-solid fa-user-gear"></i>
+          </div>
+          <div>
+            <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งกำหนดขึ้นเอง</span>
+            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${customRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Bar Header -->
+      <div class="card" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1.2rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:#fff;">
-            <i class="fa-solid fa-user-shield" style="color:var(--accent-gold);"></i> จัดการสิทธิ์และตำแหน่งงาน (${roles.length} ตำแหน่ง)
+          <h3 style="font-size:1.2rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.6rem; margin:0 0 0.2rem 0;">
+            <i class="fa-solid fa-sliders" style="color:var(--accent-gold);"></i> จัดการสิทธิ์การมองเห็นเมนู (Menu Permissions)
           </h3>
-          <p style="font-size:0.82rem; color:var(--text-muted);">สร้างตำแหน่งงาน กำหนดสิทธิ์เมนูที่ต้องการให้ตำแหน่งนั้นมองเห็น และซ่อนเมนูที่ไม่ได้รับอนุญาต</p>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
+            ติ๊กเลือกเปิดหรือปิดเมนูที่คุณต้องการให้แต่ละตำแหน่งมองเห็น เมนูที่ถูกปิดจะถูกซ่อนจากพนักงานในตำแหน่งนั้นทันที
+          </p>
         </div>
 
         <div>
-          <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700;">
-            <i class="fa-solid fa-plus"></i> + สร้างตำแหน่งงานใหม่
+          <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700; padding:0.6rem 1.2rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.5rem; box-shadow:0 4px 12px rgba(56,189,248,0.25);">
+            <i class="fa-solid fa-plus-circle" style="font-size:1rem;"></i> + สร้างตำแหน่งใหม่
           </button>
         </div>
       </div>
 
       <!-- Roles Grid -->
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:1.2rem;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:1.2rem;">
         ${roles.map(r => {
           const allowedCount = (r.allowedMenus || []).length;
           const totalMenus = systemMenus.length;
+          const pct = Math.round((allowedCount / totalMenus) * 100);
 
           return `
-            <div class="card" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between;">
+            <div class="card" style="background:rgba(30,41,59,0.4); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:1.4rem; display:flex; flex-direction:column; justify-content:space-between; transition:all 0.25s ease;">
               <div>
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.6rem;">
+                <!-- Role Header -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
                   <div>
-                    <strong style="font-size:1.1rem; color:#fff; font-weight:800; display:block;">${r.name}</strong>
-                    <span style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">CODE: ${r.code}</span>
+                    <h4 style="font-size:1.15rem; color:#fff; font-weight:800; margin:0 0 0.2rem 0; display:flex; align-items:center; gap:0.5rem;">
+                      ${r.name}
+                    </h4>
+                    <span style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; background:rgba(0,0,0,0.3); padding:0.15rem 0.5rem; border-radius:4px; border:1px solid rgba(255,255,255,0.05);">
+                      รหัส: ${r.code}
+                    </span>
                   </div>
+
                   ${r.isSystemDefault ? `
-                    <span class="badge badge-purple" style="font-size:0.72rem;"><i class="fa-solid fa-lock"></i> ตำแหน่งหลักระบบ</span>
+                    <span style="font-size:0.75rem; font-weight:700; background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
+                      <i class="fa-solid fa-lock" style="font-size:0.7rem;"></i> หลักของระบบ
+                    </span>
                   ` : `
-                    <span class="badge badge-blue" style="font-size:0.72rem;"><i class="fa-solid fa-user-gear"></i> ตำแหน่งกำหนดเอง</span>
+                    <span style="font-size:0.75rem; font-weight:700; background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
+                      <i class="fa-solid fa-user-gear" style="font-size:0.7rem;"></i> กำหนดขึ้นเอง
+                    </span>
                   `}
                 </div>
 
-                <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:0.8rem; min-height:36px;">
+                <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:1rem; min-height:36px; line-height:1.4;">
                   ${r.description || 'ไม่มีคำอธิบายเพิ่มเติม'}
                 </p>
 
-                <!-- Allowed Menus Badge Pill Summary -->
-                <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06); padding:0.8rem; border-radius:8px; margin-bottom:1rem;">
-                  <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">
-                    <span style="color:var(--text-muted);">เมนูที่ได้รับอนุญาต:</span>
-                    <span style="color:${allowedCount === totalMenus ? '#34d399' : '#38bdf8'};">${allowedCount} จาก ${totalMenus} เมนู</span>
+                <!-- Permission Progress & Summary Box -->
+                <div style="background:rgba(15,23,42,0.7); border:1px solid rgba(255,255,255,0.07); padding:1rem; border-radius:10px; margin-bottom:1.2rem;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; margin-bottom:0.6rem; font-weight:700;">
+                    <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
+                      <i class="fa-solid fa-eye" style="color:var(--accent-primary);"></i> สิทธิ์การเห็นเมนู:
+                    </span>
+                    <span style="color:${pct === 100 ? '#34d399' : (pct > 0 ? '#38bdf8' : '#ef4444')};">
+                      ${allowedCount} จาก ${totalMenus} เมนู (${pct}%)
+                    </span>
                   </div>
 
-                  <div style="display:flex; flex-wrap:wrap; gap:0.35rem; max-height:100px; overflow-y:auto; padding-right:0.2rem;">
+                  <!-- Progress Bar -->
+                  <div style="height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden; margin-bottom:0.8rem;">
+                    <div style="height:100%; width:${pct}%; background:linear-gradient(90deg, #38bdf8, #34d399); border-radius:3px; transition:width 0.3s ease;"></div>
+                  </div>
+
+                  <!-- Menu Pill List -->
+                  <div style="display:flex; flex-wrap:wrap; gap:0.35rem; max-height:110px; overflow-y:auto; padding-right:0.2rem;">
                     ${systemMenus.map(m => {
                       const isPermitted = (r.allowedMenus || []).includes(m.key);
                       return `
-                        <span style="font-size:0.73rem; padding:0.2rem 0.5rem; border-radius:4px; ${isPermitted ? 'background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3);' : 'background:rgba(255,255,255,0.03); color:rgba(255,255,255,0.25); border:1px solid rgba(255,255,255,0.05); text-decoration:line-through;'}">
-                          <i class="fa-solid ${m.icon}"></i> ${m.name}
+                        <span style="font-size:0.74rem; font-weight:600; padding:0.22rem 0.55rem; border-radius:6px; display:inline-flex; align-items:center; gap:0.35rem; ${isPermitted ? 'background:rgba(52,211,153,0.12); color:#34d399; border:1px solid rgba(52,211,153,0.25);' : 'background:rgba(255,255,255,0.02); color:rgba(255,255,255,0.25); border:1px solid rgba(255,255,255,0.04); text-decoration:line-through;'}">
+                          <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:#34d399;' : 'color:rgba(255,255,255,0.2);'}"></i> ${m.name}
                         </span>
                       `;
                     }).join('')}
@@ -5858,13 +5937,14 @@ async function renderRolesPermissionsView() {
                 </div>
               </div>
 
-              <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                <button class="btn btn-warning btn-sm" style="flex:1; font-weight:700; font-size:0.82rem;" onclick="openEditRoleModal('${r._id}')">
+              <!-- Action Buttons -->
+              <div style="display:flex; gap:0.6rem; margin-top:0.4rem;">
+                <button class="btn btn-warning" style="flex:1; font-weight:700; font-size:0.85rem; padding:0.55rem 0.8rem; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;" onclick="openEditRoleModal('${r._id}')">
                   <i class="fa-solid fa-pen-to-square"></i> กำหนดสิทธิ์เมนู
                 </button>
                 ${!r.isSystemDefault ? `
-                  <button class="btn btn-danger btn-sm" style="font-weight:700; font-size:0.82rem;" onclick="deleteRoleAction('${r._id}')" title="ลบตำแหน่งนี้">
-                    <i class="fa-solid fa-trash"></i> ลบ
+                  <button class="btn btn-danger" style="font-weight:700; font-size:0.85rem; padding:0.55rem 0.9rem; border-radius:8px;" onclick="deleteRoleAction('${r._id}')" title="ลบตำแหน่งนี้">
+                    <i class="fa-solid fa-trash"></i>
                   </button>
                 ` : ''}
               </div>
@@ -5874,7 +5954,7 @@ async function renderRolesPermissionsView() {
       </div>
     `;
   } catch (err) {
-    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดตำแหน่ง: ${err.message}</div>`;
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem; text-align:center;">เกิดข้อผิดพลาดในการโหลดตำแหน่ง: ${err.message}</div>`;
   }
 }
 
@@ -5887,38 +5967,46 @@ async function openCreateRoleModal() {
 
     const bodyHtml = `
       <form id="create-role-form" onsubmit="event.preventDefault(); submitCreateRole();">
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="font-weight:700; color:#fff;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700;">
+        <div class="form-group" style="margin-bottom:1.1rem;">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px;">
         </div>
 
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="font-weight:700; color:#fff;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้">
+        <div class="form-group" style="margin-bottom:1.2rem;">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" style="padding:0.65rem 0.9rem; border-radius:8px;">
         </div>
 
-        <div style="font-weight:800; color:#38bdf8; font-size:0.95rem; margin-bottom:0.6rem; display:flex; justify-content:space-between; align-items:center;">
-          <span><i class="fa-solid fa-list-check"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
-          <div>
-            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(true)">เลือกทั้งหมด</button>
-            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(false)">ล้างทั้งหมด</button>
+        <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1rem; margin-bottom:1rem;">
+          <div style="font-weight:800; color:#38bdf8; font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+            <div style="display:flex; gap:0.4rem;">
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
+                <i class="fa-solid fa-check-double"></i> เลือกทั้งหมด
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(false)">
+                <i class="fa-solid fa-ban"></i> ล้างทั้งหมด
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; max-height:300px; overflow-y:auto; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:0.8rem; border-radius:8px;">
-          ${systemMenus.map(m => `
-            <label style="display:flex; align-items:center; gap:0.5rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.83rem;">
-              <input type="checkbox" class="role-menu-checkbox" value="${m.key}" checked style="accent-color:var(--accent-primary); width:16px; height:16px;">
-              <span><i class="fa-solid ${m.icon}" style="color:var(--accent-primary);"></i> ${m.name}</span>
-            </label>
-          `).join('')}
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.6rem; max-height:300px; overflow-y:auto; padding-right:0.3rem;">
+            ${systemMenus.map(m => `
+              <label style="display:flex; align-items:center; gap:0.6rem; background:rgba(30,41,59,0.5); padding:0.6rem 0.8rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.84rem; font-weight:600; color:#fff; transition:all 0.15s ease;">
+                <input type="checkbox" class="role-menu-checkbox" value="${m.key}" checked style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
+                <span style="display:flex; align-items:center; gap:0.4rem;">
+                  <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
+                </span>
+              </label>
+            `).join('')}
+          </div>
         </div>
       </form>
     `;
 
     const footerHtml = `
-      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="submitCreateRole()" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกตำแหน่งใหม่</button>
+      <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:600; padding:0.55rem 1.2rem; border-radius:8px;">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitCreateRole()" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save"></i> บันทึกตำแหน่งใหม่</button>
     `;
 
     openModal('➕ สร้างตำแหน่งงานใหม่ และกำหนดสิทธิ์เมนู', bodyHtml, footerHtml);
@@ -5972,44 +6060,52 @@ async function openEditRoleModal(roleId) {
 
     const bodyHtml = `
       <form id="edit-role-form" onsubmit="event.preventDefault(); submitEditRole('${role._id}');">
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="font-weight:700; color:#fff;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700;">
+        <div class="form-group" style="margin-bottom:1.1rem;">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px;">
         </div>
 
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="font-weight:700; color:#fff;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}">
+        <div class="form-group" style="margin-bottom:1.2rem;">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}" style="padding:0.65rem 0.9rem; border-radius:8px;">
         </div>
 
-        <div style="font-weight:800; color:#38bdf8; font-size:0.95rem; margin-bottom:0.6rem; display:flex; justify-content:space-between; align-items:center;">
-          <span><i class="fa-solid fa-list-check"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
-          <div>
-            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(true)">เลือกทั้งหมด</button>
-            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="toggleAllMenuCheckboxes(false)">ล้างทั้งหมด</button>
+        <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1rem; margin-bottom:1rem;">
+          <div style="font-weight:800; color:#38bdf8; font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+            <div style="display:flex; gap:0.4rem;">
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
+                <i class="fa-solid fa-check-double"></i> เลือกทั้งหมด
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(false)">
+                <i class="fa-solid fa-ban"></i> ล้างทั้งหมด
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; max-height:300px; overflow-y:auto; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:0.8rem; border-radius:8px;">
-          ${systemMenus.map(m => {
-            const isChecked = currentMenus.includes(m.key);
-            return `
-              <label style="display:flex; align-items:center; gap:0.5rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.83rem;">
-                <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:16px; height:16px;">
-                <span><i class="fa-solid ${m.icon}" style="color:var(--accent-primary);"></i> ${m.name}</span>
-              </label>
-            `;
-          }).join('')}
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.6rem; max-height:300px; overflow-y:auto; padding-right:0.3rem;">
+            ${systemMenus.map(m => {
+              const isChecked = currentMenus.includes(m.key);
+              return `
+                <label style="display:flex; align-items:center; gap:0.6rem; background:rgba(30,41,59,0.5); padding:0.6rem 0.8rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.84rem; font-weight:600; color:#fff; transition:all 0.15s ease;">
+                  <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
+                  <span style="display:flex; align-items:center; gap:0.4rem;">
+                    <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
+                  </span>
+                </label>
+              `;
+            }).join('')}
+          </div>
         </div>
       </form>
     `;
 
     const footerHtml = `
-      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="submitEditRole('${role._id}')" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไขสิทธิ์</button>
+      <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:600; padding:0.55rem 1.2rem; border-radius:8px;">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitEditRole('${role._id}')" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไขสิทธิ์</button>
     `;
 
-    openModal(`✏️ แก้ไขสิทธิ์ตำแหน่ง: ${role.name}`, bodyHtml, footerHtml);
+    openModal(`✏️ กำหนดสิทธิ์ตำแหน่ง: ${role.name}`, bodyHtml, footerHtml);
   } catch (err) {
     openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
   }
