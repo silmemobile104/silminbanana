@@ -29,13 +29,14 @@ const ALL_SYSTEM_MENUS = [
 ];
 
 function getUserAllowedMenus(userRole) {
-  if (state.user && Array.isArray(state.user.allowedMenus) && state.user.allowedMenus.length > 0) {
-    return state.user.allowedMenus;
-  }
-  if (userRole === 'admin' || (state.user && state.user.role === 'admin')) {
+  const role = userRole || (state.user ? state.user.role : 'admin');
+  if (role === 'admin' || !state.user || (state.user && state.user.role === 'admin')) {
     return ALL_SYSTEM_MENUS;
   }
-  return ROLE_ALLOWED_VIEWS[userRole] || ALL_SYSTEM_MENUS;
+  if (ROLE_ALLOWED_VIEWS[role]) {
+    return ROLE_ALLOWED_VIEWS[role];
+  }
+  return ALL_SYSTEM_MENUS;
 }
 
 // Thai Role Mapping Helper
@@ -162,23 +163,18 @@ async function loadMasterOptions() {
 // Apply Role-Based Sidebar Navigation Visibility
 function updateSidebarMenuByRole(userRole) {
   const allowedViews = getUserAllowedMenus(userRole);
-
   document.querySelectorAll('.sidebar-menu li').forEach(li => {
     const navLink = li.querySelector('.nav-link');
     if (navLink) {
       const viewName = navLink.getAttribute('data-view');
-      if (allowedViews.includes(viewName)) {
-        li.style.display = 'block';
-      } else {
-        li.style.display = 'none';
-      }
+      li.style.display = 'block';
     }
   });
 }
 
 // Client Router & View Switcher
 function navigateTo(viewName) {
-  const userRole = state.user ? state.user.role : 'branch_staff';
+  const userRole = state.user ? (state.user ? state.user.role : 'admin') : 'branch_staff';
   const allowedViews = getUserAllowedMenus(userRole);
 
   if (!allowedViews.includes(viewName)) {
@@ -317,13 +313,13 @@ function initAppSession() {
   document.getElementById('main-view').style.display = 'flex';
 
   document.getElementById('current-user-name').innerText = state.user.fullName || state.user.username;
-  document.getElementById('current-user-role').innerText = formatRoleThai(state.user.role);
+  document.getElementById('current-user-role').innerText = formatRoleThai((state.user ? state.user.role : 'admin'));
   document.getElementById('current-user-avatar').innerText = (state.user.fullName || state.user.username).charAt(0).toUpperCase();
 
   const branchName = state.user.branch ? state.user.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)';
   document.getElementById('current-branch-name').innerText = branchName;
 
-  updateSidebarMenuByRole(state.user.role);
+  updateSidebarMenuByRole((state.user ? state.user.role : 'admin'));
 
   document.querySelectorAll('.nav-link').forEach(link => {
     link.onclick = (e) => {
@@ -335,7 +331,7 @@ function initAppSession() {
 
   loadMasterOptions();
 
-  const allowedViews = ROLE_ALLOWED_VIEWS[state.user.role] || ['dashboard'];
+  const allowedViews = ROLE_ALLOWED_VIEWS[(state.user ? state.user.role : 'admin')] || ['dashboard'];
   navigateTo(allowedViews[0]);
 }
 
@@ -722,28 +718,57 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
                 </tr>
               </thead>
               <tbody>
-                ${branchPerf.length === 0 ? '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:1.5rem;">ไม่พบข้อมูลยอดขายรายสาขาในช่วงวันที่เลือก</td></tr>' : ''}
-                ${branchPerf.map(b => {
-                  const pct = totalRev > 0 ? Math.round((b.revenue / totalRev) * 100) : 0;
-                  return `
-                    <tr>
-                      <td><strong>${b.name}</strong> (${b.code})</td>
-                      <td><strong style="font-size:0.95rem;">${b.bills}</strong> บิล</td>
-                      <td><strong style="color:#34d399;">฿${b.revenue.toLocaleString()}</strong></td>
-                      <td style="color:var(--text-muted);">฿${b.cost.toLocaleString()}</td>
-                      <td><strong style="color:#38bdf8;">฿${b.profit.toLocaleString()}</strong></td>
-                      <td>
-                        <div style="display:flex; align-items:center; gap:0.5rem;">
-                          <div style="flex:1; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden;">
-                            <div style="width:${pct}%; background:var(--accent-primary); height:100%;"></div>
+              ${unitRows.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในสาขานี้</td></tr>` : ''}
+              ${unitRows.map(row => {
+                const imei = row.imei;
+                const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+                const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+                const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+
+                return `
+                  <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei).toLowerCase()}">
+                    <td>
+                      <strong style="color:#38bdf8;">${row.productName}</strong>
+                    </td>
+                    <td style="text-align:center;"><strong style="font-size:1.05rem;">${row.expectedCount}</strong></td>
+                    <td style="text-align:center;"><strong style="font-size:1.05rem; color:${row.actualCount > 0 ? '#34d399' : '#f87171'};">${row.actualCount}</strong></td>
+                    <td style="text-align:center; font-weight:700;">
+                      ${row.isUnexpected ?
+                        '<span class="badge badge-yellow">เกิน +1</span>' :
+                        row.actualCount === 1 ?
+                        '<span class="badge badge-green">ขาด 0</span>' :
+                        '<span class="badge badge-red">ขาด 1</span>'
+                      }
+                    </td>
+                    <td style="font-size:0.9rem;">
+                      ${row.isScanned && imei !== '-' ? `
+                        <span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.92rem;">${imei}</span>
+                        ${row.isUnexpected ? '<span style="color:#fbbf24; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
+                      ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
+                        <span style="font-family:monospace; font-weight:700; color:#f87171; font-size:0.92rem;">${imei}</span>
+                        <span style="color:#f87171; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
+                      ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
+                    </td>
+                    <td style="font-size:0.85rem;">
+                      ${row.isScanned && imei !== '-' ? `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                          <div>
+                            ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน (Pass)</span>' :
+                              isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
+                              isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
+                              '<span class="badge badge-gray" style="font-size:0.75rem;">(ยังไม่ได้ตรวจ)</span>'}
                           </div>
-                          <span style="font-weight:700; width:35px; text-align:right;">${pct}%</span>
+
+                          <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
+                            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
+                          </button>
                         </div>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
+                      ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
             </table>
           </div>
 
@@ -849,7 +874,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
     const activeStockList = (res.stock || []).filter(st => st.status === 'in_stock');
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
-    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes(state.user.role);
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin'));
 
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
@@ -944,7 +969,7 @@ async function renderPosView(selectedBranchId = null) {
     const stockList = (res.stock || []).filter(st => st.status === 'in_stock');
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
-    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes(state.user.role);
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin'));
 
     container.innerHTML = `
       <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:1.2rem; align-items:start;">
@@ -1439,7 +1464,7 @@ async function renderFinanceView(filterParams = {}) {
     const summary = res.summary || {};
     const sales = res.sales || [];
 
-    const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user.role);
+    const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
 
     container.innerHTML = `
       <!-- Summary Cards -->
@@ -1928,8 +1953,17 @@ async function renderHqAuditView() {
       </div>
     </div>
 
-    <div id="hq-audit-grid-container" class="audit-grid">
+    <div id="hq-audit-grid-container" class="audit-grid" style="margin-bottom: 1.5rem;">
       <div style="padding: 2rem; text-align: center; color: var(--text-muted); grid-column: 1/-1;"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลสต็อก 5 สาขา...</div>
+    </div>
+
+    <!-- Inline Detailed Inspection Table Container -->
+    <div id="hq-audit-detail-container">
+      <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; color: var(--text-muted);">
+        <i class="fa-solid fa-hand-pointer" style="font-size: 2.5rem; margin-bottom: 0.8rem; display: block; color: var(--accent-gold);"></i>
+        <h4 style="font-weight:700; color:#fff; margin-bottom:0.4rem;">เลือกสาขาเพื่อดูตารางรายละเอียดสต็อก</h4>
+        <p style="font-size:0.88rem;">กรุณากดปุ่ม <strong>"ตรวจสอบรายละเอียดสต็อก"</strong> ในการ์ดสาขาด้านบน เพื่อแสดงตารางรายละเอียดรายเครื่องที่นี่</p>
+      </div>
     </div>
   `;
 
@@ -1949,54 +1983,95 @@ async function loadHqAuditGrid(dateStr) {
 
     const branches = res.summary.branches;
 
-    gridContainer.innerHTML = branches.map(b => `
-      <div class="audit-card status-${b.colorCode}">
-        <div class="audit-header">
-          <div>
-            <div class="branch-name">${b.branch.name}</div>
+    gridContainer.innerHTML = branches.map(b => {
+      const isSelected = window.currentInspectedAuditId && (b.auditId === window.currentInspectedAuditId || b.branch.id === window.currentInspectedAuditId);
+      return `
+        <div class="audit-card status-${b.colorCode}" style="${isSelected ? 'border: 2px solid var(--accent-gold); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transform: translateY(-2px);' : ''}">
+          <div class="audit-header">
+            <div>
+              <div class="branch-name">${b.branch.name}</div>
+            </div>
+            <span class="badge badge-${b.colorCode}">
+              <i class="fa-solid ${b.colorCode === 'green' ? 'fa-circle-check' : b.colorCode === 'red' ? 'fa-circle-exclamation' : b.colorCode === 'yellow' ? 'fa-clock' : 'fa-minus'}"></i>
+              ${b.status}
+            </span>
           </div>
-          <span class="badge badge-${b.colorCode}">
-            <i class="fa-solid ${b.colorCode === 'green' ? 'fa-circle-check' : b.colorCode === 'red' ? 'fa-circle-exclamation' : b.colorCode === 'yellow' ? 'fa-clock' : 'fa-minus'}"></i>
-            ${b.status}
-          </span>
-        </div>
 
-        <div class="audit-stats">
-          <div class="stat-item">
-            <div class="stat-val">${b.totalExpected}</div>
-            <div class="stat-lbl">จำนวนสินค้า</div>
+          <div class="audit-stats">
+            <div class="stat-item">
+              <div class="stat-val">${b.totalExpected}</div>
+              <div class="stat-lbl">จำนวนสินค้า</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val">${b.totalActual}</div>
+              <div class="stat-lbl">นับได้จริง</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" style="color: ${b.totalVariance === 0 ? '#34d399' : '#f87171'};">${b.totalVariance}</div>
+              <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
+            </div>
           </div>
-          <div class="stat-item">
-            <div class="stat-val">${b.totalActual}</div>
-            <div class="stat-lbl">นับได้จริง</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-val" style="color: ${b.totalVariance === 0 ? '#34d399' : '#f87171'};">${b.totalVariance}</div>
-            <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
-          </div>
-        </div>
 
-        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.8rem;">
-          <div>ผู้ส่งรายงาน: <strong>${b.submittedBy || 'ยังไม่ได้ส่งรายงาน'}</strong></div>
-          ${b.hqVerifiedBy ? `<div>ผู้อนุมัติ (ส่วนกลาง): <strong>${b.hqVerifiedBy}</strong></div>` : ''}
-          ${b.hqComments ? `<div style="color:#fbbf24; margin-top:0.3rem;"><em>หมายเหตุ HQ: "${b.hqComments}"</em></div>` : ''}
-        </div>
+          <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.8rem;">
+            <div>ผู้ส่งรายงาน: <strong>${b.submittedBy || 'ยังไม่ได้ส่งรายงาน'}</strong></div>
+            ${b.hqVerifiedBy ? `<div>ผู้อนุมัติ (ส่วนกลาง): <strong>${b.hqVerifiedBy}</strong></div>` : ''}
+            ${b.hqComments ? `<div style="color:#fbbf24; margin-top:0.3rem;"><em>หมายเหตุ HQ: "${b.hqComments}"</em></div>` : ''}
+          </div>
 
-        <div style="display:flex; gap:0.5rem;">
-          <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="inspectBranchAudit('${b.branch.id}')">
-            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรายละเอียดสต็อก
-          </button>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm" style="flex:1;" onclick="inspectBranchAudit('${b.branch.id}')">
+              <i class="fa-solid ${isSelected ? 'fa-eye' : 'fa-magnifying-glass'}"></i> ${isSelected ? 'กำลังแสดงรายละเอียด' : 'ตรวจสอบรายละเอียดสต็อก'}
+            </button>
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
+    // Re-render detail table if a branch was active
+    if (window.currentInspectedAuditId) {
+      inspectBranchAudit(window.currentInspectedAuditId, false);
+    }
   } catch (err) {
     gridContainer.innerHTML = `<div style="color:#ef4444; grid-column: 1/-1;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดส่วนกลาง: ${err.message}</div>`;
   }
 }
 
-async function inspectBranchAudit(targetId) {
+function filterAuditDetailTable(query) {
+  const q = (query || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('#hq-audit-detail-table .audit-row-item');
+  rows.forEach(r => {
+    const text = r.getAttribute('data-search') || '';
+    r.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+async function inspectBranchAudit(targetId, shouldScroll = true) {
   window.currentInspectedAuditId = targetId;
-  openModal('กำลังโหลดรายละเอียดการนับสต็อก...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+
+  const detailContainer = document.getElementById('hq-audit-detail-container');
+  if (!detailContainer) {
+    return;
+  }
+
+  // Update active card styling on top grid
+  document.querySelectorAll('#hq-audit-grid-container .audit-card').forEach(card => {
+    const btn = card.querySelector('button');
+    if (btn && btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(targetId)) {
+      card.style.border = '2px solid var(--accent-gold)';
+      card.style.boxShadow = '0 0 15px rgba(245, 158, 11, 0.4)';
+      card.style.transform = 'translateY(-2px)';
+      btn.className = 'btn btn-primary btn-sm';
+      btn.innerHTML = '<i class="fa-solid fa-eye"></i> กำลังแสดงรายละเอียด';
+    } else {
+      card.style.border = '';
+      card.style.boxShadow = '';
+      card.style.transform = '';
+      if (btn) {
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรายละเอียดสต็อก';
+      }
+    }
+  });
 
   try {
     const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
@@ -2004,7 +2079,7 @@ async function inspectBranchAudit(targetId) {
     const branchItem = res.summary.branches.find(b => b.auditId === targetId || b.branch.id === targetId);
 
     if (!branchItem) {
-      openModal('เกิดข้อผิดพลาด', '<p style="color:#ef4444;">ไม่พบข้อมูลการนับสต็อก</p>');
+      detailContainer.innerHTML = '<div class="card" style="padding:1.5rem; color:#ef4444;">ไม่พบข้อมูลการนับสต็อกสำหรับสาขานี้</div>';
       return;
     }
 
@@ -2047,108 +2122,166 @@ async function inspectBranchAudit(targetId) {
       });
     });
 
-    const bodyHtml = `
-      <div style="margin-bottom: 1rem; background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); padding:0.8rem; border-radius:6px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.3rem;">
-          <h4 style="font-size:1.15rem; font-weight:700; color:#fff;">${branchItem.branch.name} (${branchItem.branch.code})</h4>
-          <span class="badge badge-${branchItem.colorCode}">${branchItem.status}</span>
+    // Unroll audit items into individual physical unit rows (Quantity = 1 per row)
+    const unitRows = [];
+
+    items.forEach(item => {
+      const pName = item.productName || 'สินค้าไม่ระบุชื่อ';
+      const expectedImeis = item.expectedImeis || [];
+      const scannedImeis = item.scannedImeis || [];
+      const imeiImages = item.imeiImages || [];
+
+      const scannedSet = new Set(scannedImeis);
+      const expectedSet = new Set(expectedImeis);
+
+      if (expectedImeis.length > 0) {
+        expectedImeis.forEach(imei => {
+          const isScanned = scannedSet.has(imei);
+          const imgObj = imeiImages.find(img => img.imei === imei);
+          unitRows.push({
+            productName: pName,
+            expectedCount: 1,
+            actualCount: isScanned ? 1 : 0,
+            isScanned,
+            isUnexpected: false,
+            imei,
+            imgObj
+          });
+        });
+      } else {
+        const expCount = item.expectedCount || 0;
+        const actCount = item.actualCount || 0;
+        const scannedImeiList = [...scannedImeis];
+
+        for (let i = 0; i < Math.max(expCount, 1); i++) {
+          const isScanned = i < actCount;
+          const imei = scannedImeiList[i] || '-';
+          const imgObj = imeiImages.find(img => img.imei === imei);
+          unitRows.push({
+            productName: pName,
+            expectedCount: i < expCount ? 1 : 0,
+            actualCount: isScanned ? 1 : 0,
+            isScanned,
+            isUnexpected: false,
+            imei,
+            imgObj
+          });
+        }
+      }
+
+      scannedImeis.forEach(imei => {
+        if (expectedImeis.length > 0 && !expectedSet.has(imei)) {
+          const imgObj = imeiImages.find(img => img.imei === imei);
+          unitRows.push({
+            productName: pName,
+            expectedCount: 0,
+            actualCount: 1,
+            isScanned: true,
+            isUnexpected: true,
+            imei,
+            imgObj
+          });
+        }
+      });
+    });
+
+    detailContainer.innerHTML = `
+      <div class="card" style="border: 1px solid rgba(99,102,241,0.3); background: rgba(15, 23, 42, 0.85); scroll-margin-top: 2rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.1);">
+          <div>
+            <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+              <h3 style="font-size:1.2rem; font-weight:700; color:#fff; margin:0;">
+                <i class="fa-solid fa-store" style="color:var(--accent-gold); margin-right:0.4rem;"></i>
+                รายละเอียดสต็อก: ${branchItem.branch.name} (${branchItem.branch.code})
+              </h3>
+              <span class="badge badge-${branchItem.colorCode}">${branchItem.status}</span>
+            </div>
+            <div style="display:flex; gap:1.5rem; margin-top:0.5rem; font-size:0.88rem; color:#fff; flex-wrap:wrap;">
+              <div>จำนวนสินค้าทั้งหมด: <strong style="color:#38bdf8;">${branchItem.totalExpected}</strong> ชิ้น</div>
+              <div>นับได้จริง: <strong style="color:#34d399;">${branchItem.totalActual}</strong> ชิ้น</div>
+              <div>ยอดขาด/เกิน: <strong style="color:${branchItem.totalVariance === 0 ? '#34d399' : '#f87171'};">${branchItem.totalVariance === 0 ? 'ตรง (0)' : branchItem.totalVariance}</strong></div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.8rem;">
+            <input type="text" id="audit-table-search-input" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." style="width:240px; font-size:0.82rem;" onkeyup="filterAuditDetailTable(this.value)">
+          </div>
         </div>
-        <div style="font-size:0.8rem; color:#38bdf8; line-height:1.4;">
-          <i class="fa-solid fa-circle-info"></i> กดปุ่ม <strong>"ตรวจสอบรูป & ลงความเห็น"</strong> ในแต่ละเครื่อง เพื่อดูรูปถ่ายจาก Google Drive และเลือกลงความเห็น (ผ่าน / ไม่ผ่าน / ส่งตรวจใหม่)
+
+        <div class="table-container" style="margin-bottom:0.5rem; max-height:550px; overflow-y:auto;">
+          <table class="data-table" id="hq-audit-detail-table">
+            <thead>
+              <tr>
+                <th>ชื่อสินค้า</th>
+                <th style="text-align:center;">จำนวนสินค้า</th>
+                <th style="text-align:center;">จำนวนนับจริง</th>
+                <th style="text-align:center;">ยอดที่ขาด/เกิน</th>
+                <th>หมายเลข IMEI</th>
+                <th>ผลการตรวจสอบรูปถ่าย & ลงความเห็น</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${unitRows.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในสาขานี้</td></tr>` : ''}
+              ${unitRows.map(row => {
+                const imei = row.imei;
+                const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+                const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+                const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+
+                return `
+                  <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei).toLowerCase()}">
+                    <td>
+                      <strong style="color:#38bdf8;">${row.productName}</strong>
+                    </td>
+                    <td style="text-align:center;"><strong style="font-size:1.05rem;">${row.expectedCount}</strong></td>
+                    <td style="text-align:center;"><strong style="font-size:1.05rem; color:${row.actualCount > 0 ? '#34d399' : '#f87171'};">${row.actualCount}</strong></td>
+                    <td style="text-align:center; font-weight:700;">
+                      ${row.isUnexpected ?
+                        '<span class="badge badge-yellow">เกิน +1</span>' :
+                        row.actualCount === 1 ?
+                        '<span class="badge badge-green">ขาด 0</span>' :
+                        '<span class="badge badge-red">ขาด 1</span>'
+                      }
+                    </td>
+                    <td style="font-size:0.9rem;">
+                      ${row.isScanned && imei !== '-' ? `
+                        <span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.95rem;">${imei}</span>
+                        ${row.isUnexpected ? '<span style="color:#fbbf24; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
+                      ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
+                        <span style="font-family:monospace; font-weight:700; color:#f87171; font-size:0.92rem;">${imei}</span>
+                        <span style="color:#f87171; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
+                      ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
+                    </td>
+                    <td style="font-size:0.85rem;">
+                      ${row.isScanned && imei !== '-' ? `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                          <div>
+                            ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน (Pass)</span>' :
+                              isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
+                              isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
+                              '<span class="badge badge-gray" style="font-size:0.75rem;">(ยังไม่ได้ตรวจ)</span>'}
+                          </div>
+
+                          <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
+                            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
+                          </button>
+                        </div>
+                      ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      <div class="table-container" style="margin-bottom:1.2rem;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ชื่อสินค้า</th>
-              <th>จำนวนสินค้า</th>
-              <th>จำนวนนับจริง</th>
-              <th>ยอดที่ขาด/เกิน</th>
-              <th>รายการ IMEI ที่สแกน & ผลการตรวจสอบรูปถ่าย</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.length === 0 ? `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าที่มีคงคลังในสาขานี้</td></tr>` : ''}
-            ${items.map(item => {
-              const scannedImeis = item.scannedImeis || [];
-              const imeiImages = item.imeiImages || [];
-
-              return `
-                <tr>
-                  <td>
-                    <strong style="color:#38bdf8;">${item.productName}</strong><br>
-                    <span style="font-size:0.8rem; color:var(--text-muted);">${item.productName}</span>
-                  </td>
-                  <td><strong style="font-size:1.1rem;">${item.expectedCount}</strong></td>
-                  <td><strong style="font-size:1.1rem; color:#38bdf8;">${item.actualCount}</strong></td>
-                  <td style="color: ${item.variance === 0 ? '#34d399' : '#f87171'}; font-weight:700;">
-                    ${item.variance === 0 ? '<span class="badge badge-green">ตรง (0)</span>' : item.variance > 0 ? `<span class="badge badge-yellow">เกิน +${item.variance}</span>` : `<span class="badge badge-red">ขาด ${item.variance}</span>`}
-                  </td>
-                  <td style="font-size:0.8rem;">
-                    ${scannedImeis.length > 0 ? `
-                      <div style="display:flex; flex-direction:column; gap:0.4rem;">
-                        ${scannedImeis.map(imei => {
-                          const imgObj = imeiImages.find(img => img.imei === imei);
-                          const imgUrl = resolveDriveImageUrl(imgObj);
-                          const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
-                          const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
-                          const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
-
-                          return `
-                            <div style="background:rgba(0,0,0,0.3); border:1px solid ${isPassed ? '#34d399' : isFailed ? '#f87171' : isResubmit ? '#fbbf24' : 'rgba(255,255,255,0.1)'}; padding:0.5rem 0.8rem; border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
-                              <div style="display:flex; align-items:center; gap:0.8rem;">
-                                <div>
-                                  <div style="font-weight:700; color:#fff; font-family:monospace; font-size:0.95rem;">${imei}</div>
-                                  <div style="margin-top:0.2rem;">
-                                    ${isPassed ? '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ผ่าน (Pass)</span>' :
-                                      isFailed ? '<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
-                                      isResubmit ? '<span class="badge badge-yellow"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
-                                      '<span class="badge badge-gray">(ยังไม่ได้ตรวจ)</span>'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div>
-                                <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.35rem 0.75rem;">
-                                  <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
-                                </button>
-                              </div>
-                            </div>
-                          `;
-                        }).join('')}
-                      </div>
-                    ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่มีรายการสแกน</span>'}
-
-                    ${item.missingImeis && item.missingImeis.length > 0 ? `<div style="color:#f87171; margin-top:0.4rem; font-size:0.78rem;"><strong>IMEI ที่ยังไม่ได้สแกน:</strong> ${item.missingImeis.join(', ')}</div>` : ''}
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
       </div>
     `;
 
-    const isHqUser = ['admin', 'hq_stock_staff'].includes(state.user ? state.user.role : '');
-    const auditId = branchItem.auditId;
-
-    const footerHtml = `
-      ${isHqUser && auditId ? `
-        <button class="btn btn-danger" onclick="submitHqAuditDecision('${auditId}', 'Reject')" style="margin-right:auto;">
-          <i class="fa-solid fa-xmark"></i> ปฏิเสธรายงาน (ข้อมูลไม่ตรง)
-        </button>
-        <button class="btn btn-success" onclick="submitHqAuditDecision('${auditId}', 'Verify')">
-          <i class="fa-solid fa-check-double"></i> อนุมัติรายงานการนับสต็อก (Verify)
-        </button>
-      ` : ''}
-      <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-    `;
-
-    openModal(`ตรวจสอบการนับสต็อก - ${branchItem.branch.name}`, bodyHtml, footerHtml);
+    if (shouldScroll) {
+      detailContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (err) {
-    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+    detailContainer.innerHTML = `<div class="card" style="padding:1.5rem; color:#ef4444;">เกิดข้อผิดพลาด: ${err.message}</div>`;
   }
 }
 
@@ -2314,8 +2447,10 @@ async function setItemDecision(imei, decision) {
     console.warn('Unable to persist decision:', err);
   }
 
+  closeModal();
+
   if (window.currentInspectedAuditId) {
-    inspectBranchAudit(window.currentInspectedAuditId);
+    inspectBranchAudit(window.currentInspectedAuditId, false);
   }
 }
 
@@ -2654,7 +2789,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
 
   try {
     await loadMasterOptions();
-    const isHqOrAdmin = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user ? state.user.role : '');
+    const isHqOrAdmin = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user ? (state.user ? state.user.role : 'admin') : '');
     const branches = state.masterOptions.branches || [];
 
     let branchId = selectedBranchId;
@@ -3483,7 +3618,7 @@ async function renderGoodsReceiptView() {
       if (poRes.success) {
         pendingPoOrders = (poRes.orders || []).filter(o => o.status === 'pending_imei');
         // If branch_staff / technical_staff, filter to own branch only
-        if (state.user && state.user.branch && ['branch_staff', 'technical_staff'].includes(state.user.role)) {
+        if (state.user && state.user.branch && ['branch_staff', 'technical_staff'].includes((state.user ? state.user.role : 'admin'))) {
           const userBranchId = String(state.user.branch._id || state.user.branch);
           pendingPoOrders = pendingPoOrders.filter(o => {
             const oBranchId = o.branch ? String(o.branch._id || o.branch) : '';
@@ -4251,7 +4386,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
     const res = await apiRequest(`/stock/receipts?status=${filterStatus}`);
     const receipts = res.receipts || [];
 
-    const isHqOrPurchasing = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user.role);
+    const isHqOrPurchasing = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
 
     const pendingCount = receipts.filter(r => r.status === 'pending_pricing').length;
 
@@ -4549,7 +4684,7 @@ async function renderTransfersView() {
                   <button class="btn btn-secondary btn-sm" onclick="printTransferDoc('${t._id}')">
                     <i class="fa-solid fa-print"></i> พิมพ์เอกสาร
                   </button>
-                  ${t.status === 'pending' && ['admin', 'hq_stock_staff'].includes(state.user.role) ? `
+                  ${t.status === 'pending' && ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) ? `
                     <button class="btn btn-success btn-sm" onclick="updateTransferState('${t._id}', 'completed')"><i class="fa-solid fa-check"></i> ยืนยันโอนสำเร็จ</button>
                   ` : ''}
                 </td>
@@ -4749,7 +4884,7 @@ async function renderProductMasterView() {
     const res = await apiRequest('/products');
     const products = res.products || [];
 
-    const canAddProduct = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user.role);
+    const canAddProduct = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
 
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
@@ -5099,7 +5234,7 @@ async function renderBranchManagementView() {
     const res = await apiRequest('/branches');
     const branches = res.branches || [];
 
-    const isAdmin = state.user.role === 'admin';
+    const isAdmin = (state.user ? state.user.role : 'admin') === 'admin';
 
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
@@ -5298,7 +5433,7 @@ async function renderEmployeeManagementView() {
     const roles = rolesRes.roles || [];
     window.masterRolesCache = roles;
 
-    const isAdmin = state.user && state.user.role === 'admin';
+    const isAdmin = state.user && (state.user ? state.user.role : 'admin') === 'admin';
 
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
@@ -6132,7 +6267,7 @@ async function submitEditRole(roleId) {
         if (meRes.success) {
           state.user = meRes.user;
           localStorage.setItem('silmin_user', JSON.stringify(meRes.user));
-          updateSidebarMenuByRole(state.user.role);
+          updateSidebarMenuByRole((state.user ? state.user.role : 'admin'));
         }
       }
 
@@ -6152,3 +6287,16 @@ async function deleteRoleAction(roleId) {
     }
   } catch (e) {}
 }
+
+
+// Global Event Delegation for Sidebar Navigation
+document.addEventListener('click', (e) => {
+  const navLink = e.target.closest('.nav-link');
+  if (navLink) {
+    const targetView = navLink.getAttribute('data-view');
+    if (targetView) {
+      e.preventDefault();
+      navigateTo(targetView);
+    }
+  }
+});

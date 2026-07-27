@@ -13,56 +13,43 @@ const getBranchExpectedStock = async (req, res, next) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const existingAudit = await DailyAudit.findOne({ auditDate: todayStr, branch: branchId });
 
-    // Fetch all active stock items (1 per device IMEI)
-    const stocks = await Stock.find({ branch: branchId, status: 'in_stock' }).populate('product');
-    
-    // Group stocks by Product catalog
-    const productGroupMap = new Map();
+    // Collect all scanned IMEIs and uploaded photo URLs from existing daily audit for today
+    const scannedImeiSet = new Set();
+    const imeiImageMap = new Map();
 
-    stocks.forEach(st => {
-      if (!st.product) return;
-      const pIdStr = st.product._id.toString();
-
-      if (!productGroupMap.has(pIdStr)) {
-        productGroupMap.set(pIdStr, {
-          product: st.product._id,
-          productName: st.product.name || st.productName,
-          expectedImeis: []
+    if (existingAudit && existingAudit.items) {
+      existingAudit.items.forEach(item => {
+        (item.scannedImeis || []).forEach(im => scannedImeiSet.add(im));
+        (item.imeiImages || []).forEach(img => {
+          const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
+          const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
+          if (img.imei && imgUrl) {
+            imeiImageMap.set(img.imei, imgUrl);
+          }
         });
-      }
+      });
+    }
 
-      if (st.imei) {
-        productGroupMap.get(pIdStr).expectedImeis.push(st.imei);
-      }
-    });
+    // Fetch all active stock items (1 per device IMEI)
+    const stocks = await Stock.find({ branch: branchId, status: 'in_stock' }).populate('product').sort({ createdAt: -1 });
 
-    const items = Array.from(productGroupMap.values()).map(grp => {
-      const existingItem = existingAudit && existingAudit.items 
-        ? existingAudit.items.find(i => i.product && i.product.toString() === grp.product.toString()) 
-        : null;
-
-      let scannedImeis = existingItem ? existingItem.scannedImeis || [] : [];
-      let imeiImages = existingItem ? existingItem.imeiImages || [] : [];
-
-      // Exclude IMEIs marked as 'resubmit' by HQ
-      if (existingItem && existingItem.imeiDecisions && existingItem.imeiDecisions.length > 0) {
-        const resubmitImeis = existingItem.imeiDecisions
-          .filter(d => d.decision === 'resubmit')
-          .map(d => d.imei);
-        
-        if (resubmitImeis.length > 0) {
-          scannedImeis = scannedImeis.filter(im => !resubmitImeis.includes(im));
-          imeiImages = imeiImages.filter(img => !resubmitImeis.includes(img.imei));
-        }
-      }
+    const items = stocks.map(st => {
+      const pName = st.product ? st.product.name : (st.productName || 'สินค้าไม่ระบุชื่อ');
+      const imei = st.imei || '';
+      const isScanned = imei ? scannedImeiSet.has(imei) : false;
+      const photoUrl = imei ? imeiImageMap.get(imei) || null : null;
 
       return {
-        product: grp.product,
-        productName: grp.productName,
-        expectedCount: grp.expectedImeis.length,
-        expectedImeis: grp.expectedImeis,
-        scannedImeis,
-        imeiImages
+        stockId: st._id,
+        product: st.product ? st.product._id : null,
+        productName: pName,
+        imei: imei || 'ไม่มี IMEI',
+        expectedCount: 1,
+        expectedImeis: imei ? [imei] : [],
+        scannedImeis: isScanned ? [imei] : [],
+        isScanned,
+        photoUrl,
+        imeiImages: photoUrl ? [{ imei, imageUrl: photoUrl }] : []
       };
     });
 

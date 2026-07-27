@@ -39,7 +39,11 @@ const auditItemSchema = new mongoose.Schema({
   imeiImages: [{
     imei: String,
     fileId: String,
-    url: String
+    url: String,
+    imageUrl: String,
+    driveFileId: String,
+    driveWebViewLink: String,
+    uploadedAt: { type: Date, default: Date.now }
   }],
   imeiDecisions: [{
     imei: String,
