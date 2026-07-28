@@ -30,13 +30,13 @@ const ALL_SYSTEM_MENUS = [
 
 function getUserAllowedMenus(userRole) {
   const role = userRole || (state.user ? state.user.role : 'admin');
-  if (role === 'admin' || !state.user || (state.user && state.user.role === 'admin')) {
+  if (role === 'admin' || (state.user && state.user.role === 'admin')) {
     return ALL_SYSTEM_MENUS;
   }
-  if (ROLE_ALLOWED_VIEWS[role]) {
-    return ROLE_ALLOWED_VIEWS[role];
+  if (state.user && Array.isArray(state.user.allowedMenus) && state.user.allowedMenus.length > 0) {
+    return state.user.allowedMenus;
   }
-  return ALL_SYSTEM_MENUS;
+  return ROLE_ALLOWED_VIEWS[role] || ALL_SYSTEM_MENUS;
 }
 
 // Thai Role Mapping Helper
@@ -167,7 +167,11 @@ function updateSidebarMenuByRole(userRole) {
     const navLink = li.querySelector('.nav-link');
     if (navLink) {
       const viewName = navLink.getAttribute('data-view');
-      li.style.display = 'block';
+      if (allowedViews.includes(viewName)) {
+        li.style.display = 'block';
+      } else {
+        li.style.display = 'none';
+      }
     }
   });
 }
