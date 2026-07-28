@@ -100,8 +100,36 @@ const submitBranchAudit = async (req, res, next) => {
     const auditedItems = [];
     const processedProductIds = new Set();
 
-    // Process scanned items
+    // Aggregate scanned items by unique product ID first to avoid duplicates
+    const aggregatedScannedMap = new Map();
     for (const scanned of scannedItems) {
+      if (!scanned.product) continue;
+      const pIdStr = scanned.product.toString();
+      if (!aggregatedScannedMap.has(pIdStr)) {
+        aggregatedScannedMap.set(pIdStr, {
+          product: scanned.product,
+          productName: scanned.productName,
+          scannedImeis: [],
+          imeiImages: []
+        });
+      }
+      const grp = aggregatedScannedMap.get(pIdStr);
+      (scanned.scannedImeis || []).forEach(imei => {
+        if (imei && imei !== '-' && imei !== 'ไม่มี IMEI' && !grp.scannedImeis.includes(imei)) {
+          grp.scannedImeis.push(imei);
+        }
+      });
+      (scanned.imeiImages || []).forEach(img => {
+        if (img && img.imei && !grp.imeiImages.some(x => x.imei === img.imei)) {
+          grp.imeiImages.push(img);
+        }
+      });
+    }
+
+    const uniqueScannedItems = Array.from(aggregatedScannedMap.values());
+
+    // Process unique scanned items
+    for (const scanned of uniqueScannedItems) {
       const pIdStr = scanned.product ? scanned.product.toString() : null;
       const stockGrp = pIdStr ? productMap.get(pIdStr) : null;
       if (pIdStr) processedProductIds.add(pIdStr);
@@ -567,7 +595,35 @@ const saveImeiDecision = async (req, res, next) => {
   }
 };
 
+const getSystemLogs = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงประวัติระบบ' });
+    }
+
+    const { limit = 100, skip = 0, action } = req.query;
+    const filter = {};
+    if (action && action !== 'all') filter.action = action;
+
+    const logs = await AuditLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(Number(skip))
+      .limit(Number(limit));
+
+    const total = await AuditLog.countDocuments(filter);
+
+    res.json({
+      success: true,
+      total,
+      logs
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  getSystemLogs,
   getBranchExpectedStock,
   submitBranchAudit,
   getHqDashboard,

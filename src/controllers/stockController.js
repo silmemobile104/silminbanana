@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const Branch = require('../models/Branch');
 const GoodsReceipt = require('../models/GoodsReceipt');
 const AuditLog = require('../models/AuditLog');
+const Role = require('../models/Role');
 
 // Helper to generate Full Product Name
 function generateAutoName(brand = '', model = '', capacity = '', color = '') {
@@ -155,11 +156,7 @@ const getGoodsReceipts = async (req, res, next) => {
       query.status = status;
     }
 
-    if (['branch_staff', 'technical_staff'].includes(req.user.role)) {
-      if (req.user.branch) {
-        query.branch = req.user.branch;
-      }
-    } else if (branchId) {
+    if (branchId) {
       query.branch = branchId;
     }
 
@@ -591,7 +588,74 @@ const deleteGoodsReceipt = async (req, res, next) => {
   }
 };
 
+const updateStock = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { imei, productName, brand, model, capacity, color, category, purchase_price, selling_price, status } = req.body;
+
+    // Check permission from roles
+    const roleDoc = await Role.findOne({ code: req.user.role });
+    const allowedMenus = roleDoc ? roleDoc.allowedMenus : [];
+    if (req.user.role !== 'admin' && !allowedMenus.includes('edit-branch-inventory')) {
+      return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขข้อมูลสินค้าในสาขา' });
+    }
+
+    const stock = await Stock.findById(id).populate('branch');
+    if (!stock) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการสินค้าที่ต้องการแก้ไข' });
+    }
+
+    const oldValues = {};
+    const newValues = {};
+
+    const fields = ['imei', 'productName', 'brand', 'model', 'capacity', 'color', 'category', 'purchase_price', 'selling_price', 'status'];
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        const oldVal = stock[field];
+        const newVal = req.body[field];
+        if (String(oldVal) !== String(newVal)) {
+          oldValues[field] = oldVal;
+          newValues[field] = newVal;
+          stock[field] = newVal;
+        }
+      }
+    }
+
+    if (Object.keys(newValues).length > 0) {
+      await stock.save();
+
+      // Create AuditLog
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'EDIT_BRANCH_STOCK',
+        entity: 'Stock',
+        entityId: stock._id.toString(),
+        details: {
+          branch: stock.branch ? stock.branch.name : 'ไม่ระบุ',
+          productName: stock.productName,
+          imei: stock.imei,
+          changes: {
+            old: oldValues,
+            new: newValues
+          }
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'แก้ไขข้อมูลสินค้าและบันทึก LOG เรียบร้อยแล้ว',
+      stock
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  updateStock,
   receiveStock,
   getGoodsReceipts,
   confirmGoodsReceipt,

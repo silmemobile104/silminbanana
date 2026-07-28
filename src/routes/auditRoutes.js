@@ -10,6 +10,7 @@ const upload = multer({
 });
 
 router.get('/expected', authenticateToken, auditController.getBranchExpectedStock);
+router.get('/logs', authenticateToken, authorize('admin'), auditController.getSystemLogs);
 router.post('/submit', authenticateToken, auditController.submitBranchAudit);
 router.post('/upload-imei-image', authenticateToken, upload.single('image'), auditController.uploadImeiImage);
 router.get('/drive-image/:fileId', auditController.proxyDriveImage);

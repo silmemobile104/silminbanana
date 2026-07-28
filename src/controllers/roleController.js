@@ -15,7 +15,9 @@ const SYSTEM_MENUS = [
   { key: 'master-settings', name: 'ตั้งค่าตัวเลือกสินค้า', icon: 'fa-sliders' },
   { key: 'branches', name: 'จัดการสาขา', icon: 'fa-store' },
   { key: 'employees', name: 'จัดการพนักงาน', icon: 'fa-users-gear' },
-  { key: 'roles-permissions', name: 'จัดการสิทธิ์และตำแหน่ง', icon: 'fa-user-shield' }
+  { key: 'roles-permissions', name: 'จัดการสิทธิ์และตำแหน่ง', icon: 'fa-user-shield' },
+  { key: 'edit-branch-inventory', name: 'แก้ไขข้อมูลสินค้าในสาขา', icon: 'fa-pen-to-square' },
+  { key: 'system-logs', name: 'ประวัติกิจกรรมระบบ (Logs)', icon: 'fa-clock-rotate-left' }
 ];
 
 // Helper to seed default system roles if database is empty

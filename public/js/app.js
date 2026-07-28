@@ -25,7 +25,7 @@ const ROLE_ALLOWED_VIEWS = {
 const ALL_SYSTEM_MENUS = [
   'dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit',
   'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers',
-  'master-settings', 'branches', 'employees', 'roles-permissions'
+  'master-settings', 'branches', 'employees', 'roles-permissions', 'edit-branch-inventory', 'system-logs'
 ];
 
 function getUserAllowedMenus(userRole) {
@@ -269,6 +269,11 @@ function navigateTo(viewName) {
       heading.innerText = 'จัดการสิทธิ์และตำแหน่งงาน';
       subheading.innerText = 'สร้างตำแหน่งงานใหม่ กำหนดและปรับปรุงสิทธิ์การเข้าถึงเมนูต่าง ๆ ในระบบ';
       renderRolesPermissionsView();
+      break;
+    case 'system-logs':
+      heading.innerText = 'ประวัติกิจกรรมระบบ (System Audit Logs)';
+      subheading.innerText = 'ประวัติการดำเนินกิจกรรมที่สำคัญทั้งหมดในระบบ เช่น การขายสินค้า การโอนย้าย และการแก้ไขข้อมูลสินค้า';
+      renderSystemLogsView();
       break;
   }
 }
@@ -876,9 +881,11 @@ async function renderBranchInventoryView(selectedBranchId = null) {
     const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
     const activeStockList = (res.stock || []).filter(st => st.status === 'in_stock');
+    state.branchStockCache = res.stock || [];
     const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
 
     const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin'));
+    const canEdit = getUserAllowedMenus().includes('edit-branch-inventory');
 
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
@@ -914,6 +921,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
               <th>ความจุ / สีสินค้า</th>
               <th>ราคาขาย</th>
               <th style="text-align:center;">สถานะสต็อก</th>
+              ${canEdit ? `<th style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
@@ -935,7 +943,18 @@ async function renderBranchInventoryView(selectedBranchId = null) {
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
                   <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
-                  <td style="text-align:center;"><span class="badge badge-green">1 เครื่อง (พร้อมขาย)</span></td>
+                  <td style="text-align:center;">
+                    <span class="badge badge-${st.status === 'in_stock' ? 'green' : st.status === 'in_transit' ? 'yellow' : 'gray'}">
+                      ${st.status === 'in_stock' ? 'พร้อมขาย' : st.status === 'in_transit' ? 'ระหว่างโอนย้าย' : st.status}
+                    </span>
+                  </td>
+                  ${canEdit ? `
+                    <td style="text-align:center;">
+                      <button class="btn btn-secondary btn-sm" onclick="openEditStockModal('${st._id}')">
+                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                      </button>
+                    </td>
+                  ` : ''}
                 </tr>
               `;
             }).join('')}
@@ -2502,23 +2521,32 @@ async function renderBranchAuditView() {
           <thead>
             <tr>
               <th>ชื่อสินค้า</th>
+              <th>หมายเลข IMEI</th>
               <th>จำนวนสินค้า</th>
               <th>จำนวนนับได้จริง</th>
               <th>ยอดที่ขาด/เกิน</th>
+              <th style="text-align:center;">รูปภาพที่แนบ</th>
             </tr>
           </thead>
           <tbody id="branch-audit-table-body">
-            ${state.expectedStockCache.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
+            ${state.expectedStockCache.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
             ${state.expectedStockCache.map((item, idx) => {
               const scannedImeis = item.scannedImeis || [];
               const actual = scannedImeis.length;
               const diff = actual - item.expectedCount;
+              const photoBtn = item.photoUrl ? `
+                <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
+                  <i class="fa-solid fa-image"></i> ดูรูปภาพ
+                </button>
+              ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
 
               return `
                 <tr id="audit-row-${idx}">
                   <td>
-                    <strong style="color:#38bdf8;">${item.productName}</strong><br>
-                    <span style="font-size:0.8rem; color:var(--text-muted);">${item.productName}</span>
+                    <strong style="color:#38bdf8;">${item.productName}</strong>
+                  </td>
+                  <td>
+                    <strong style="color:#fbbf24; font-family:monospace; font-size:0.95rem;">${item.imei}</strong>
                   </td>
                   <td><strong class="expected-val" id="expected-${idx}">${item.expectedCount}</strong></td>
                   <td style="text-align:center; vertical-align:middle;">
@@ -2528,6 +2556,9 @@ async function renderBranchAuditView() {
                     ${diff === 0 ? `<span class="badge badge-green">ยอดตรงพอดี (0)</span>` :
                       diff < 0 ? `<span class="badge badge-red">${actual === 0 ? 'ยังไม่ได้สแกน' : ''} (ขาด -${Math.abs(diff)})</span>` :
                       `<span class="badge badge-yellow">เกิน +${diff}</span>`}
+                  </td>
+                  <td id="photo-cell-${idx}" style="text-align:center; vertical-align:middle;">
+                    ${photoBtn}
                   </td>
                 </tr>
               `;
@@ -2578,6 +2609,16 @@ function updateRowVariance(idx) {
     statusTd.innerHTML = `<span class="badge badge-red">ขาด ${Math.abs(diff)} ชิ้น (${diff})</span>`;
   } else {
     statusTd.innerHTML = `<span class="badge badge-yellow">เกิน ${diff} ชิ้น (+${diff})</span>`;
+  }
+
+  // Update photo cell dynamically
+  const photoCell = document.getElementById(`photo-cell-${idx}`);
+  if (photoCell) {
+    photoCell.innerHTML = item.photoUrl ? `
+      <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
+        <i class="fa-solid fa-image"></i> ดูรูปภาพ
+      </button>
+    ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
   }
 }
 
@@ -2712,6 +2753,9 @@ async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
       fileId: res.fileId,
       url: res.url
     });
+
+    // Save photoUrl to item cache so it renders immediately
+    item.photoUrl = res.fileId ? `/api/audit/drive-image/${res.fileId}` : res.url;
 
     updateRowVariance(matchedIdx);
     closeModal();
@@ -4672,28 +4716,48 @@ async function renderTransfersView() {
           </thead>
           <tbody>
             ${transfers.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">ไม่พบรายการโอนย้ายสินค้า</td></tr>` : ''}
-            ${transfers.map(t => `
-              <tr class="transfer-history-row">
-                <td><strong>${t.transferNumber}</strong></td>
-                <td>${t.fromBranch ? t.fromBranch.name : 'ไม่ระบุ'}</td>
-                <td>${t.toBranch ? t.toBranch.name : 'ไม่ระบุ'}</td>
-                <td>${t.items ? t.items.reduce((acc, i) => acc + i.quantity, 0) : 0} ชิ้น</td>
-                <td>
-                  <span class="badge badge-${t.status === 'completed' ? 'green' : t.status === 'rejected' ? 'red' : 'yellow'}">
-                    ${t.status === 'completed' ? 'โอนย้ายสำเร็จ' : t.status === 'rejected' ? 'ยกเลิก/ปฏิเสธ' : 'รออนุมัติโอนย้าย'}
-                  </span>
-                </td>
-                <td>${new Date(t.createdAt).toLocaleDateString('th-TH')}</td>
-                <td>
-                  <button class="btn btn-secondary btn-sm" onclick="printTransferDoc('${t._id}')">
-                    <i class="fa-solid fa-print"></i> พิมพ์เอกสาร
-                  </button>
-                  ${t.status === 'pending' && ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) ? `
-                    <button class="btn btn-success btn-sm" onclick="updateTransferState('${t._id}', 'completed')"><i class="fa-solid fa-check"></i> ยืนยันโอนสำเร็จ</button>
-                  ` : ''}
-                </td>
-              </tr>
-            `).join('')}
+            ${transfers.map(t => {
+              const userBranchId = state.user && state.user.branch ? String(state.user.branch._id || state.user.branch) : '';
+              const toBranchId = String(t.toBranch ? (t.toBranch._id || t.toBranch) : '');
+              const fromBranchId = String(t.fromBranch ? (t.fromBranch._id || t.fromBranch) : '');
+              
+              const isToBranch = toBranchId === userBranchId;
+              const isFromBranch = fromBranchId === userBranchId;
+              const isAdmin = state.user && (state.user ? state.user.role : 'admin') === 'admin';
+
+              return `
+                <tr class="transfer-history-row">
+                  <td><strong>${t.transferNumber}</strong></td>
+                  <td>${t.fromBranch ? t.fromBranch.name : 'ไม่ระบุ'}</td>
+                  <td>${t.toBranch ? t.toBranch.name : 'ไม่ระบุ'}</td>
+                  <td>${t.items ? t.items.reduce((acc, i) => acc + i.quantity, 0) : 0} ชิ้น</td>
+                  <td>
+                    <span class="badge badge-${t.status === 'completed' ? 'green' : t.status === 'rejected' ? 'red' : t.status === 'in_transit' ? 'yellow' : 'gray'}">
+                      ${t.status === 'completed' ? 'โอนย้ายสำเร็จ' : t.status === 'rejected' ? 'ปฏิเสธ/ยกเลิก' : t.status === 'in_transit' ? 'อยู่ระหว่างจัดส่ง (รอปลายทางกดรับ)' : t.status}
+                    </span>
+                  </td>
+                  <td>${new Date(t.createdAt).toLocaleDateString('th-TH')}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="printTransferDoc('${t._id}')">
+                      <i class="fa-solid fa-print"></i> พิมพ์เอกสาร
+                    </button>
+                    ${t.status === 'in_transit' && (isAdmin || isToBranch) ? `
+                      <button class="btn btn-success btn-sm" onclick="updateTransferState('${t._id}', 'completed')">
+                        <i class="fa-solid fa-check"></i> ยืนยันรับสินค้า
+                      </button>
+                      <button class="btn btn-danger btn-sm" onclick="updateTransferState('${t._id}', 'rejected')">
+                        <i class="fa-solid fa-ban"></i> ปฏิเสธรับสินค้า
+                      </button>
+                    ` : ''}
+                    ${t.status === 'in_transit' && (isAdmin || isFromBranch) ? `
+                      <button class="btn btn-danger btn-sm" onclick="updateTransferState('${t._id}', 'rejected')">
+                        <i class="fa-solid fa-xmark"></i> ยกเลิกส่ง
+                      </button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -4800,73 +4864,120 @@ async function printTransferDoc(transferId) {
     const doc = res.document;
 
     const bodyHtml = `
-      <div id="printable-voucher" class="printable-area" style="background:#fff; color:#000; padding:1.8rem; border-radius:8px; font-family:'Sarabun','Prompt',sans-serif;">
-        <div style="display:flex; justify-content:space-between; border-bottom:2px solid #000; padding-bottom:1rem; margin-bottom:1rem;">
-          <div>
-            <h2 style="font-size:1.5rem; font-weight:800; color:#000; margin-bottom:0.2rem;">SILMIN BANANA POS</h2>
-            <p style="font-size:0.95rem; font-weight:700; color:#333;">${doc.documentTitle || 'ใบโอนย้ายสินค้าระหว่างสาขา'}</p>
+      <div id="printable-voucher" class="printable-area" style="background:#fff; color:#000; padding:2.2rem; border:1px solid #ccc; border-radius:8px; font-family:'Sarabun','Prompt',sans-serif; max-width:800px; margin:0 auto; box-shadow:0 0 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; min-height:277mm; justify-content:space-between; box-sizing:border-box;">
+        
+        <!-- Top & Middle Content Area -->
+        <div>
+          <!-- Header Section with Logo & Company Info -->
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #000; padding-bottom:1.2rem; margin-bottom:1.5rem;">
+            <div style="display:flex; gap:1.2rem; align-items:center;">
+              <img src="/image/icon_silminbanana.png" style="height:70px; width:auto; object-fit:contain;" alt="Logo">
+              <div>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">บริษัท ซิลมิน บานาน่า จำกัด</h2>
+                <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
+                  สำนักงานใหญ่: 88/8 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110<br>
+                  เลขประจำตัวผู้เสียภาษี: 0105563000123
+                </p>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <span style="display:inline-block; border:1px solid #000; padding:0.4rem 0.8rem; font-weight:800; font-size:1.05rem; background:#f8fafc; margin-bottom:0.4rem; border-radius:4px;">
+                ใบโอนย้ายสินค้าระหว่างสาขา
+              </span>
+              <div style="font-size:0.85rem; color:#333; line-height:1.5;">
+                <div><strong>เลขที่เอกสาร:</strong> ${doc.transferNumber}</div>
+                <div><strong>วันที่ออกเอกสาร:</strong> ${new Date(doc.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                <div><strong>สถานะ:</strong> <span style="font-weight:700;">${doc.status === 'completed' ? 'โอนย้ายสำเร็จ' : doc.status === 'rejected' ? 'ปฏิเสธ/ยกเลิก' : 'อยู่ระหว่างจัดส่ง'}</span></div>
+              </div>
+            </div>
           </div>
-          <div style="text-align:right;">
-            <h3 style="font-size:1.1rem; font-weight:700; color:#000;">เลขที่เอกสาร: ${doc.transferNumber}</h3>
-            <p style="font-size:0.85rem; color:#555;">วันที่ออกเอกสาร: ${new Date(doc.date).toLocaleDateString('th-TH')}</p>
+
+          <!-- Branches Details Grid -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+            <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
+              <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#0284c7;">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i> สาขาต้นทาง (ผู้จัดส่ง)
+              </div>
+              <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
+                <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${doc.fromBranch ? doc.fromBranch.name : 'ไม่ระบุ'} (${doc.fromBranch ? doc.fromBranch.code : '-'})</strong></td></tr>
+                <tr><td style="color:#555; valign:top;">ที่อยู่:</td><td>${doc.fromBranch ? doc.fromBranch.address || '-' : '-'}</td></tr>
+                <tr><td style="color:#555;">เบอร์โทร:</td><td>${doc.fromBranch ? doc.fromBranch.phone || '-' : '-'}</td></tr>
+                <tr><td style="color:#555;">ผู้จัดส่ง:</td><td>${doc.requestedBy || '-'}</td></tr>
+              </table>
+            </div>
+            
+            <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
+              <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#16a34a;">
+                <i class="fa-solid fa-arrow-down-to-bracket"></i> สาขาปลายทาง (ผู้รับ)
+              </div>
+              <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
+                <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${doc.toBranch ? doc.toBranch.name : 'ไม่ระบุ'} (${doc.toBranch ? doc.toBranch.code : '-'})</strong></td></tr>
+                <tr><td style="color:#555; valign:top;">ที่อยู่:</td><td>${doc.toBranch ? doc.toBranch.address || '-' : '-'}</td></tr>
+                <tr><td style="color:#555;">เบอร์โทร:</td><td>${doc.toBranch ? doc.toBranch.phone || '-' : '-'}</td></tr>
+                <tr><td style="color:#555;">ผู้รับมอบ:</td><td>${doc.approvedBy || '-'}</td></tr>
+              </table>
+            </div>
           </div>
+
+          <!-- Items Table -->
+          <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
+            <thead>
+              <tr style="background:#e5e7eb; color:#000; border-top:1px solid #000; border-bottom:1px solid #000;">
+                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:50px;">ลำดับ</th>
+                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
+                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">หมายเลข IMEI / ซีเรียล</th>
+                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:80px;">จำนวน (ชิ้น)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${doc.items.map((item, idx) => {
+                const imeiText = (item.imei_serials && item.imei_serials.length > 0) ? item.imei_serials.join(', ') : (item.imei || '-');
+                return `
+                  <tr style="color:#000; border-bottom:1px solid #eee;">
+                    <td style="padding:10px 8px; text-align:center; color:#555;">${idx + 1}</td>
+                    <td style="padding:10px 8px;"><strong>${item.productName || (item.product ? item.product.name : 'สินค้าทั่วไป')}</strong></td>
+                    <td style="padding:10px 8px; font-family:monospace; font-weight:700; color:#000; font-size:0.92rem;">${imeiText}</td>
+                    <td style="padding:10px 8px; text-align:right;"><strong>${item.quantity}</strong></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="background:#f9fafb; font-weight:800; border-bottom:2px solid #000; color:#000;">
+                <td colspan="3" style="padding:10px 8px; text-align:right;">จำนวนรวมทั้งสิ้น:</td>
+                <td style="padding:10px 8px; text-align:right;">${doc.items.reduce((acc, i) => acc + i.quantity, 0)} ชิ้น</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Remarks Section -->
+          ${doc.remarks ? `
+            <div style="background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; padding:0.8rem; font-size:0.82rem; margin-bottom:2rem; color:#78350f;">
+              <strong>หมายเหตุการโอนย้าย:</strong> ${doc.remarks}
+            </div>
+          ` : ''}
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.2rem; font-size:0.85rem;">
-          <div style="background:#f3f4f6; padding:0.8rem; border-radius:6px; border:1px solid #ddd;">
-            <strong style="color:#000;">สาขาต้นทาง (ผู้จัดส่ง):</strong><br>
-            ${doc.fromBranch ? doc.fromBranch.name : 'ไม่ระบุ'}<br>
-            ที่อยู่: ${doc.fromBranch ? doc.fromBranch.address : '-'}<br>
-            เบอร์โทรศัพท์: ${doc.fromBranch ? doc.fromBranch.phone : '-'}
+        <!-- Signature Section (Always Pushed to Bottom of Page) -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; text-align:center; font-size:0.85rem; color:#000; margin-top:auto; padding-top:1.5rem; border-top:1px dashed #ccc;">
+          <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div style="font-weight:700; margin-bottom:2rem;">ผู้จัดส่งสินค้า (สาขาต้นทาง)</div>
+            <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
+            <div>( ${doc.requestedBy || '____________________________________'} )</div>
+            <div style="font-size:0.78rem; color:#555; margin-top:0.4rem;">วันที่ _____ / _____ / ________</div>
           </div>
-          <div style="background:#f3f4f6; padding:0.8rem; border-radius:6px; border:1px solid #ddd;">
-            <strong style="color:#000;">สาขาปลายทาง (ผู้รับ):</strong><br>
-            ${doc.toBranch ? doc.toBranch.name : 'ไม่ระบุ'}<br>
-            ที่อยู่: ${doc.toBranch ? doc.toBranch.address : '-'}<br>
-            เบอร์โทรศัพท์: ${doc.toBranch ? doc.toBranch.phone : '-'}
-          </div>
-        </div>
-
-        <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.2rem;">
-          <thead>
-            <tr style="background:#e5e7eb; color:#000;">
-              <th style="padding:8px; border:1px solid #ccc; text-align:left;">รายการสินค้า</th>
-              <th style="padding:8px; border:1px solid #ccc; text-align:left;">หมายเลข IMEI / ซีเรียล</th>
-              <th style="padding:8px; border:1px solid #ccc; text-align:right;">จำนวนโอน (ชิ้น)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${doc.items.map(item => {
-              const imeiText = (item.imei_serials && item.imei_serials.length > 0) ? item.imei_serials.join(', ') : (item.imei || '-');
-              return `
-                <tr style="color:#000;">
-                  <td style="padding:8px; border:1px solid #ccc;">${item.productName || (item.product ? item.product.name : 'สินค้าทั่วไป')}</td>
-                  <td style="padding:8px; border:1px solid #ccc; font-family:monospace; font-weight:700;">${imeiText}</td>
-                  <td style="padding:8px; border:1px solid #ccc; text-align:right;"><strong>${item.quantity}</strong></td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-
-        ${doc.remarks ? `<div style="font-size:0.85rem; margin-bottom:1.5rem; color:#333;"><strong>หมายเหตุ:</strong> ${doc.remarks}</div>` : ''}
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem; margin-top:2.5rem; padding-top:1rem; border-top:1px dashed #aaa; font-size:0.85rem; text-align:center; color:#000;">
-          <div>
-            <br>____________________________________<br>
-            <strong>ลงชื่อผู้จัดส่งสินค้า (สาขาต้นทาง)</strong><br>
-            วันที่ _____ / _____ / ________
-          </div>
-          <div>
-            <br>____________________________________<br>
-            <strong>ลงชื่อผู้รับสินค้า (สาขาปลายทาง)</strong><br>
-            วันที่ _____ / _____ / ________
+          
+          <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div style="font-weight:700; margin-bottom:2rem;">ผู้รับสินค้า (สาขาปลายทาง)</div>
+            <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
+            <div>( ${doc.status === 'completed' && doc.approvedBy ? doc.approvedBy : '____________________________________'} )</div>
+            <div style="font-size:0.78rem; color:#555; margin-top:0.4rem;">วันที่ _____ / _____ / ________</div>
           </div>
         </div>
       </div>
     `;
 
-    const footerHtml = `
+  const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
       <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบโอนย้ายสินค้า</button>
     `;
@@ -6304,3 +6415,267 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+async function openEditStockModal(stockId) {
+  const stock = (state.branchStockCache || []).find(st => String(st._id) === String(stockId));
+  if (!stock) {
+    showToast('ไม่พบข้อมูลสินค้า', 'error');
+    return;
+  }
+
+  const p = stock.product || {};
+  const imei = stock.imei || '';
+  const productName = stock.productName || p.name || '';
+  const brand = stock.brand || p.brand || '';
+  const model = stock.model || p.model || '';
+  const capacity = stock.capacity || p.capacity || '';
+  const color = stock.color || p.color || '';
+  const category = stock.category || p.category || '';
+  const purchasePrice = stock.purchase_price || p.purchase_price || 0;
+  const sellingPrice = stock.selling_price || p.selling_price || 0;
+  const status = stock.status || 'in_stock';
+
+  const bodyHtml = `
+    <form id="edit-stock-form" onsubmit="event.preventDefault(); submitEditStock('${stock._id}');">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; text-align:left;">
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">หมายเลข IMEI</label>
+          <input type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อสินค้า</label>
+          <input type="text" id="es-name" class="form-control" value="${productName}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ยี่ห้อ (Brand)</label>
+          <input type="text" id="es-brand" class="form-control" value="${brand}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">รุ่น (Model)</label>
+          <input type="text" id="es-model" class="form-control" value="${model}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ความจุ (Capacity)</label>
+          <input type="text" id="es-capacity" class="form-control" value="${capacity}" style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">สี (Color)</label>
+          <input type="text" id="es-color" class="form-control" value="${color}" style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">หมวดหมู่</label>
+          <input type="text" id="es-category" class="form-control" value="${category}" style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">สถานะสต็อก</label>
+          <select id="es-status" class="form-select" style="padding:0.5rem; border-radius:6px;">
+            <option value="in_stock" ${status === 'in_stock' ? 'selected' : ''}>พร้อมขาย (in_stock)</option>
+            <option value="transferred" ${status === 'transferred' ? 'selected' : ''}>โอนย้ายแล้ว (transferred)</option>
+            <option value="sold" ${status === 'sold' ? 'selected' : ''}>ขายแล้ว (sold)</option>
+            <option value="missing" ${status === 'missing' ? 'selected' : ''}>สูญหาย (missing)</option>
+            <option value="in_transit" ${status === 'in_transit' ? 'selected' : ''}>อยู่ระหว่างจัดส่ง (in_transit)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ราคาทุน</label>
+          <input type="number" id="es-purchase-price" class="form-control" min="0" value="${purchasePrice}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ราคาขาย</label>
+          <input type="number" id="es-selling-price" class="form-control" min="0" value="${sellingPrice}" required style="padding:0.5rem; border-radius:6px;">
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-primary" onclick="submitEditStock('${stock._id}')"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
+  `;
+
+  openModal('✏️ แก้ไขข้อมูลสินค้าในสต็อกสาขา', bodyHtml, footerHtml);
+}
+
+async function submitEditStock(stockId) {
+  const imei = document.getElementById('es-imei').value.trim();
+  const productName = document.getElementById('es-name').value.trim();
+  const brand = document.getElementById('es-brand').value.trim();
+  const model = document.getElementById('es-model').value.trim();
+  const capacity = document.getElementById('es-capacity').value.trim();
+  const color = document.getElementById('es-color').value.trim();
+  const category = document.getElementById('es-category').value.trim();
+  const status = document.getElementById('es-status').value;
+  const purchase_price = parseFloat(document.getElementById('es-purchase-price').value) || 0;
+  const selling_price = parseFloat(document.getElementById('es-selling-price').value) || 0;
+
+  if (!imei || !productName || !brand || !model) {
+    showToast('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/stock/${stockId}`, 'PUT', {
+      imei,
+      productName,
+      brand,
+      model,
+      capacity,
+      color,
+      category,
+      status,
+      purchase_price,
+      selling_price
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      const selectEl = document.getElementById('bi-branch-select');
+      const currentBranchId = selectEl ? selectEl.value : null;
+      renderBranchInventoryView(currentBranchId);
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function renderSystemLogsView() {
+  const container = document.getElementById('content-container');
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดประวัติระบบ...</div>`;
+
+  try {
+    const res = await apiRequest('/audit/logs');
+    const logs = res.logs || [];
+
+    // Extract unique actions for filtering options
+    const uniqueActions = [...new Set(logs.map(l => l.action))];
+
+    container.innerHTML = `
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติกิจกรรมระบบ (System Audit Logs)</h3>
+          <p style="font-size:0.83rem; color:var(--text-muted);">ระบบบันทึกความเคลื่อนไหว กิจกรรมการแก้ไข ข้อมูลทางการเงิน และประวัติการจัดส่งเรียลไทม์</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <select id="sl-action-filter" class="form-select" style="width:auto; font-size:0.82rem;" onchange="filterSystemLogsTable()">
+            <option value="all">-- แสดงทุกกิจกรรม --</option>
+            ${uniqueActions.map(act => `<option value="${act}">${act}</option>`).join('')}
+          </select>
+          <input type="text" id="sl-search-input" class="form-control" placeholder="ค้นหาชื่อผู้ทำ, รายละเอียด..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSystemLogsTable()">
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table" id="sl-table">
+          <thead>
+            <tr>
+              <th style="width:180px;">วันเวลาที่ทำรายการ</th>
+              <th style="width:150px;">ผู้ดำเนินการ / สิทธิ์</th>
+              <th style="width:180px;">กิจกรรม (Action)</th>
+              <th>เป้าหมาย</th>
+              <th>รายละเอียดกิจกรรม</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.length === 0 ? `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบประวัติกิจกรรมใดๆ ในระบบ</td></tr>` : ''}
+            ${logs.map(l => {
+              const dt = new Date(l.createdAt).toLocaleString('th-TH');
+              const usrStr = `<strong>${l.username}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">${l.userRole}</span>`;
+              const actionBadge = `<span class="badge" style="background:${getLogActionBg(l.action)}; color:#fff; font-weight:700;">${l.action}</span>`;
+              const entityStr = `<strong>${l.entity || '-'}</strong><br><span style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;">ID: ${l.entityId || '-'}</span>`;
+              const detailsHtml = formatLogDetails(l);
+
+              return `
+                <tr class="sl-row" data-action="${l.action}" data-search="${(l.username + ' ' + l.userRole + ' ' + l.action + ' ' + (l.entity || '')).toLowerCase()}">
+                  <td style="font-size:0.82rem; color:var(--text-muted);">${dt}</td>
+                  <td>${usrStr}</td>
+                  <td>${actionBadge}</td>
+                  <td>${entityStr}</td>
+                  <td>${detailsHtml}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem; text-align:center;">เกิดข้อผิดพลาดในการโหลดประวัติระบบ: ${err.message}</div>`;
+  }
+}
+
+function getLogActionBg(action) {
+  switch (action) {
+    case 'EDIT_BRANCH_STOCK': return '#d97706'; // Gold
+    case 'CREATE_TRANSFER': return '#2563eb'; // Blue
+    case 'TRANSFER_STATUS_COMPLETED': return '#16a34a'; // Green
+    case 'TRANSFER_STATUS_REJECTED': return '#dc2626'; // Red
+    case 'SUBMIT_GOODS_RECEIPT': return '#6366f1'; // Indigo
+    case 'CONFIRM_GOODS_RECEIPT': return '#0d9488'; // Teal
+    case 'CREATE_ROLE': return '#7c3aed'; // Purple
+    default: return '#4b5563'; // Gray
+  }
+}
+
+function formatLogDetails(log) {
+  const d = log.details || {};
+  let html = '';
+  if (log.action === 'EDIT_BRANCH_STOCK') {
+    html += `<div><strong>สาขา:</strong> ${d.branch || '-'}</div>`;
+    html += `<div><strong>สินค้า:</strong> ${d.productName || '-'} (IMEI: <code>${d.imei || '-'}</code>)</div>`;
+    if (d.changes && d.changes.new) {
+      html += `<div style="margin-top:0.4rem; font-size:0.78rem; background:rgba(0,0,0,0.2); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">`;
+      html += `<div style="font-weight:700; color:var(--accent-gold); margin-bottom:0.2rem;"><i class="fa-solid fa-pen"></i> ฟิลด์ที่แก้ไข:</div>`;
+      for (const field of Object.keys(d.changes.new)) {
+        const oldV = d.changes.old ? d.changes.old[field] : '-';
+        const newV = d.changes.new[field];
+        html += `<div>• <strong style="color:var(--text-muted);">${field}:</strong> <span style="text-decoration:line-through; color:#ef4444;">${oldV}</span> <i class="fa-solid fa-arrow-right" style="font-size:0.7rem; color:var(--text-muted);"></i> <span style="color:#34d399; font-weight:700;">${newV}</span></div>`;
+      }
+      html += `</div>`;
+    }
+  } else {
+    html += `<div style="font-size:0.8rem; line-height:1.4;">`;
+    for (const [k, v] of Object.entries(d)) {
+      if (typeof v === 'object' && v !== null) {
+        html += `<div><strong>${k}:</strong> <pre style="margin:0; font-size:0.74rem; background:rgba(0,0,0,0.2); padding:0.2rem; border-radius:4px; font-family:monospace; color:#38bdf8;">${JSON.stringify(v, null, 2)}</pre></div>`;
+      } else {
+        html += `<div><strong>${k}:</strong> ${v}</div>`;
+      }
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+function filterSystemLogsTable() {
+  const filterVal = document.getElementById('sl-action-filter').value;
+  const searchVal = document.getElementById('sl-search-input').value.toLowerCase().trim();
+
+  document.querySelectorAll('.sl-row').forEach(row => {
+    const act = row.getAttribute('data-action') || '';
+    const searchData = row.getAttribute('data-search') || '';
+
+    const matchesFilter = (filterVal === 'all' || act === filterVal);
+    const matchesSearch = (!searchVal || searchData.includes(searchVal));
+
+    if (matchesFilter && matchesSearch) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+function viewAuditPhoto(url) {
+  if (!url) {
+    showToast('ไม่พบรูปภาพประกอบ', 'error');
+    return;
+  }
+  const bodyHtml = `
+    <div style="text-align:center;">
+      <img src="${url}" style="max-width:100%; max-height:500px; border-radius:8px; border:2px solid var(--accent-primary); box-shadow:0 4px 15px rgba(0,0,0,0.3);">
+    </div>
+  `;
+  const footerHtml = `<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>`;
+  openModal('🖼️ รูปถ่ายตัวเครื่อง / ป้าย IMEI สินค้า', bodyHtml, footerHtml);
+}

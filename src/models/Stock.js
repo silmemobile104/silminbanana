@@ -58,7 +58,7 @@ const stockSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['in_stock', 'transferred', 'sold', 'missing'],
+    enum: ['in_stock', 'transferred', 'sold', 'missing', 'in_transit'],
     default: 'in_stock'
   },
   import_date: {

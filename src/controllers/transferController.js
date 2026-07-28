@@ -42,6 +42,10 @@ const createTransfer = async (req, res, next) => {
           });
         }
 
+        // Lock stock item immediately by setting status to 'in_transit'
+        stock.status = 'in_transit';
+        await stock.save();
+
         preparedItems.push({
           product: stock.product ? stock.product._id : null,
           productName: stock.productName || (stock.product ? stock.product.name : 'สินค้าไม่ระบุชื่อ'),
@@ -61,7 +65,7 @@ const createTransfer = async (req, res, next) => {
       items: preparedItems,
       requestedBy: req.user._id,
       remarks: remarks || '',
-      status: 'pending'
+      status: 'in_transit'
     });
 
     await AuditLog.create({
@@ -138,6 +142,17 @@ const updateTransferStatus = async (req, res, next) => {
           );
         }
       }
+    } else if (status === 'rejected' || status === 'cancelled') {
+      // Restore stock back to source branch as active in_stock
+      for (const item of transfer.items) {
+        const targetImeis = item.imei_serials || [];
+        for (const im of targetImeis) {
+          await Stock.updateOne(
+            { imei: im },
+            { $set: { branch: transfer.fromBranch._id, status: 'in_stock' } }
+          );
+        }
+      }
     }
 
     transfer.status = status;
@@ -185,8 +200,8 @@ const getTransferDocument = async (req, res, next) => {
         status: transfer.status,
         fromBranch: transfer.fromBranch,
         toBranch: transfer.toBranch,
-        requestedBy: transfer.requestedBy ? transfer.requestedBy.username : 'ไม่ระบุ',
-        approvedBy: transfer.approvedBy ? transfer.approvedBy.username : 'ไม่ระบุ',
+        requestedBy: transfer.requestedBy ? (transfer.requestedBy.fullName || transfer.requestedBy.username) : 'ไม่ระบุ',
+        approvedBy: transfer.approvedBy ? (transfer.approvedBy.fullName || transfer.approvedBy.username) : 'ไม่ระบุ',
         items: transfer.items,
         remarks: transfer.remarks
       }
