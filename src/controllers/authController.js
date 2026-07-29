@@ -4,13 +4,29 @@ const Role = require('../models/Role');
 const AuditLog = require('../models/AuditLog');
 const { SYSTEM_MENUS } = require('./roleController');
 
-const getRoleAllowedMenus = async (userRoleCode) => {
+const getRoleDetails = async (userRoleCode) => {
   const allMenuKeys = SYSTEM_MENUS.map(m => m.key);
   const roleDoc = await Role.findOne({ code: userRoleCode });
-  if (roleDoc && Array.isArray(roleDoc.allowedMenus)) {
-    return roleDoc.allowedMenus;
+  
+  const defaultRoles = {
+    'admin': 'ผู้ดูแลระบบสูงสุด (Admin)',
+    'hq_stock_staff': 'พนักงานคลังสินค้าส่วนกลาง (HQ Stock)',
+    'branch_staff': 'พนักงานประจำสาขา (Branch Staff)',
+    'purchase_staff': 'พนักงานฝ่ายจัดซื้อ (Purchasing Staff)',
+    'technical_staff': 'ช่างเทคนิค (Technical Staff)'
+  };
+
+  if (roleDoc) {
+    return {
+      allowedMenus: Array.isArray(roleDoc.allowedMenus) ? roleDoc.allowedMenus : allMenuKeys,
+      roleName: roleDoc.name || defaultRoles[userRoleCode] || userRoleCode
+    };
   }
-  return allMenuKeys;
+
+  return {
+    allowedMenus: allMenuKeys,
+    roleName: defaultRoles[userRoleCode] || userRoleCode
+  };
 };
 
 const login = async (req, res, next) => {
@@ -66,7 +82,7 @@ const login = async (req, res, next) => {
       details: { username: user.username, email: user.email }
     });
 
-    const allowedMenus = await getRoleAllowedMenus(user.role);
+    const roleDetails = await getRoleDetails(user.role);
 
     res.json({
       success: true,
@@ -78,7 +94,8 @@ const login = async (req, res, next) => {
         fullName: user.fullName || user.username,
         email: user.email,
         role: user.role,
-        allowedMenus,
+        roleName: roleDetails.roleName,
+        allowedMenus: roleDetails.allowedMenus,
         branch: user.branch
       }
     });
@@ -89,7 +106,7 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    const allowedMenus = await getRoleAllowedMenus(req.user.role);
+    const roleDetails = await getRoleDetails(req.user.role);
 
     res.json({
       success: true,
@@ -99,7 +116,8 @@ const getMe = async (req, res, next) => {
         fullName: req.user.fullName || req.user.username,
         email: req.user.email,
         role: req.user.role,
-        allowedMenus,
+        roleName: roleDetails.roleName,
+        allowedMenus: roleDetails.allowedMenus,
         branch: req.user.branch
       }
     });

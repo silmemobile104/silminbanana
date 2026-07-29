@@ -145,14 +145,22 @@ document.getElementById('modal-close').addEventListener('click', closeModal);
 async function loadMasterOptions() {
   if (!state.token) return;
   try {
-    const [masterRes, branchRes] = await Promise.all([
+    const [masterRes, branchRes, roleRes] = await Promise.all([
       apiRequest('/master/options'),
-      apiRequest('/branches')
+      apiRequest('/branches'),
+      apiRequest('/roles').catch(() => null)
     ]);
     if (masterRes && masterRes.success) {
       state.masterOptions = masterRes.options || { brands: [], models: [], capacities: [], colors: [], categories: [] };
       if (branchRes && branchRes.success) {
         state.masterOptions.branches = branchRes.branches || [];
+      }
+    }
+    if (roleRes && roleRes.success) {
+      window.masterRolesCache = roleRes.roles || [];
+      const currentRoleEl = document.getElementById('current-user-role');
+      if (currentRoleEl && state.user) {
+        currentRoleEl.innerText = state.user.roleName || formatRoleThai(state.user.role);
       }
     }
   } catch (err) {
@@ -293,7 +301,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       localStorage.setItem('silmin_token', res.token);
       localStorage.setItem('silmin_user', JSON.stringify(res.user));
 
-      showToast(`ยินดีต้อนรับคุณ ${res.user.fullName || res.user.username} (สิทธิ์: ${formatRoleThai(res.user.role)})`);
+      showToast(`ยินดีต้อนรับคุณ ${res.user.fullName || res.user.username} (สิทธิ์: ${res.user.roleName || formatRoleThai(res.user.role)})`);
       initAppSession();
     }
   } catch (err) {
@@ -322,7 +330,7 @@ function initAppSession() {
   document.getElementById('main-view').style.display = 'flex';
 
   document.getElementById('current-user-name').innerText = state.user.fullName || state.user.username;
-  document.getElementById('current-user-role').innerText = formatRoleThai((state.user ? state.user.role : 'admin'));
+  document.getElementById('current-user-role').innerText = state.user.roleName || formatRoleThai((state.user ? state.user.role : 'admin'));
   document.getElementById('current-user-avatar').innerText = (state.user.fullName || state.user.username).charAt(0).toUpperCase();
 
   const branchName = state.user.branch ? state.user.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)';
@@ -4452,7 +4460,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
     const res = await apiRequest(`/stock/receipts?status=${filterStatus}`);
     const receipts = res.receipts || [];
 
-    const isHqOrPurchasing = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
+    const isHqOrPurchasing = true;
 
     const pendingCount = receipts.filter(r => r.status === 'pending_pricing').length;
 
