@@ -75,6 +75,19 @@ const saleSchema = new mongoose.Schema({
     type: String,
     enum: ['completed', 'voided'],
     default: 'completed'
+  },
+  costReturnedStatus: {
+    type: String,
+    enum: ['pending', 'returned', 'not_applicable'],
+    default: 'pending'
+  },
+  costReturnedDate: {
+    type: Date,
+    default: null
+  },
+  costReturnedRemarks: {
+    type: String,
+    default: ''
   }
 }, { timestamps: true });
 

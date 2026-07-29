@@ -94,6 +94,8 @@ const createSale = async (req, res, next) => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const receiptNumber = `INV-${branch.code || 'HQ'}-${todayStr}-${randomNum}`;
 
+    const isFinance = paymentMethod === 'finance';
+
     const sale = await Sale.create({
       receiptNumber,
       branch: branch._id,
@@ -112,8 +114,16 @@ const createSale = async (req, res, next) => {
       paymentMethod: paymentMethod || 'cash',
       financeDetails,
       receivedAmount: numReceived,
-      changeAmount
+      changeAmount,
+      costReturnedStatus: isFinance ? 'not_applicable' : 'pending'
     });
+
+    // If payment method is finance, restore branch credit limit by totalCost immediately!
+    if (isFinance) {
+      const currentUsed = branch.usedCredit || 0;
+      branch.usedCredit = Math.max(0, currentUsed - calculatedTotalCost);
+      await branch.save();
+    }
 
     await AuditLog.create({
       user: req.user._id,
@@ -122,7 +132,14 @@ const createSale = async (req, res, next) => {
       action: 'CREATE_POS_SALE',
       entity: 'Sale',
       entityId: sale._id.toString(),
-      details: { receiptNumber: sale.receiptNumber, grandTotal: sale.grandTotal, branch: branch.name, paymentMethod }
+      details: {
+        receiptNumber: sale.receiptNumber,
+        grandTotal: sale.grandTotal,
+        branch: branch.name,
+        paymentMethod,
+        creditRefunded: isFinance ? calculatedTotalCost : 0,
+        newUsedCredit: branch.usedCredit
+      }
     });
 
     // Populate branch and seller details for receipt printing
@@ -573,7 +590,69 @@ const getExecutiveReportRange = async (req, res, next) => {
   }
 };
 
+const returnCostToHq = async (req, res, next) => {
+  try {
+    const { saleId } = req.params;
+    const { payoutReceivedDate, remarks } = req.body;
+
+    const dateVal = payoutReceivedDate || new Date();
+
+    const sale = await Sale.findById(saleId).populate('branch');
+    if (!sale) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการบิลขาย' });
+    }
+
+    if (sale.costReturnedStatus === 'returned') {
+      return res.status(400).json({ success: false, message: 'รายการนี้ได้รับการโอนคืนต้นทุนแล้ว' });
+    }
+
+    if (sale.paymentMethod === 'finance') {
+      return res.status(400).json({ success: false, message: 'รายการจัดไฟแนนซ์คืนวงเงินอัตโนมัติแล้ว ไม่ต้องโอนคืนซ้ำ' });
+    }
+
+    sale.costReturnedStatus = 'returned';
+    sale.costReturnedDate = dateVal;
+    if (remarks !== undefined) {
+      sale.costReturnedRemarks = remarks;
+    }
+    await sale.save();
+
+    // Adjust branch used credit (restoring credit limit by reducing usedCredit)
+    const branch = sale.branch;
+    if (branch) {
+      const currentUsed = branch.usedCredit || 0;
+      const refundAmount = sale.totalCost || 0;
+      branch.usedCredit = Math.max(0, currentUsed - refundAmount);
+      await branch.save();
+    }
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'RETURN_COST_TO_HQ',
+      entity: 'Sale',
+      entityId: sale._id.toString(),
+      details: {
+        receiptNumber: sale.receiptNumber,
+        branch: branch ? branch.name : 'ไม่ระบุ',
+        refundAmount: sale.totalCost,
+        newUsedCredit: branch ? branch.usedCredit : 0
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'บันทึกโอนยอดต้นทุนคืนบริษัทใหญ่ และคืนวงเงินสาขาเรียบร้อยแล้ว',
+      sale
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  returnCostToHq,
   createSale,
   getSaleReceipt,
   getSalesHistory,

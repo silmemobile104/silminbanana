@@ -1595,6 +1595,7 @@ async function renderFinanceView(filterParams = {}) {
               <th>ราคาขาย (บาท)</th>
               <th>กำไรสุทธิ (บาท)</th>
               <th style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
+              <th style="text-align:center;">การคืนเงินทุนสาขา</th>
             </tr>
           </thead>
           <tbody>
@@ -1645,6 +1646,23 @@ async function renderFinanceView(filterParams = {}) {
                         </span>
                       `}
                     ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- (รับเงินสดแล้ว) -</span>`}
+                  </td>
+                  <td style="text-align:center; vertical-align:middle;">
+                    ${isFinance ? `
+                      <span style="color:var(--text-muted); font-size:0.8rem;">- (คืนวงเงินอัตโนมัติ) -</span>
+                    ` : `
+                      ${(s.costReturnedStatus || 'pending') === 'pending' ? `
+                        <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอโอนทุนคืน (฿${costTotal.toLocaleString()})</span><br>
+                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordCostReturnModal('${s._id}', '${s.receiptNumber}', ${costTotal})">
+                          <i class="fa-solid fa-check"></i> บันทึกโอนทุนคืน
+                        </button>
+                      ` : `
+                        <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว</span><br>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">
+                          วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}
+                        </span>
+                      `}
+                    `}
                   </td>
                 </tr>
               `;
@@ -6678,4 +6696,70 @@ function viewAuditPhoto(url) {
   `;
   const footerHtml = `<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>`;
   openModal('🖼️ รูปถ่ายตัวเครื่อง / ป้าย IMEI สินค้า', bodyHtml, footerHtml);
+}
+
+function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
+  const bodyHtml = `
+    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:left;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.88rem;">
+        <span>เลขที่ใบเสร็จ: <strong>${receiptNumber}</strong></span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:1.1rem; font-weight:800; color:#fbbf24;">
+        <span>ยอดเงินต้นทุนโอนคืนบริษัทใหญ่:</span>
+        <span>฿${Number(costAmount).toLocaleString()}</span>
+      </div>
+    </div>
+
+    <form id="record-cost-return-form" onsubmit="event.preventDefault(); submitCostReturn('${saleId}');">
+      <div class="form-group" style="text-align:left;">
+        <label for="cr-date" style="color:#34d399; font-weight:700;">
+          <i class="fa-solid fa-calendar-days"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
+        </label>
+        <input type="date" id="cr-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700; padding:0.5rem; border-radius:6px;">
+        <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาคุณเท่ากับยอดต้นทุนเครื่องนี้ทันที</span>
+      </div>
+
+      <div class="form-group" style="text-align:left;">
+        <label for="cr-remarks">หมายเหตุ / เลขอ้างอิงสลิปโอนเงิน (ถ้ามี)</label>
+        <textarea id="cr-remarks" class="form-control" rows="2" placeholder="เช่น โอนคืนทุนเครื่อง iPhone 11 เข้าบัญชีส่วนกลางแล้ว" style="padding:0.5rem; border-radius:6px;"></textarea>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-success" onclick="submitCostReturn('${saleId}')"><i class="fa-solid fa-check-double"></i> ยืนยันบันทึกโอนทุนคืน</button>
+  `;
+
+  openModal(`บันทึกโอนเงินทุนคืนบริษัท: ${receiptNumber}`, bodyHtml, footerHtml);
+}
+
+async function submitCostReturn(saleId) {
+  const dateInput = document.getElementById('cr-date');
+  const payoutReceivedDate = dateInput ? dateInput.value.trim() : '';
+  const remarks = document.getElementById('cr-remarks') ? document.getElementById('cr-remarks').value : '';
+
+  if (!payoutReceivedDate) {
+    showToast('กรุณาระบุและเลือกวันที่โอนเงินคืนบริษัทจริงก่อนกดบันทึก', 'error');
+    if (dateInput) {
+      dateInput.focus();
+      if (dateInput.showPicker) dateInput.showPicker();
+    }
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/pos/return-cost/${saleId}`, 'PUT', {
+      payoutReceivedDate,
+      remarks
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderFinanceView(); // Reload finance view to show updated status
+    }
+  } catch (err) {
+    // Handled
+  }
 }
