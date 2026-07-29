@@ -80,7 +80,7 @@ const createPurchaseOrder = async (req, res, next) => {
 
         if (!existingProd) {
           const cost = Number(item.unitPrice) || 0;
-          const sell = cost ? Math.round(cost * 1.15) : 0;
+          const sell = 0;
           const varStr = [capacity, color].filter(Boolean).join(' ') || 'Standard';
 
           existingProd = await Product.create({
@@ -252,7 +252,7 @@ const receivePurchaseOrder = async (req, res, next) => {
       let category = (prodDoc ? prodDoc.category : 'Smartphones') || 'Smartphones';
 
       const costPrice = poItem.unitPrice || (prodDoc ? prodDoc.purchase_price : 0);
-      const sellingPrice = prodDoc ? (prodDoc.selling_price || Math.round(costPrice * 1.15)) : Math.round(costPrice * 1.15);
+      const sellingPrice = 0;
 
       for (let imIdx = 0; imIdx < (poItem.imeis || []).length; imIdx++) {
         const currentImei = poItem.imeis[imIdx];
@@ -385,7 +385,7 @@ const updatePurchaseOrder = async (req, res, next) => {
 
         if (!existingProd) {
           const cost = Number(item.unitPrice) || 0;
-          const sell = cost ? Math.round(cost * 1.15) : 0;
+          const sell = 0;
           const varStr = [capacity, color].filter(Boolean).join(' ') || 'Standard';
 
           existingProd = await Product.create({

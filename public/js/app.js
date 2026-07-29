@@ -1460,6 +1460,16 @@ function openReceiptVoucherModal(sale) {
           <span>ยอดชำระสุทธิ (Total):</span>
           <span>฿${(sale.grandTotal || 0).toLocaleString()}</span>
         </div>
+        <div style="border-top:1px dotted #888; margin-top:0.4rem; padding-top:0.4rem; font-size:0.76rem; color:#555;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
+            <span>มูลค่าก่อนภาษี (Taxable Value):</span>
+            <span>฿${((sale.grandTotal || 0) / 1.07).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
+            <span>ภาษีมูลค่าเพิ่ม 7% (VAT 7%):</span>
+            <span>฿${((sale.grandTotal || 0) - ((sale.grandTotal || 0) / 1.07)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
         <div style="display:flex; justify-content:space-between; margin-top:0.4rem; font-size:0.78rem; color:#444;">
           <span>ชำระโดย: <strong>${sale.paymentMethod === 'cash' ? 'เงินสด (Cash)' : sale.paymentMethod === 'transfer' ? 'โอนเงิน / QR' : sale.paymentMethod === 'credit_card' ? 'บัตรเครดิต' : 'จัดไฟแนนซ์ (' + (sale.financeDetails ? sale.financeDetails.companyName : 'ไฟแนนซ์') + ')'}</strong></span>
           <span>${sale.paymentMethod === 'finance' ? 'รอรับเงินไฟแนนซ์' : 'รับเงิน: ฿' + (sale.receivedAmount || 0).toLocaleString() + ' | เงินทอน: ฿' + (sale.changeAmount || 0).toLocaleString()}</span>
@@ -1494,6 +1504,7 @@ async function renderFinanceView(filterParams = {}) {
     const res = await apiRequest(`/pos/finance-report?${queryParams}`);
     const summary = res.summary || {};
     const sales = res.sales || [];
+    state.salesCache = sales;
 
     const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
 
@@ -1604,14 +1615,16 @@ async function renderFinanceView(filterParams = {}) {
               <th>กำไรสุทธิ (บาท)</th>
               <th style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
               <th style="text-align:center;">การคืนเงินทุนสาขา</th>
+              <th style="text-align:center;">ดำเนินการ</th>
             </tr>
           </thead>
           <tbody>
-            ${sales.length === 0 ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
-            ${sales.map(s => {
+            ${sales.length === 0 ? `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
+            ${sales.map((s, idx) => {
               const itemsStr = (s.items || []).map(i => `${i.productName} (${i.imei})`).join('<br>');
               const isFinance = s.paymentMethod === 'finance';
               const finDetails = s.financeDetails || {};
+              const isVoided = s.status === 'voided';
               const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
 
               let costTotal = s.totalCost || 0;
@@ -1621,9 +1634,10 @@ async function renderFinanceView(filterParams = {}) {
               const profitTotal = s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal);
 
               return `
-                <tr>
+                <tr style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
                   <td>
-                    <strong>${s.receiptNumber}</strong><br>
+                    <strong>${s.receiptNumber}</strong>
+                    ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
                     <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(s.createdAt).toLocaleString('th-TH')}</span>
                   </td>
                   <td>
@@ -1671,6 +1685,11 @@ async function renderFinanceView(filterParams = {}) {
                         </span>
                       `}
                     `}
+                  </td>
+                  <td style="text-align:center; vertical-align:middle;">
+                    <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
+                      <i class="fa-solid fa-print"></i> พิมพ์บิลซ้ำ
+                    </button>
                   </td>
                 </tr>
               `;
@@ -2893,7 +2912,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
     const displayedOrders = branchId ? allOrders.filter(o => String(o.branch ? (o.branch._id || o.branch) : '') === String(branchId)) : allOrders;
 
     container.innerHTML = `
-      ${isHqOrAdmin && branches.length > 0 ? `
+      ${branches.length > 0 ? `
         <!-- Branch Purchasing Overview Cards Grid -->
         <div style="margin-bottom:2rem;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
@@ -3023,7 +3042,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="openCreatePurchaseOrderModal(${selectedBranchId ? `'${selectedBranchId}'` : ''})"><i class="fa-solid fa-plus"></i> สั่งซื้อสินค้าลงสาขาใหม่</button>
-          ${isHqOrAdmin && branches.length > 0 ? `
+          ${branches.length > 0 ? `
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ตัวกรองสาขา:</label>
               <select class="form-select" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem; font-weight:700;" onchange="renderBranchPurchaseOrdersView(this.value || null)">
@@ -6769,5 +6788,15 @@ async function submitCostReturn(saleId) {
     }
   } catch (err) {
     // Handled
+  }
+}
+
+
+function reprintReceiptVoucher(index) {
+  const sale = (state.salesCache || [])[index];
+  if (sale) {
+    openReceiptVoucherModal(sale);
+  } else {
+    showToast('ไม่พบข้อมูลบิลขายนี้ในระบบแคช กรุณารีเฟรชหน้าเว็บ', 'error');
   }
 }
