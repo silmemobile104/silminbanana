@@ -711,3 +711,100 @@ body {
     padding: 1.2rem;
   }
 }
+
+/* ==========================================================================
+   GOODS RECEIPT PREMIUM STYLING
+   ========================================================================== */
+.gr-history-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85)) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.gr-pending-po-card {
+  border: 1px solid rgba(251, 191, 36, 0.35) !important;
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.03), rgba(251, 191, 36, 0.08)) !important;
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.08);
+  animation: grPulse 2s infinite alternate;
+}
+
+.gr-manual-form-card {
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8)) !important;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  padding: 1.8rem;
+  animation: slideDownFade 0.4s ease-out;
+}
+
+.gr-imei-input-box {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1.5px solid rgba(251, 191, 36, 0.4) !important;
+  color: #fbbf24 !important;
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: 700;
+  font-size: 1.1rem !important;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem !important;
+  border-radius: 8px !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s ease;
+}
+.gr-imei-input-box:focus {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.45), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  outline: none;
+}
+
+.gr-table-row {
+  transition: background-color 0.2s ease;
+}
+.gr-table-row:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Badges */
+.badge-gr-pending {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #f59e0b !important;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 0.35rem 0.7rem;
+  border-radius: 50px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.badge-gr-confirmed {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #10b981 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 0.35rem 0.7rem;
+  border-radius: 50px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+
+@keyframes grPulse {
+  0% { box-shadow: 0 4px 20px rgba(251, 191, 36, 0.05); }
+  100% { box-shadow: 0 4px 25px rgba(251, 191, 36, 0.15); border-color: rgba(251, 191, 36, 0.5) !important; }
+}
+
+@keyframes slideDownFade {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

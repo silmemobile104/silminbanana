@@ -735,57 +735,30 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
                 </tr>
               </thead>
               <tbody>
-              ${unitRows.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในสาขานี้</td></tr>` : ''}
-              ${unitRows.map(row => {
-                const imei = row.imei;
-                const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
-                const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
-                const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
-
-                return `
-                  <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei).toLowerCase()}">
-                    <td>
-                      <strong style="color:#38bdf8;">${row.productName}</strong>
-                    </td>
-                    <td style="text-align:center;"><strong style="font-size:1.05rem;">${row.expectedCount}</strong></td>
-                    <td style="text-align:center;"><strong style="font-size:1.05rem; color:${row.actualCount > 0 ? '#34d399' : '#f87171'};">${row.actualCount}</strong></td>
-                    <td style="text-align:center; font-weight:700;">
-                      ${row.isUnexpected ?
-                        '<span class="badge badge-yellow">เกิน +1</span>' :
-                        row.actualCount === 1 ?
-                        '<span class="badge badge-green">ขาด 0</span>' :
-                        '<span class="badge badge-red">ขาด 1</span>'
-                      }
-                    </td>
-                    <td style="font-size:0.9rem;">
-                      ${row.isScanned && imei !== '-' ? `
-                        <span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.92rem;">${imei}</span>
-                        ${row.isUnexpected ? '<span style="color:#fbbf24; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
-                      ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
-                        <span style="font-family:monospace; font-weight:700; color:#f87171; font-size:0.92rem;">${imei}</span>
-                        <span style="color:#f87171; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
-                      ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
-                    </td>
-                    <td style="font-size:0.85rem;">
-                      ${row.isScanned && imei !== '-' ? `
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
-                          <div>
-                            ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน (Pass)</span>' :
-                              isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
-                              isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
-                              '<span class="badge badge-gray" style="font-size:0.75rem;">(ยังไม่ได้ตรวจ)</span>'}
+                ${branchPerf.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลผลการดำเนินงานรายสาขาในช่วงเวลานี้</td></tr>` : ''}
+                ${branchPerf.map(b => {
+                  const proportion = totalRev > 0 ? Math.round((b.revenue / totalRev) * 100) : 0;
+                  return `
+                    <tr>
+                      <td>
+                        <strong style="color:#38bdf8;">[${b.code || '-'}]</strong> <strong>${b.name || '-'}</strong>
+                      </td>
+                      <td style="text-align:center;">${b.bills || 0} บิล</td>
+                      <td style="text-align:right; font-weight:700; color:#34d399;">฿${(b.revenue || 0).toLocaleString()}</td>
+                      <td style="text-align:right; color:var(--text-muted);">฿${(b.cost || 0).toLocaleString()}</td>
+                      <td style="text-align:right; font-weight:700; color:#38bdf8;">฿${(b.profit || 0).toLocaleString()}</td>
+                      <td style="text-align:center;">
+                        <div style="display:flex; align-items:center; gap:0.5rem; justify-content:center;">
+                          <div style="flex-grow:1; background:rgba(255,255,255,0.1); height:6px; border-radius:3px; max-width:80px; text-align:left;">
+                            <div style="width:${proportion}%; background:var(--accent-primary); height:100%; border-radius:3px;"></div>
                           </div>
-
-                          <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
-                            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
-                          </button>
+                          <span style="font-weight:700; min-width:30px;">${proportion}%</span>
                         </div>
-                      ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
             </table>
           </div>
 
@@ -3780,132 +3753,9 @@ async function renderGoodsReceiptView() {
 
     container.innerHTML = `
       ${pendingPoSectionHtml}
-      <!-- Entry Card -->
-      <div class="card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
-        <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (คละรุ่น / คละความจุ / คละสี)
-        </h3>
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1.5rem;">
-          เลือกรุ่น สเปกสินค้า และกรอกหมายเลข IMEI แล้วกดปุ่ม <strong>"+ เพิ่มเข้ารายการคละ"</strong> เพื่อคละสินค้าต่างรุ่น/สีในรอบเดียวกันได้ไม่จำกัด
-        </p>
-
-        <div class="form-group">
-          <label for="gr-branch">สาขาที่รับสินค้าเข้าสต็อก</label>
-          <select id="gr-branch" class="form-select" required>
-            ${userBranches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
-          </select>
-        </div>
-
-        <!-- Add Item Box -->
-        <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem;">
-          <div style="font-weight:700; color:#38bdf8; font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
-            <i class="fa-solid fa-plus-circle"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
-          </div>
-
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-            <div class="form-group">
-              <label for="gr-brand">ยี่ห้อ</label>
-              <select id="gr-brand" class="form-select" onchange="recalculateGrAutoFields()">
-                <option value="">-- เลือกยี่ห้อ --</option>
-                ${brands.map(b => `<option value="${b.value}">${b.value}</option>`).join('')}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="gr-model">ชื่อรุ่น</label>
-              <select id="gr-model" class="form-select" onchange="recalculateGrAutoFields()">
-                <option value="">-- เลือกชื่อรุ่น --</option>
-                ${models.map(m => `<option value="${m.value}">${m.value}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-            <div class="form-group">
-              <label for="gr-capacity">ความจุ</label>
-              <select id="gr-capacity" class="form-select" onchange="recalculateGrAutoFields()">
-                <option value="">-- เลือกความจุ --</option>
-                ${capacities.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="gr-color">สีสินค้า</label>
-              <select id="gr-color" class="form-select" onchange="recalculateGrAutoFields()">
-                <option value="">-- เลือกสีสินค้า --</option>
-                ${colors.map(cl => `<option value="${cl.value}">${cl.value}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-            <div class="form-group">
-              <label for="gr-category">หมวดหมู่สินค้า</label>
-              <select id="gr-category" class="form-select">
-                <option value="">-- เลือกหมวดหมู่ --</option>
-                ${categories.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="gr-name">ชื่อสินค้าแบบเต็ม (ประกอบให้อัตโนมัติ)</label>
-              <input type="text" id="gr-name" class="form-control" value="${initialName}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" readonly>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-bottom:0.8rem;">
-            <label for="gr-single-imei">หมายเลขซีเรียล / IMEI <span style="color:#ef4444;">*</span></label>
-            <div style="display:flex; gap:0.8rem;">
-              <input type="text" id="gr-single-imei" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI" style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:1.05rem;" onkeypress="if(event.key==='Enter'){ event.preventDefault(); addStagedGoodsReceiptItem(); }">
-              <button type="button" class="btn btn-warning" onclick="addStagedGoodsReceiptItem()" style="white-space:nowrap; font-weight:700;">
-                <i class="fa-solid fa-cart-plus"></i> + เพิ่มเข้ารายการคละ
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Staged Items Table -->
-        <div style="margin-bottom:1.5rem;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <div style="font-weight:700; color:#fff; font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
-              <span id="staged-count-badge" class="badge badge-gold" style="font-size:0.8rem;">${(window.stagedGoodsReceiptItems || []).length} เครื่อง</span>
-            </div>
-            ${(window.stagedGoodsReceiptItems || []).length > 0 ? `
-              <button type="button" class="btn btn-sm btn-danger" onclick="clearAllStagedGoodsReceiptItems()">
-                <i class="fa-solid fa-trash-can"></i> ล้างรายการทั้งหมด
-              </button>
-            ` : ''}
-          </div>
-
-          <div class="table-container" style="background:rgba(0,0,0,0.2); border-radius:6px;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th style="width:40px; text-align:center;">#</th>
-                  <th>รายละเอียดสินค้า</th>
-                  <th>หมวดหมู่</th>
-                  <th>หมายเลข IMEI / ซีเรียล</th>
-                  <th style="text-align:center; width:80px;">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody id="staged-items-tbody">
-                <!-- Rendered by renderStagedItemsTable() -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:0.8rem;">
-          <button type="button" class="btn btn-secondary" onclick="navigateTo('dashboard')">ยกเลิก</button>
-          <button type="button" id="submit-batch-gr-btn" class="btn btn-primary" onclick="submitBatchGoodsReceipt()" style="padding:0.65rem 1.4rem; font-size:0.95rem; font-weight:700;" ${(window.stagedGoodsReceiptItems || []).length === 0 ? 'disabled' : ''}>
-            <i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${(window.stagedGoodsReceiptItems || []).length} รายการ)
-          </button>
-        </div>
-      </div>
-
+      
       <!-- History & Editing Section -->
-      <div class="card" style="max-width: 950px; margin: 0 auto;">
+      <div class="card gr-history-card" style="width: 100%; margin: 0 auto;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
             <h4 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
@@ -3915,7 +3765,8 @@ async function renderGoodsReceiptView() {
               รายการที่ขึ้นสถานะ <span class="badge badge-yellow" style="font-size:0.7rem;">🟡 รอตั้งราคา / ยืนยัน</span> สามารถกดแก้ไขข้อมูล/IMEI ได้ ก่อนที่ฝ่ายจัดซื้อจะยืนยันเข้าสต็อกจริง
             </p>
           </div>
-          <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <button id="toggle-gr-form-btn" class="btn btn-warning btn-sm" onclick="toggleGrManualForm()" style="font-weight:700;"><i class="fa-solid fa-plus"></i> คีย์รับเข้าแมนนวล (คละรุ่น)</button>
             <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
             <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
           </div>
@@ -3942,7 +3793,7 @@ async function renderGoodsReceiptView() {
                 const dateStr = new Date(r.createdAt).toLocaleString('th-TH');
 
                 return `
-                  <tr class="receipt-history-row">
+                  <tr class="receipt-history-row gr-table-row">
                     <td>
                       <strong style="color:#38bdf8;">${r.receiptNumber}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
@@ -3959,8 +3810,8 @@ async function renderGoodsReceiptView() {
                       <span style="font-family:monospace; font-weight:700; color:#fbbf24;">${(r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
                     </td>
                     <td>
-                      ${isPending ? '<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
-                        isConfirmed ? '<span class="badge badge-green"><i class="fa-solid fa-check-double"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
+                      ${isPending ? '<span class="badge badge-gr-pending"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
+                        isConfirmed ? '<span class="badge badge-gr-confirmed"><i class="fa-solid fa-check-double"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
                         '<span class="badge badge-red"><i class="fa-solid fa-xmark"></i> ถูกปฏิเสธ</span>'}
                     </td>
                     <td style="text-align:center;">
@@ -3979,6 +3830,132 @@ async function renderGoodsReceiptView() {
               }).join('')}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div id="gr-manual-form-container" style="display:none; margin-top:1.5rem;">
+        <!-- Entry Card -->
+        <div class="card gr-manual-form-card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
+          <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (คละรุ่น / คละความจุ / คละสี)
+          </h3>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1.5rem;">
+            เลือกรุ่น สเปกสินค้า และกรอกหมายเลข IMEI แล้วกดปุ่ม <strong>"+ เพิ่มเข้ารายการคละ"</strong> เพื่อคละสินค้าต่างรุ่น/สีในรอบเดียวกันได้ไม่จำกัด
+          </p>
+
+          <div class="form-group">
+            <label for="gr-branch">สาขาที่รับสินค้าเข้าสต็อก</label>
+            <select id="gr-branch" class="form-select" required>
+              ${userBranches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
+            </select>
+          </div>
+
+          <!-- Add Item Box -->
+          <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem;">
+            <div style="font-weight:700; color:#38bdf8; font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
+              <i class="fa-solid fa-plus-circle"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+              <div class="form-group">
+                <label for="gr-brand">ยี่ห้อ</label>
+                <select id="gr-brand" class="form-select" onchange="recalculateGrAutoFields()">
+                  <option value="">-- เลือกยี่ห้อ --</option>
+                  ${brands.map(b => `<option value="${b.value}">${b.value}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="gr-model">ชื่อรุ่น</label>
+                <select id="gr-model" class="form-select" onchange="recalculateGrAutoFields()">
+                  <option value="">-- เลือกชื่อรุ่น --</option>
+                  ${models.map(m => `<option value="${m.value}">${m.value}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+              <div class="form-group">
+                <label for="gr-capacity">ความจุ</label>
+                <select id="gr-capacity" class="form-select" onchange="recalculateGrAutoFields()">
+                  <option value="">-- เลือกความจุ --</option>
+                  ${capacities.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="gr-color">สีสินค้า</label>
+                <select id="gr-color" class="form-select" onchange="recalculateGrAutoFields()">
+                  <option value="">-- เลือกสีสินค้า --</option>
+                  ${colors.map(cl => `<option value="${cl.value}">${cl.value}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+              <div class="form-group">
+                <label for="gr-category">หมวดหมู่สินค้า</label>
+                <select id="gr-category" class="form-select">
+                  <option value="">-- เลือกหมวดหมู่ --</option>
+                  ${categories.map(c => `<option value="${c.value}">${c.value}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="gr-name">ชื่อสินค้าแบบเต็ม (ประกอบให้อัตโนมัติ)</label>
+                <input type="text" id="gr-name" class="form-control" value="${initialName}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" readonly>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:0.8rem;">
+              <label for="gr-single-imei">หมายเลขซีเรียล / IMEI <span style="color:#ef4444;">*</span></label>
+              <div style="display:flex; gap:0.8rem;">
+                <input type="text" id="gr-single-imei" class="form-control gr-imei-input-box" placeholder="📥 สแกนบาร์โค้ด หรือพิมพ์หมายเลข IMEI 15 หลัก แล้วกด Enter..." onkeypress="if(event.key==='Enter'){ event.preventDefault(); addStagedGoodsReceiptItem(); }">
+                <button type="button" class="btn btn-warning" onclick="addStagedGoodsReceiptItem()" style="white-space:nowrap; font-weight:700; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
+                  <i class="fa-solid fa-cart-plus"></i> + เพิ่มเข้ารายการคละ
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Staged Items Table -->
+          <div style="margin-bottom:1.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+              <div style="font-weight:700; color:#fff; font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
+                <i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
+                <span id="staged-count-badge" class="badge badge-gold" style="font-size:0.8rem;">${(window.stagedGoodsReceiptItems || []).length} เครื่อง</span>
+              </div>
+              ${(window.stagedGoodsReceiptItems || []).length > 0 ? `
+                <button type="button" class="btn btn-sm btn-danger" onclick="clearAllStagedGoodsReceiptItems()">
+                  <i class="fa-solid fa-trash-can"></i> ล้างรายการทั้งหมด
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="table-container" style="background:rgba(0,0,0,0.2); border-radius:6px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px; text-align:center;">#</th>
+                    <th>รายละเอียดสินค้า</th>
+                    <th>หมวดหมู่</th>
+                    <th>หมายเลข IMEI / ซีเรียล</th>
+                    <th style="text-align:center; width:80px;">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody id="staged-items-tbody">
+                  <!-- Rendered by renderStagedItemsTable() -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:0.8rem;">
+            <button type="button" class="btn btn-secondary" onclick="toggleGrManualForm()">ยกเลิก</button>
+            <button type="button" id="submit-batch-gr-btn" class="btn btn-primary" onclick="submitBatchGoodsReceipt()" style="padding:0.65rem 1.4rem; font-size:0.95rem; font-weight:700;" ${(window.stagedGoodsReceiptItems || []).length === 0 ? 'disabled' : ''}>
+              <i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${(window.stagedGoodsReceiptItems || []).length} รายการ)
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -4121,6 +4098,21 @@ async function submitEditGoodsReceipt(receiptId) {
     }
   } catch (err) {
     // Handled
+  }
+}
+
+function toggleGrManualForm() {
+  const formContainer = document.getElementById('gr-manual-form-container');
+  const btn = document.getElementById('toggle-gr-form-btn');
+  if (formContainer) {
+    if (formContainer.style.display === 'none') {
+      formContainer.style.display = 'block';
+      formContainer.scrollIntoView({ behavior: 'smooth' });
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-minus"></i> ซ่อนแบบฟอร์มแมนนวล';
+    } else {
+      formContainer.style.display = 'none';
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-plus"></i> คีย์รับเข้าแมนนวล (คละรุ่น)';
+    }
   }
 }
 
