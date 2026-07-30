@@ -4645,7 +4645,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                     ${isPending ? `
                       <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา & ยืนยัน</span><br>
                       ${isHqOrPurchasing ? `
-                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}')">
+                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', ${r.purchase_price || 0}, ${r.selling_price || 0})">
                           <i class="fa-solid fa-check"></i> ใส่ราคา & ยืนยัน
                         </button>
                       ` : ''}
@@ -4746,7 +4746,10 @@ async function submitBatchConfirmReceipt(receiptIds) {
   }
 }
 
-function openConfirmReceiptModal(receiptId, receiptNumber, productName) {
+function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchasePrice, sellingPrice) {
+  const pPriceVal = (purchasePrice && purchasePrice > 0) ? purchasePrice : '';
+  const sPriceVal = (sellingPrice && sellingPrice > 0) ? sellingPrice : '';
+
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="font-weight:700; font-size:0.9rem; color:var(--accent-primary); margin-bottom:0.3rem;">
@@ -4761,11 +4764,11 @@ function openConfirmReceiptModal(receiptId, receiptNumber, productName) {
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
         <div class="form-group">
           <label for="cr-pprice">กำหนดราคาทุน (บาท)</label>
-          <input type="number" id="cr-pprice" class="form-control" min="0" placeholder="0" required autofocus>
+          <input type="number" id="cr-pprice" class="form-control" min="0" value="${pPriceVal}" placeholder="0" required autofocus>
         </div>
         <div class="form-group">
           <label for="cr-sprice">กำหนดราคาขาย (บาท)</label>
-          <input type="number" id="cr-sprice" class="form-control" min="0" placeholder="0" required>
+          <input type="number" id="cr-sprice" class="form-control" min="0" value="${sPriceVal}" placeholder="0" required>
         </div>
       </div>
 

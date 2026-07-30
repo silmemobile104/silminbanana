@@ -166,10 +166,35 @@ const getGoodsReceipts = async (req, res, next) => {
       .populate('confirmedBy', 'fullName username')
       .sort({ createdAt: -1 });
 
+    const products = await Product.find({});
+    const productMap = new Map();
+    products.forEach(p => {
+      const key = `${String(p.brand).trim().toLowerCase()}|${String(p.model).trim().toLowerCase()}|${String(p.capacity || '').trim().toLowerCase()}|${String(p.color || '').trim().toLowerCase()}`;
+      productMap.set(key, p);
+    });
+
+    const enrichedReceipts = receipts.map(r => {
+      const doc = r.toObject();
+      if (doc.status === 'pending_pricing') {
+        const pInfo = doc.productInfo || {};
+        const key = `${String(pInfo.brand).trim().toLowerCase()}|${String(pInfo.model).trim().toLowerCase()}|${String(pInfo.capacity || '').trim().toLowerCase()}|${String(pInfo.color || '').trim().toLowerCase()}`;
+        const matchedProd = productMap.get(key);
+        if (matchedProd) {
+          if (!doc.purchase_price || doc.purchase_price === 0) {
+            doc.purchase_price = matchedProd.purchase_price;
+          }
+          if (!doc.selling_price || doc.selling_price === 0) {
+            doc.selling_price = matchedProd.selling_price;
+          }
+        }
+      }
+      return doc;
+    });
+
     res.json({
       success: true,
-      count: receipts.length,
-      receipts
+      count: enrichedReceipts.length,
+      receipts: enrichedReceipts
     });
   } catch (err) {
     next(err);
