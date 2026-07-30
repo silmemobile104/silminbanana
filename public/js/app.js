@@ -3604,7 +3604,7 @@ async function openFillImeiAndReceiveModal(orderId) {
         bodyHtml += `
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <span style="font-size:0.78rem; color:var(--text-muted); width:70px;">เครื่องที่ ${i + 1}:</span>
-            <input type="text" class="form-control po-imei-input" data-item-idx="${itemIdx}" data-sub-idx="${i}" placeholder="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" required style="font-family:monospace; font-size:0.85rem; font-weight:700;">
+            <input type="text" class="form-control po-imei-input" data-item-idx="${itemIdx}" data-sub-idx="${i}" placeholder="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" required style="font-family:monospace; font-size:0.85rem; font-weight:700;" onkeydown="handlePoImeiInputKeyDown(event, this)">
           </div>
         `;
       }
@@ -3621,8 +3621,62 @@ async function openFillImeiAndReceiveModal(orderId) {
 
     openModal(`📱 สแกนเติม IMEI สินค้า: ${order.orderNumber}`, bodyHtml, footerHtml);
 
+    setTimeout(() => {
+      const firstInput = document.querySelector('.po-imei-input');
+      if (firstInput) {
+        firstInput.focus();
+        firstInput.select();
+      }
+    }, 150);
+
   } catch (err) {
     openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
+function handlePoImeiInputKeyDown(event, input) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    
+    const currentVal = input.value.trim();
+    if (!currentVal) return;
+
+    const inputs = Array.from(document.querySelectorAll('.po-imei-input'));
+    const currentIdx = inputs.indexOf(input);
+
+    // Check if duplicate exists in any other inputs
+    let duplicateIdx = -1;
+    for (let i = 0; i < inputs.length; i++) {
+      if (i !== currentIdx && inputs[i].value.trim() === currentVal) {
+        duplicateIdx = i;
+        break;
+      }
+    }
+
+    if (duplicateIdx !== -1) {
+      const duplicateInput = inputs[duplicateIdx];
+      const itemIdx = parseInt(duplicateInput.getAttribute('data-item-idx'), 10);
+      const subIdx = parseInt(duplicateInput.getAttribute('data-sub-idx'), 10);
+      const productName = window.currentFillingPo && window.currentFillingPo.items[itemIdx]
+        ? window.currentFillingPo.items[itemIdx].productName
+        : '';
+      
+      showToast(`⚠️ หมายเลข IMEI ซ้ำกับ ${productName} เครื่องที่ ${subIdx + 1}`, 'error');
+      input.focus();
+      input.select();
+      return;
+    }
+
+    if (currentIdx !== -1 && currentIdx < inputs.length - 1) {
+      const nextInput = inputs[currentIdx + 1];
+      nextInput.focus();
+      nextInput.select();
+    } else {
+      const orderId = window.currentFillingPo ? window.currentFillingPo._id : null;
+      if (orderId) {
+        submitFillImeiAndReceive(orderId);
+      }
+    }
   }
 }
 
@@ -3766,7 +3820,7 @@ async function renderGoodsReceiptView() {
       }).join('');
 
       pendingPoSectionHtml = `
-        <div class="card" style="max-width:950px; margin:0 auto 1.5rem auto; border:1px solid rgba(251,191,36,0.35); background:rgba(251,191,36,0.05);">
+        <div class="card gr-pending-po-card" style="width: 100%; margin:0 auto 1.5rem auto;">
           <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.8rem;">
             <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;"></i>
             <h4 style="font-size:1.05rem; font-weight:800; color:#fbbf24; margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
