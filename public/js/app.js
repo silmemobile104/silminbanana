@@ -2502,13 +2502,35 @@ async function renderBranchAuditView() {
   const container = document.getElementById('content-container');
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังดึงรายการสินค้าคงคลังสาขา...</div>`;
 
-  const userBranchId = state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null);
-  
   try {
-    const res = await apiRequest(`/audit/expected?branchId=${userBranchId}`);
+    await loadMasterOptions();
+
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+
+    if (isHqUser && !state.selectedBranchAuditId) {
+      state.selectedBranchAuditId = 'all';
+    }
+
+    const selectedBranchId = isHqUser ? state.selectedBranchAuditId : (state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null));
+
+    const res = await apiRequest(`/audit/expected?branchId=${selectedBranchId}`);
     state.expectedStockCache = (res.items || []).filter(item => item.expectedCount > 0);
 
     const todayStr = new Date().toISOString().split('T')[0];
+
+    let branchSelectorHtml = '';
+    if (isHqUser) {
+      const branches = state.masterOptions.branches || [];
+      branchSelectorHtml = `
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted); white-space:nowrap;"><i class="fa-solid fa-store"></i> สาขา:</label>
+          <select id="branch-audit-selector" class="form-select" style="width:auto; font-weight:700; color:#38bdf8; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15);" onchange="changeBranchAuditSelector()">
+            <option value="all" ${selectedBranchId === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
+            ${branches.map(b => `<option value="${b._id}" ${selectedBranchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    }
 
     container.innerHTML = `
       <div class="card" style="margin-bottom: 1.5rem;">
@@ -2517,20 +2539,26 @@ async function renderBranchAuditView() {
             <h3 style="font-size:1.1rem; font-weight:700;">แบบฟอร์ม นับสต็อกประจำวัน (Branch Daily Stock Check)</h3>
             <p style="font-size:0.85rem; color:var(--text-muted);">สแกนบาร์โค้ด IMEI/ซีเรียล หรือพิมพ์เพื่อตรวจนับสินค้า ระบบจะคำนวณ ยอดที่ขาด/เกิน ให้อัตโนมัติ</p>
           </div>
-          <div style="display:flex; align-items:center; gap:0.8rem;">
-            <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">วันที่ตรวจนับ:</label>
-            <input type="date" id="branch-audit-date" class="form-control" style="width:auto;" value="${todayStr}">
+          <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+            ${branchSelectorHtml}
           </div>
         </div>
 
         <div style="margin-top: 1.2rem; background: rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.2); padding:1rem; border-radius:var(--radius-md); display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-          <div style="flex:1; min-width:260px;">
-            <label style="font-size:0.78rem; font-weight:700; color:var(--accent-secondary);">ช่องสแกนบาร์โค้ดรวดเร็ว (สแกน IMEI/ซีเรียลที่นี่)</label>
-            <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล แล้วกด Enter..." style="margin-top:0.3rem;" autofocus>
-          </div>
-          <div style="font-size:0.85rem; color:var(--text-muted);">
-            <i class="fa-solid fa-circle-info" style="color:var(--accent-primary);"></i> สแกนหมายเลข IMEI เพื่อตรวจนับสินค้าคงเหลือในสาขา
-          </div>
+          ${selectedBranchId === 'all' ? `
+            <div style="font-size:0.9rem; font-weight:700; color:#fbbf24; display:flex; align-items:center; gap:0.5rem; width:100%;">
+              <i class="fa-solid fa-circle-info" style="font-size:1.1rem;"></i> 
+              <span>กำลังเปิดดูสต็อกทุกสาขารวมกัน (โหมดอ่านอย่างเดียว) หากต้องการตรวจนับ/สแกนสินค้า กรุณาเลือกสาขาที่เจาะจงด้านบน</span>
+            </div>
+          ` : `
+            <div style="flex:1; min-width:260px;">
+              <label style="font-size:0.78rem; font-weight:700; color:var(--accent-secondary);">ช่องสแกนบาร์โค้ดรวดเร็ว (สแกน IMEI/ซีเรียลที่นี่)</label>
+              <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล แล้วกด Enter..." style="margin-top:0.3rem;" autofocus>
+            </div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">
+              <i class="fa-solid fa-circle-info" style="color:var(--accent-primary);"></i> สแกนหมายเลข IMEI เพื่อตรวจนับสินค้าคงเหลือในสาขา
+            </div>
+          `}
         </div>
       </div>
 
@@ -2539,6 +2567,7 @@ async function renderBranchAuditView() {
           <thead>
             <tr>
               <th>ชื่อสินค้า</th>
+              ${selectedBranchId === 'all' ? '<th>สาขา</th>' : ''}
               <th>หมายเลข IMEI</th>
               <th>จำนวนสินค้า</th>
               <th>จำนวนนับได้จริง</th>
@@ -2547,7 +2576,7 @@ async function renderBranchAuditView() {
             </tr>
           </thead>
           <tbody id="branch-audit-table-body">
-            ${state.expectedStockCache.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
+            ${state.expectedStockCache.length === 0 ? `<tr><td colspan="${selectedBranchId === 'all' ? 7 : 6}" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
             ${state.expectedStockCache.map((item, idx) => {
               const scannedImeis = item.scannedImeis || [];
               const actual = scannedImeis.length;
@@ -2563,6 +2592,7 @@ async function renderBranchAuditView() {
                   <td>
                     <strong style="color:#38bdf8;">${item.productName}</strong>
                   </td>
+                  ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${item.branchName || '-'}</span></td>` : ''}
                   <td>
                     <strong style="color:#fbbf24; font-family:monospace; font-size:0.95rem;">${item.imei}</strong>
                   </td>
@@ -2602,6 +2632,14 @@ async function renderBranchAuditView() {
     }
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดรายการสต็อก: ${err.message}</div>`;
+  }
+}
+
+function changeBranchAuditSelector() {
+  const selector = document.getElementById('branch-audit-selector');
+  if (selector) {
+    state.selectedBranchAuditId = selector.value;
+    renderBranchAuditView();
   }
 }
 
@@ -2819,7 +2857,11 @@ async function confirmScanWithoutPhoto(serial, matchedIdx) {
 async function submitBranchAuditFormSilent() {
   const auditDateEl = document.getElementById('branch-audit-date');
   const auditDate = auditDateEl ? auditDateEl.value : new Date().toISOString().split('T')[0];
-  const userBranchId = state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null);
+  
+  const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+  const userBranchId = isHqUser && state.selectedBranchAuditId && state.selectedBranchAuditId !== 'all'
+    ? state.selectedBranchAuditId
+    : (state.user.branch ? state.user.branch._id : (state.masterOptions.branches && state.masterOptions.branches[0] ? state.masterOptions.branches[0]._id : null));
 
   const scannedItems = state.expectedStockCache.map((item) => {
     const scannedImeis = item.scannedImeis || [];

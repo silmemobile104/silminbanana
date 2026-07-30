@@ -11,27 +11,42 @@ const getBranchExpectedStock = async (req, res, next) => {
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const existingAudit = await DailyAudit.findOne({ auditDate: todayStr, branch: branchId });
-
+    
     // Collect all scanned IMEIs and uploaded photo URLs from existing daily audit for today
     const scannedImeiSet = new Set();
     const imeiImageMap = new Map();
 
-    if (existingAudit && existingAudit.items) {
-      existingAudit.items.forEach(item => {
-        (item.scannedImeis || []).forEach(im => scannedImeiSet.add(im));
-        (item.imeiImages || []).forEach(img => {
-          const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
-          const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
-          if (img.imei && imgUrl) {
-            imeiImageMap.set(img.imei, imgUrl);
-          }
-        });
-      });
+    let existingAudits = [];
+    if (branchId === 'all') {
+      existingAudits = await DailyAudit.find({ auditDate: todayStr });
+    } else {
+      const existingAudit = await DailyAudit.findOne({ auditDate: todayStr, branch: branchId });
+      if (existingAudit) {
+        existingAudits.push(existingAudit);
+      }
     }
 
-    // Fetch all active stock items (1 per device IMEI)
-    const stocks = await Stock.find({ branch: branchId, status: 'in_stock' }).populate('product').sort({ createdAt: -1 });
+    existingAudits.forEach(audit => {
+      if (audit && audit.items) {
+        audit.items.forEach(item => {
+          (item.scannedImeis || []).forEach(im => scannedImeiSet.add(im));
+          (item.imeiImages || []).forEach(img => {
+            const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
+            const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
+            if (img.imei && imgUrl) {
+              imeiImageMap.set(img.imei, imgUrl);
+            }
+          });
+        });
+      }
+    });
+
+    // Fetch active stock items (1 per device IMEI)
+    let query = { status: 'in_stock' };
+    if (branchId !== 'all') {
+      query.branch = branchId;
+    }
+    const stocks = await Stock.find(query).populate('product').populate('branch').sort({ createdAt: -1 });
 
     const items = stocks.map(st => {
       const pName = st.product ? st.product.name : (st.productName || 'สินค้าไม่ระบุชื่อ');
@@ -43,6 +58,8 @@ const getBranchExpectedStock = async (req, res, next) => {
         stockId: st._id,
         product: st.product ? st.product._id : null,
         productName: pName,
+        branchId: st.branch ? st.branch._id : null,
+        branchName: st.branch ? st.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)',
         imei: imei || 'ไม่มี IMEI',
         expectedCount: 1,
         expectedImeis: imei ? [imei] : [],
