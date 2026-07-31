@@ -4566,6 +4566,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
   try {
     const res = await apiRequest(`/stock/receipts?status=${filterStatus}`);
     const receipts = res.receipts || [];
+    state.pendingReceiptsCache = receipts;
 
     const isHqOrPurchasing = true;
 
@@ -4681,58 +4682,119 @@ function openBatchConfirmReceiptModal() {
     return;
   }
 
-  const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
+  // Find the selected receipt objects
+  const cache = state.pendingReceiptsCache || [];
+  const selectedReceipts = cache.filter(r => selectedIds.includes(r._id));
+
+  // Group by productInfo name
+  const groupsMap = new Map();
+  selectedReceipts.forEach(r => {
+    const pInfo = r.productInfo || {};
+    const key = pInfo.name || 'สินค้าไม่ระบุชื่อ';
+    if (!groupsMap.has(key)) {
+      groupsMap.set(key, {
+        name: key,
+        productInfo: pInfo,
+        receiptIds: [],
+        purchase_price: 0,
+        selling_price: 0
+      });
+    }
+    const grp = groupsMap.get(key);
+    grp.receiptIds.push(r._id);
+    if (r.purchase_price && r.purchase_price > 0 && !grp.purchase_price) {
+      grp.purchase_price = r.purchase_price;
+    }
+    if (r.selling_price && r.selling_price > 0 && !grp.selling_price) {
+      grp.selling_price = r.selling_price;
+    }
+  });
+
+  const groups = Array.from(groupsMap.values());
+  window.currentBatchGroups = groups;
+
+  let bodyHtml = `
+    <div style="background:rgba(0,0,0,0.25); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
       <div style="font-weight:800; font-size:1rem; color:#38bdf8;">
         คุณเลือกสินค้าทั้งหมด: <span style="color:#34d399;">${selectedIds.length} รายการ (เครื่อง)</span>
       </div>
       <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">
-        ราคาทุนและราคาขายที่ระบุด้านล่างจะถูกนำไปใช้กับรายการสินค้าที่เลือกทั้งหมด
+        ระบบจัดกลุ่มสินค้าที่เหมือนกันให้โดยอัตโนมัติ (${groups.length} กลุ่ม) กรุณาระบุราคาทุนและราคาขายของแต่ละกลุ่มสินค้า
       </div>
     </div>
 
     <form id="confirm-batch-form">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-        <div class="form-group">
-          <label for="crb-pprice">กำหนดราคาทุน (บาท)</label>
-          <input type="number" id="crb-pprice" class="form-control" min="0" placeholder="0" required autofocus>
+  `;
+
+  groups.forEach((group, gIdx) => {
+    const pPriceVal = group.purchase_price > 0 ? group.purchase_price : '';
+    const sPriceVal = group.selling_price > 0 ? group.selling_price : '';
+    const safeKey = `group-${gIdx}`;
+    group.key = safeKey; // Assign unique key to group object
+
+    bodyHtml += `
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:1rem; border-radius:8px; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+          <strong style="color:#38bdf8; font-size:0.95rem;">${group.name}</strong>
+          <span class="badge badge-gold" style="font-size:0.78rem; font-weight:700;">${group.receiptIds.length} เครื่อง</span>
         </div>
-        <div class="form-group">
-          <label for="crb-sprice">กำหนดราคาขาย (บาท)</label>
-          <input type="number" id="crb-sprice" class="form-control" min="0" placeholder="0" required>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.78rem; color:var(--text-muted);">ราคาทุน (บาท)</label>
+            <input type="number" id="crb-pprice-${safeKey}" class="form-control" min="0" value="${pPriceVal}" placeholder="0" required ${gIdx === 0 ? 'autofocus' : ''}>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.78rem; color:var(--text-muted);">ราคาขาย (บาท)</label>
+            <input type="number" id="crb-sprice-${safeKey}" class="form-control" min="0" value="${sPriceVal}" placeholder="0" required>
+          </div>
         </div>
       </div>
+    `;
+  });
 
-      <div class="form-group">
-        <label for="crb-remarks">หมายเหตุการอนุมัติ (ถ้ามี)</label>
-        <textarea id="crb-remarks" class="form-control" rows="2" placeholder="ระบุหมายเหตุการกำหนดราคาแบบกลุ่ม..."></textarea>
+  bodyHtml += `
+      <div class="form-group" style="margin-top:1rem;">
+        <label for="crb-remarks">หมายเหตุการอนุมัติกลุ่ม (ถ้ามี)</label>
+        <textarea id="crb-remarks" class="form-control" rows="2" placeholder="ระบุหมายเหตุหรือข้อสังเกต..."></textarea>
       </div>
     </form>
   `;
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-success" onclick="submitBatchConfirmReceipt([${selectedIds.map(id => `'${id}'`).join(',')}])"><i class="fa-solid fa-check-double"></i> ยืนยันตั้งราคาทั้งหมด ${selectedIds.length} รายการ</button>
+    <button class="btn btn-success" onclick="submitBatchConfirmReceipt()"><i class="fa-solid fa-check-double"></i> ยืนยันตั้งราคาทั้งหมด ${groups.length} กลุ่ม</button>
   `;
 
-  openModal(`อนุมัติและตั้งราคาแบบเลือกกลุ่ม (${selectedIds.length} รายการ)`, bodyHtml, footerHtml);
+  openModal(`อนุมัติและตั้งราคาแบบเลือกกลุ่ม (${groups.length} กลุ่ม)`, bodyHtml, footerHtml);
 }
 
-async function submitBatchConfirmReceipt(receiptIds) {
-  const purchase_price = document.getElementById('crb-pprice').value;
-  const selling_price = document.getElementById('crb-sprice').value;
-  const remarks = document.getElementById('crb-remarks').value;
+async function submitBatchConfirmReceipt() {
+  const groups = window.currentBatchGroups;
+  if (!groups || groups.length === 0) return;
 
-  if (purchase_price === '' || selling_price === '') {
-    showToast('กรุณาระบุทั้งราคาทุนและราคาขาย', 'error');
-    return;
+  const remarks = document.getElementById('crb-remarks') ? document.getElementById('crb-remarks').value : '';
+
+  const items = [];
+  for (const group of groups) {
+    const pPrice = document.getElementById(`crb-pprice-${group.key}`).value;
+    const sPrice = document.getElementById(`crb-sprice-${group.key}`).value;
+
+    if (pPrice === '' || sPrice === '') {
+      showToast('กรุณาระบุราคาทุนและราคาขายให้ครบถ้วนทุกกลุ่มสินค้า', 'error');
+      return;
+    }
+
+    items.push({
+      receiptIds: group.receiptIds,
+      purchase_price: Number(pPrice),
+      selling_price: Number(sPrice)
+    });
   }
 
   try {
     const res = await apiRequest('/stock/receipts/confirm-batch', 'PUT', {
-      receiptIds,
-      purchase_price: Number(purchase_price),
-      selling_price: Number(selling_price),
+      items,
       remarks
     });
 

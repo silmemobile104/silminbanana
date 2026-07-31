@@ -326,107 +326,121 @@ const confirmGoodsReceipt = async (req, res, next) => {
 // Confirm Goods Receipts in Batch (Confirm multiple items with same prices)
 const confirmBatchGoodsReceipts = async (req, res, next) => {
   try {
-    const { receiptIds, purchase_price, selling_price, remarks } = req.body;
+    const { receiptIds, purchase_price, selling_price, remarks, items } = req.body;
 
-    if (!Array.isArray(receiptIds) || receiptIds.length === 0) {
-      return res.status(400).json({ success: false, message: 'กรุณาเลือกรายการรับสินค้าที่ต้องการยืนยัน' });
-    }
+    const batches = items || [
+      {
+        receiptIds,
+        purchase_price,
+        selling_price
+      }
+    ];
 
-    if (purchase_price === undefined || selling_price === undefined || Number(purchase_price) < 0 || Number(selling_price) < 0) {
-      return res.status(400).json({ success: false, message: 'กรุณาระบุราคาทุนและราคาขายให้ถูกต้อง' });
-    }
+    let totalConfirmed = 0;
 
-    const receipts = await GoodsReceipt.find({ _id: { $in: receiptIds }, status: 'pending_pricing' }).populate('branch');
+    for (const batch of batches) {
+      const { receiptIds: batchIds, purchase_price: batchPPrice, selling_price: batchSPrice } = batch;
 
-    if (receipts.length === 0) {
-      return res.status(400).json({ success: false, message: 'ไม่พบรายการรับสินค้าที่รอการยืนยัน' });
-    }
+      if (!Array.isArray(batchIds) || batchIds.length === 0) {
+        continue;
+      }
 
-    const pPrice = Number(purchase_price);
-    const sPrice = Number(selling_price);
+      if (batchPPrice === undefined || batchSPrice === undefined || Number(batchPPrice) < 0 || Number(batchSPrice) < 0) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุราคาทุนและราคาขายให้ถูกต้อง' });
+      }
 
-    for (const receipt of receipts) {
-      const { name, brand, model, capacity, color, category } = receipt.productInfo;
-      let finalVariation = `${capacity} ${color}`.trim() || 'มาตรฐาน';
+      const receipts = await GoodsReceipt.find({ _id: { $in: batchIds }, status: 'pending_pricing' }).populate('branch');
+      if (receipts.length === 0) {
+        continue;
+      }
 
-      let product = await Product.findOne({
-        brand: brand.trim(),
-        model: model.trim(),
-        capacity: (capacity || '').trim(),
-        color: (color || '').trim()
-      });
+      const pPrice = Number(batchPPrice);
+      const sPrice = Number(batchSPrice);
 
-      if (product) {
-        product.name = name;
-        product.purchase_price = pPrice;
-        product.selling_price = sPrice;
-        if (category) product.category = category;
-        await product.save();
-      } else {
-        product = await Product.create({
-          name,
+      for (const receipt of receipts) {
+        const { name, brand, model, capacity, color, category } = receipt.productInfo;
+        let finalVariation = `${capacity} ${color}`.trim() || 'มาตรฐาน';
+
+        let product = await Product.findOne({
           brand: brand.trim(),
           model: model.trim(),
           capacity: (capacity || '').trim(),
-          color: (color || '').trim(),
-          variation: finalVariation,
-          category: category || 'Smartphones',
-          purchase_price: pPrice,
-          selling_price: sPrice,
-          images: [],
-          hasImei: true
+          color: (color || '').trim()
         });
-      }
 
-      const targetImeis = (receipt.imeiSerials && receipt.imeiSerials.length > 0) ? receipt.imeiSerials : [];
-
-      for (const itemImei of targetImeis) {
-        const cleanImei = String(itemImei).trim();
-        let stockDoc = await Stock.findOne({ imei: cleanImei });
-        if (stockDoc) {
-          stockDoc.branch = receipt.branch._id;
-          stockDoc.product = product._id;
-          stockDoc.productName = name;
-          stockDoc.brand = brand.trim();
-          stockDoc.model = model.trim();
-          stockDoc.capacity = (capacity || '').trim();
-          stockDoc.color = (color || '').trim();
-          stockDoc.category = category || 'Smartphones';
-          stockDoc.purchase_price = pPrice;
-          stockDoc.selling_price = sPrice;
-          stockDoc.status = 'in_stock';
-          await stockDoc.save();
+        if (product) {
+          product.name = name;
+          product.purchase_price = pPrice;
+          product.selling_price = sPrice;
+          if (category) product.category = category;
+          await product.save();
         } else {
-          await Stock.create({
-            branch: receipt.branch._id,
-            product: product._id,
-            imei: cleanImei,
-            productName: name,
+          product = await Product.create({
+            name,
             brand: brand.trim(),
             model: model.trim(),
             capacity: (capacity || '').trim(),
             color: (color || '').trim(),
+            variation: finalVariation,
             category: category || 'Smartphones',
             purchase_price: pPrice,
             selling_price: sPrice,
-            status: 'in_stock',
-            import_date: new Date()
+            images: [],
+            hasImei: true
           });
         }
-      }
 
-      receipt.status = 'confirmed';
-      receipt.purchase_price = pPrice;
-      receipt.selling_price = sPrice;
-      receipt.confirmedBy = req.user._id;
-      receipt.confirmedAt = new Date();
-      if (remarks) receipt.remarks = remarks.trim();
-      await receipt.save();
+        const targetImeis = (receipt.imeiSerials && receipt.imeiSerials.length > 0) ? receipt.imeiSerials : [];
+
+        for (const itemImei of targetImeis) {
+          const cleanImei = String(itemImei).trim();
+          let stockDoc = await Stock.findOne({ imei: cleanImei });
+          if (stockDoc) {
+            stockDoc.branch = receipt.branch._id;
+            stockDoc.product = product._id;
+            stockDoc.productName = name;
+            stockDoc.brand = brand.trim();
+            stockDoc.model = model.trim();
+            stockDoc.capacity = (capacity || '').trim();
+            stockDoc.color = (color || '').trim();
+            stockDoc.category = category || 'Smartphones';
+            stockDoc.purchase_price = pPrice;
+            stockDoc.selling_price = sPrice;
+            stockDoc.status = 'in_stock';
+            await stockDoc.save();
+          } else {
+            await Stock.create({
+              branch: receipt.branch._id,
+              product: product._id,
+              imei: cleanImei,
+              productName: name,
+              brand: brand.trim(),
+              model: model.trim(),
+              capacity: (capacity || '').trim(),
+              color: (color || '').trim(),
+              category: category || 'Smartphones',
+              purchase_price: pPrice,
+              selling_price: sPrice,
+              status: 'in_stock',
+              import_date: new Date()
+            });
+          }
+        }
+
+        receipt.status = 'confirmed';
+        receipt.purchase_price = pPrice;
+        receipt.selling_price = sPrice;
+        receipt.confirmedBy = req.user._id;
+        receipt.confirmedAt = new Date();
+        if (remarks) receipt.remarks = remarks.trim();
+        await receipt.save();
+        totalConfirmed++;
+      }
     }
 
     res.json({
       success: true,
-      message: `ยืนยันและตั้งราคาสินค้าสำเร็จจำนวน ${receipts.length} รายการ สินค้าพร้อมขายหน้าร้านเรียบร้อยแล้ว`
+      message: `ยืนยันและตั้งราคาสินค้าสำเร็จจำนวน ${totalConfirmed} รายการ สินค้าพร้อมขายหน้าร้านเรียบร้อยแล้ว`
     });
   } catch (err) {
     next(err);
