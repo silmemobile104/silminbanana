@@ -10,6 +10,7 @@ router.get('/history', authenticateToken, posController.getSalesHistory);
 router.get('/finance-report', authenticateToken, posController.getFinanceProfitReport);
 router.put('/finance-payout/:id', authenticateToken, posController.updateFinancePayoutStatus);
 router.put('/return-cost/:saleId', authenticateToken, posController.returnCostToHq);
+router.put('/void/:id', authenticateToken, posController.voidSale);
 router.get('/executive-dashboard', authenticateToken, posController.getExecutiveDashboard);
 router.get('/executive-report', authenticateToken, posController.getExecutiveReportRange);
 

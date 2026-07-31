@@ -452,7 +452,18 @@ const getMyBranchStock = async (req, res, next) => {
   try {
     let targetBranchId = req.query.branchId;
 
-    if (req.user.role === 'branch_staff' || !targetBranchId) {
+    const isHqUser = !req.user.branch || req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || isHqUser;
+
+    if (!targetBranchId) {
+      if (isAdminOrHq) {
+        targetBranchId = 'all';
+      } else if (req.user.branch) {
+        targetBranchId = req.user.branch._id || req.user.branch;
+      }
+    }
+
+    if (!isAdminOrHq) {
       if (req.user.branch) {
         targetBranchId = req.user.branch._id || req.user.branch;
       }
@@ -460,15 +471,19 @@ const getMyBranchStock = async (req, res, next) => {
 
     if (!targetBranchId) {
       const firstBranch = await Branch.findOne({ isActive: true });
-      targetBranchId = firstBranch ? firstBranch._id : null;
+      targetBranchId = firstBranch ? firstBranch._id : 'all';
     }
 
-    if (!targetBranchId) {
-      return res.status(400).json({ success: false, message: 'ไม่พบข้อมูลสาขาที่สังกัด' });
-    }
+    let branch;
+    let stockList;
 
-    const branch = await Branch.findById(targetBranchId);
-    const stockList = await Stock.find({ branch: targetBranchId }).populate('product branch');
+    if (targetBranchId === 'all') {
+      branch = { _id: 'all', name: 'ทุกสาขา' };
+      stockList = await Stock.find().populate('product branch');
+    } else {
+      branch = await Branch.findById(targetBranchId);
+      stockList = await Stock.find({ branch: targetBranchId }).populate('product branch');
+    }
 
     res.json({
       success: true,

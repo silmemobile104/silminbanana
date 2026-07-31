@@ -25,7 +25,7 @@ const ROLE_ALLOWED_VIEWS = {
 const ALL_SYSTEM_MENUS = [
   'dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit',
   'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers',
-  'master-settings', 'branches', 'employees', 'roles-permissions', 'edit-branch-inventory', 'system-logs'
+  'master-settings', 'branches', 'employees', 'roles-permissions', 'edit-branch-inventory', 'system-logs', 'sales-history', 'void-sale'
 ];
 
 function getUserAllowedMenus(userRole) {
@@ -282,6 +282,11 @@ function navigateTo(viewName) {
       heading.innerText = 'ประวัติกิจกรรมระบบ (System Audit Logs)';
       subheading.innerText = 'ประวัติการดำเนินกิจกรรมที่สำคัญทั้งหมดในระบบ เช่น การขายสินค้า การโอนย้าย และการแก้ไขข้อมูลสินค้า';
       renderSystemLogsView();
+      break;
+    case 'sales-history':
+      heading.innerText = 'ประวัติการขายสินค้า';
+      subheading.innerText = 'ประวัติการขายสินค้าและออกใบเสร็จย้อนหลังแยกตามสาขา';
+      renderSalesHistoryView();
       break;
   }
 }
@@ -859,13 +864,20 @@ async function renderBranchInventoryView(selectedBranchId = null) {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
 
   try {
-    const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+
+    let branchIdParam = selectedBranchId;
+    if (isAdminOrHq && branchIdParam === null) {
+      branchIdParam = 'all';
+    }
+
+    const queryParam = branchIdParam ? `?branchId=${branchIdParam}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
     const activeStockList = (res.stock || []).filter(st => st.status === 'in_stock');
     state.branchStockCache = res.stock || [];
-    const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
+    const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
 
-    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin'));
     const canEdit = getUserAllowedMenus().includes('edit-branch-inventory');
 
     container.innerHTML = `
@@ -874,7 +886,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
           <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้าพร้อมขายรายชิ้น (1 เครื่อง 1 IMEI) ในสาขานี้เท่านั้น (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
+          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้าพร้อมขายรายชิ้น (1 เครื่อง 1 IMEI) (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -883,6 +895,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
               <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value)">
+                <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
             </div>
@@ -900,13 +913,14 @@ async function renderBranchInventoryView(selectedBranchId = null) {
               <th>รายการสินค้า</th>
               <th>ยี่ห้อ / ชื่อรุ่น</th>
               <th>ความจุ / สีสินค้า</th>
+              ${currentBranch._id === 'all' ? '<th>สาขา</th>' : ''}
               <th>ราคาขาย</th>
               <th style="text-align:center;">สถานะสต็อก</th>
               ${canEdit ? `<th style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
-            ${activeStockList.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าคงเหลือในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าคงเหลือในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
               const p = st.product || {};
               const imeiStr = st.imei;
@@ -923,6 +937,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
                   <td><strong>${prodName}</strong></td>
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
+                  ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
                   <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
                     <span class="badge badge-${st.status === 'in_stock' ? 'green' : st.status === 'in_transit' ? 'yellow' : 'gray'}">
@@ -968,12 +983,18 @@ async function renderPosView(selectedBranchId = null) {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดระบบขายสินค้า POS...</div>`;
 
   try {
-    const queryParam = selectedBranchId ? `?branchId=${selectedBranchId}` : '';
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+
+    let branchIdParam = selectedBranchId;
+    if (isAdminOrHq && branchIdParam === null) {
+      branchIdParam = 'all';
+    }
+
+    const queryParam = branchIdParam ? `?branchId=${branchIdParam}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
     const stockList = (res.stock || []).filter(st => st.status === 'in_stock');
-    const currentBranch = res.branch || { name: 'สาขาประจำของคุณ' };
-
-    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin'));
+    const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
 
     container.innerHTML = `
       <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:1.2rem; align-items:start;">
@@ -992,6 +1013,7 @@ async function renderPosView(selectedBranchId = null) {
                 <div style="display:flex; align-items:center; gap:0.4rem;">
                   <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
                   <select class="form-select" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;" onchange="renderPosView(this.value)">
+                    <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                     ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
                   </select>
                 </div>
@@ -1039,6 +1061,7 @@ async function renderPosView(selectedBranchId = null) {
                         <td>
                           <strong>${productName}</strong><br>
                           <span style="font-size:0.75rem; color:var(--text-muted);">${brandStr} ${specStr ? '• ' + specStr : ''}</span>
+                          ${currentBranch._id === 'all' && st.branch ? `<br><span style="font-size:0.72rem; color:#a5b4fc; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:3px;">📍 ${st.branch.name || 'ไม่ระบุสาขา'}</span>` : ''}
                         </td>
                         <td><strong style="color:#fbbf24; font-family:monospace; font-size:0.92rem;">${imei}</strong></td>
                         <td><strong style="color:#34d399;">฿${sellingPrice.toLocaleString()}</strong></td>
@@ -1111,7 +1134,6 @@ async function renderPosView(selectedBranchId = null) {
               <select id="pos-payment-method" class="form-select" onchange="toggleCashReceivedField(this.value)">
                 <option value="cash">เงินสด (Cash)</option>
                 <option value="transfer">โอนเงิน / สแกน QR Code (Bank Transfer)</option>
-                <option value="credit_card">บัตรเครดิต (Credit Card)</option>
                 <option value="finance">ผ่อน / จัดไฟแนนซ์ (Financing)</option>
               </select>
             </div>
@@ -1348,7 +1370,7 @@ async function submitPosCheckout(branchId) {
     if (res.success && res.sale) {
       showToast(res.message);
       state.posCart = [];
-      openReceiptVoucherModal(res.sale);
+      openSelectReceiptTypeModal(res.sale);
       renderPosView(branchId);
     }
   } catch (err) {
@@ -1433,17 +1455,7 @@ function openReceiptVoucherModal(sale) {
           <span>ยอดชำระสุทธิ (Total):</span>
           <span>฿${(sale.grandTotal || 0).toLocaleString()}</span>
         </div>
-        <div style="border-top:1px dotted #888; margin-top:0.4rem; padding-top:0.4rem; font-size:0.76rem; color:#555;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-            <span>มูลค่าก่อนภาษี (Taxable Value):</span>
-            <span>฿${((sale.grandTotal || 0) / 1.07).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-            <span>ภาษีมูลค่าเพิ่ม 7% (VAT 7%):</span>
-            <span>฿${((sale.grandTotal || 0) - ((sale.grandTotal || 0) / 1.07)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-top:0.4rem; font-size:0.78rem; color:#444;">
+        <div style="display:flex; justify-content:space-between; margin-top:0.6rem; font-size:0.78rem; color:#444;">
           <span>ชำระโดย: <strong>${sale.paymentMethod === 'cash' ? 'เงินสด (Cash)' : sale.paymentMethod === 'transfer' ? 'โอนเงิน / QR' : sale.paymentMethod === 'credit_card' ? 'บัตรเครดิต' : 'จัดไฟแนนซ์ (' + (sale.financeDetails ? sale.financeDetails.companyName : 'ไฟแนนซ์') + ')'}</strong></span>
           <span>${sale.paymentMethod === 'finance' ? 'รอรับเงินไฟแนนซ์' : 'รับเงิน: ฿' + (sale.receivedAmount || 0).toLocaleString() + ' | เงินทอน: ฿' + (sale.changeAmount || 0).toLocaleString()}</span>
         </div>
@@ -1463,6 +1475,361 @@ function openReceiptVoucherModal(sale) {
   `;
 
   openModal(`ใบเสร็จรับเงิน: ${sale.receiptNumber}`, bodyHtml, footerHtml);
+}
+
+/* Helper function to convert number to Thai Baht text */
+function thaiBahtText(num) {
+  if (isNaN(num) || num === null || num === undefined) return '';
+  num = parseFloat(num);
+  if (num === 0) return 'ศูนย์บาทถ้วน';
+
+  const digitWords = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+  const unitWords = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+
+  let [baht, satang] = num.toFixed(2).split('.');
+  let bahtText = '';
+
+  const convertGroup = (groupStr) => {
+    let text = '';
+    const len = groupStr.length;
+    for (let i = 0; i < len; i++) {
+      const digit = parseInt(groupStr[i]);
+      const pos = len - i - 1;
+      if (digit !== 0) {
+        if (pos === 0 && digit === 1 && len > 1) {
+          text += 'เอ็ด';
+        } else if (pos === 1 && digit === 1) {
+          text += 'สิบ';
+        } else if (pos === 1 && digit === 2) {
+          text += 'ยี่สิบ';
+        } else {
+          text += digitWords[digit] + unitWords[pos];
+        }
+      }
+    }
+    return text;
+  };
+
+  let bahtVal = parseInt(baht);
+  if (bahtVal === 0) {
+    bahtText = 'ศูนย์';
+  } else {
+    let bahtGroups = [];
+    while (baht.length > 6) {
+      bahtGroups.unshift(baht.slice(-6));
+      baht = baht.slice(0, -6);
+    }
+    bahtGroups.unshift(baht);
+
+    bahtText = bahtGroups.map((g, idx) => {
+      let gText = convertGroup(g);
+      if (gText && idx < bahtGroups.length - 1) {
+        gText += 'ล้าน';
+      }
+      return gText;
+    }).join('');
+  }
+
+  let text = bahtText + 'บาท';
+
+  let satangVal = parseInt(satang);
+  if (satangVal === 0) {
+    text += 'ถ้วน';
+  } else {
+    text += convertGroup(satang) + 'สตางค์';
+  }
+
+  return text;
+}
+
+function openSelectReceiptTypeModal(sale) {
+  window.currentReceiptSale = sale;
+  const bodyHtml = `
+    <div style="background:rgba(0,0,0,0.25); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
+      <div style="font-weight:800; font-size:1.05rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
+        <i class="fa-solid fa-circle-check" style="color:#34d399;"></i> บันทึกการขายสำเร็จ: ${sale.receiptNumber}
+      </div>
+      <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.3rem;">
+        กรุณาเลือกรูปแบบเอกสารที่ต้องการพิมพ์ออกเครื่องพิมพ์หรือดาวน์โหลด
+      </div>
+    </div>
+
+    <form id="select-receipt-type-form">
+      <div class="form-group">
+        <label style="font-weight:700; margin-bottom:0.5rem; display:block;">รูปแบบเอกสาร:</label>
+        
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.8rem 1rem; border-radius:6px; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-abbreviated').checked = true">
+          <input type="radio" id="r-type-abbreviated" name="receiptType" value="abbreviated" checked style="transform:scale(1.2);">
+          <div>
+            <strong style="color:#fff; font-size:0.9rem;">ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ</strong>
+            <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์ใบเสร็จย่อหน้ากว้าง 58-80mm สำหรับลูกค้าทั่วไป (ไม่แสดงคำนวณ VAT)</div>
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.8rem 1rem; border-radius:6px; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-full').checked = true">
+          <input type="radio" id="r-type-full" name="receiptType" value="full" style="transform:scale(1.2);">
+          <div>
+            <strong style="color:#38bdf8; font-size:0.9rem;">ใบกำกับภาษีเต็มรูปแบบ (Full Tax Invoice)</strong>
+            <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์เอกสารขนาด A4 แสดงข้อมูลผู้เสียภาษีของลูกค้าและการแยกภาษีมูลค่าเพิ่ม 7%</div>
+          </div>
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ปิด</button>
+    <button class="btn btn-success" onclick="handleSelectReceiptType()"><i class="fa-solid fa-arrow-right"></i> ดำเนินการต่อ</button>
+  `;
+
+  openModal(`เลือกรูปแบบเอกสารการขาย`, bodyHtml, footerHtml);
+}
+
+function handleSelectReceiptType() {
+  const sale = window.currentReceiptSale;
+  if (!sale) return;
+
+  const isFull = document.getElementById('r-type-full') ? document.getElementById('r-type-full').checked : false;
+  if (isFull) {
+    openFullTaxInvoiceDetailsModal(sale);
+  } else {
+    openReceiptVoucherModal(sale);
+  }
+}
+
+function openFullTaxInvoiceDetailsModal(sale) {
+  const customer = sale.customer || {};
+  
+  const bodyHtml = `
+    <div style="background:rgba(0,0,0,0.25); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
+      <div style="font-weight:700; font-size:0.95rem; color:#38bdf8;">
+        <i class="fa-solid fa-file-invoice"></i> กรอกข้อมูลผู้เสียภาษี (สำหรับใบกำกับภาษีเต็มรูปแบบ)
+      </div>
+      <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.2rem;">
+        ระบุข้อมูลชื่อ ที่อยู่ และเลขผู้เสียภาษีให้ถูกต้องเพื่อพิมพ์เอกสารขนาด A4
+      </div>
+    </div>
+
+    <form id="full-tax-details-form" onsubmit="event.preventDefault(); submitFullTaxInvoice();">
+      <div class="form-group">
+        <label for="tax-name">ชื่อผู้ซื้อสินค้า / ชื่อบริษัท <span style="color:#ef4444;">*</span></label>
+        <input type="text" id="tax-name" class="form-control" value="${customer.name || ''}" placeholder="เช่น นายสมชาย ดีมาก หรือ บริษัท กขค จำกัด" required autofocus>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 2.5fr 1fr; gap:0.8rem;">
+        <div class="form-group">
+          <label for="tax-id">เลขประจำตัวผู้เสียภาษี (13 หลัก) <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="tax-id" class="form-control" maxlength="13" placeholder="ระบุเลขประจำตัวผู้เสียภาษี 13 หลัก" required>
+        </div>
+        <div class="form-group">
+          <label for="tax-branch">สาขา <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="tax-branch" class="form-control" value="สำนักงานใหญ่" placeholder="เช่น สำนักงานใหญ่ หรือ 00001" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="tax-address">ที่อยู่ตามใบกำกับภาษี <span style="color:#ef4444;">*</span></label>
+        <textarea id="tax-address" class="form-control" rows="3" placeholder="ระบุเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์..." required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="tax-phone">เบอร์โทรศัพท์ (ถ้ามี)</label>
+        <input type="text" id="tax-phone" class="form-control" value="${customer.phone || ''}" placeholder="ระบุเบอร์โทรศัพท์">
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="openSelectReceiptTypeModal(window.currentReceiptSale)">ย้อนกลับ</button>
+    <button class="btn btn-success" onclick="submitFullTaxInvoice()"><i class="fa-solid fa-print"></i> ออกใบกำกับภาษีเต็มรูปแบบ</button>
+  `;
+
+  openModal(`กรอกข้อมูลใบกำกับภาษีเต็มรูปแบบ`, bodyHtml, footerHtml);
+}
+
+function submitFullTaxInvoice() {
+  const sale = window.currentReceiptSale;
+  if (!sale) return;
+
+  const taxName = document.getElementById('tax-name').value.trim();
+  const taxId = document.getElementById('tax-id').value.trim();
+  const taxBranch = document.getElementById('tax-branch').value.trim();
+  const taxAddress = document.getElementById('tax-address').value.trim();
+  const taxPhone = document.getElementById('tax-phone').value.trim();
+
+  if (!taxName || !taxId || !taxBranch || !taxAddress) {
+    showToast('กรุณากรอกข้อมูลที่จำเป็น (*) ให้ครบถ้วน', 'error');
+    return;
+  }
+
+  if (taxId.length !== 13 || isNaN(taxId)) {
+    showToast('เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลักเท่านั้น', 'error');
+    return;
+  }
+
+  const taxDetails = {
+    name: taxName,
+    taxId,
+    branch: taxBranch,
+    address: taxAddress,
+    phone: taxPhone
+  };
+
+  openFullTaxInvoiceModal(sale, taxDetails);
+}
+
+function openFullTaxInvoiceModal(sale, tax) {
+  const branch = sale.branch || {};
+  const seller = sale.soldBy || {};
+  const items = sale.items || [];
+  
+  const subtotal = sale.grandTotal || 0;
+  const taxableVal = subtotal / 1.07;
+  const vatVal = subtotal - taxableVal;
+  const thaiText = thaiBahtText(subtotal);
+
+  const bodyHtml = `
+    <div id="printable-full-invoice" class="printable-area" style="background:#fff; color:#000; padding:2rem; font-family:'Sarabun','Prompt',sans-serif; max-width:800px; margin:0 auto; box-shadow:0 0 10px rgba(0,0,0,0.15); border:1px solid #ddd; line-height:1.4;">
+      <!-- Title Section -->
+      <div style="display:flex; justify-content:space-between; align-items:start; border-bottom:2px solid #000; padding-bottom:1rem; margin-bottom:1.2rem;">
+        <div>
+          <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.4rem;">
+            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:50px; width:50px; object-fit:contain;">
+            <div>
+              <h1 style="font-size:1.6rem; font-weight:900; margin:0; color:#000;">SILMIN BANANA</h1>
+              <span style="font-size:0.72rem; color:#444;">บริษัท ซิลมิน บานาน่า จำกัด (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
+            </div>
+          </div>
+          <div style="font-size:0.8rem; color:#333;">
+            ที่อยู่: ${branch.address || '101 อาคารสีลมทาวเวอร์ ถนนสีลม แขวงสีลม เขตบางรัก กรุงเทพฯ 10500'}<br>
+            โทรศัพท์: ${branch.phone || '02-111-2222'} | เลขประจำตัวผู้เสียภาษีอากร: <strong>0105560000000</strong>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <h2 style="font-size:1.3rem; font-weight:800; margin:0; color:#000; letter-spacing:0.5px;">ใบกำกับภาษี / ใบเสร็จรับเงิน</h2>
+          <span style="font-size:0.8rem; font-weight:700; color:#333;">(TAX INVOICE / RECEIPT)</span>
+          <div style="margin-top:0.6rem; font-size:0.82rem; text-align:left; border:1px solid #000; padding:0.4rem; border-radius:4px; background:#fafafa;">
+            <div><strong>เลขที่เอกสาร:</strong> ${sale.receiptNumber}</div>
+            <div><strong>วันที่:</strong> ${new Date(sale.createdAt || Date.now()).toLocaleDateString('th-TH')}</div>
+            <div><strong>พนักงานขาย:</strong> ${seller.fullName || seller.username || 'Staff'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Details Section -->
+      <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1.5rem; margin-bottom:1.5rem; border:1px solid #000; border-radius:6px; padding:0.8rem; background:#fff; font-size:0.85rem;">
+        <div>
+          <div style="font-weight:800; border-bottom:1px solid #eee; padding-bottom:0.2rem; margin-bottom:0.4rem; color:#000; font-size:0.9rem;">
+            ข้อมูลผู้ซื้อสินค้า / Customer Details
+          </div>
+          <div><strong>ชื่อผู้เสียภาษี:</strong> ${tax.name}</div>
+          <div style="margin-top:0.25rem;"><strong>ที่อยู่:</strong> ${tax.address}</div>
+          <div style="margin-top:0.25rem;"><strong>เบอร์โทรศัพท์:</strong> ${tax.phone || '-'}</div>
+        </div>
+        <div style="border-left:1px solid #eee; padding-left:1rem;">
+          <div style="font-weight:800; border-bottom:1px solid #eee; padding-bottom:0.2rem; margin-bottom:0.4rem; color:#000; font-size:0.9rem;">
+            รายละเอียดทางภาษี
+          </div>
+          <div><strong>เลขประจำตัวผู้เสียภาษี:</strong> <span style="font-family:monospace; font-weight:700; font-size:0.95rem;">${tax.taxId}</span></div>
+          <div style="margin-top:0.3rem;"><strong>สาขาผู้เสียภาษี:</strong> ${tax.branch}</div>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.2rem; color:#000;">
+        <thead>
+          <tr style="background:#f1f5f9; border:1px solid #000; text-align:left;">
+            <th style="padding:8px; border-right:1px solid #ddd; width:45px; text-align:center;">ลำดับ</th>
+            <th style="padding:8px; border-right:1px solid #ddd;">ชื่อรายการสินค้า / สเปกเครื่อง (Product Description)</th>
+            <th style="padding:8px; border-right:1px solid #ddd; width:55px; text-align:center;">จำนวน</th>
+            <th style="padding:8px; border-right:1px solid #ddd; width:110px; text-align:right;">ราคาต่อหน่วย</th>
+            <th style="padding:8px; width:110px; text-align:right;">จำนวนเงิน (บาท)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((i, idx) => `
+            <tr style="border-bottom:1px solid #ddd; border-left:1px solid #000; border-right:1px solid #000;">
+              <td style="padding:8px; border-right:1px solid #ddd; text-align:center;">${idx + 1}</td>
+              <td style="padding:8px; border-right:1px solid #ddd;">
+                <strong style="color:#000;">${i.productName}</strong><br>
+                <span style="font-size:0.75rem; color:#444;">หมายเลขเครื่อง (IMEI): ${i.imei}</span>
+              </td>
+              <td style="padding:8px; border-right:1px solid #ddd; text-align:center; vertical-align:top;">${i.quantity}</td>
+              <td style="padding:8px; border-right:1px solid #ddd; text-align:right; vertical-align:top;">฿${i.unitPrice.toLocaleString()}</td>
+              <td style="padding:8px; text-align:right; vertical-align:top; font-weight:700;">฿${i.totalPrice.toLocaleString()}</td>
+            </tr>
+          `).join('')}
+          <!-- Empty spacers to keep invoice structured -->
+          ${items.length < 3 ? Array.from({ length: 3 - items.length }).map((_, sIdx) => `
+            <tr style="border-bottom:1px solid #ddd; border-left:1px solid #000; border-right:1px solid #000; height:35px;">
+              <td style="border-right:1px solid #ddd;"></td>
+              <td style="border-right:1px solid #ddd;"></td>
+              <td style="border-right:1px solid #ddd;"></td>
+              <td style="border-right:1px solid #ddd;"></td>
+              <td></td>
+            </tr>
+          `).join('') : ''}
+        </tbody>
+      </table>
+
+      <!-- Grand Calculations Grid -->
+      <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1rem; font-size:0.85rem; color:#000; margin-bottom:1.5rem;">
+        <div style="border:1px solid #000; padding:0.8rem; border-radius:6px; display:flex; align-items:center; justify-content:center; background:#fafafa;">
+          <div style="text-align:center;">
+            <div style="font-size:0.75rem; color:#555; margin-bottom:0.2rem;">จำนวนเงินตัวอักษร / Total Baht Text</div>
+            <strong style="font-size:0.95rem; color:#000;">(${thaiText})</strong>
+          </div>
+        </div>
+
+        <div style="border:1px solid #000; border-radius:6px; padding:0.6rem 0.8rem; background:#fff; font-size:0.82rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+            <span>ยอดรวมก่อนหักส่วนลด:</span>
+            <span>฿${(sale.subtotal || 0).toLocaleString()}</span>
+          </div>
+          ${sale.discountTotal > 0 ? `
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem; color:#dc2626;">
+              <span>ส่วนลดพิเศษ:</span>
+              <span>-฿${sale.discountTotal.toLocaleString()}</span>
+            </div>
+          ` : ''}
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem; border-top:1px dotted #ccc; padding-top:0.3rem;">
+            <span>มูลค่าก่อนภาษี (7% VAT Excluded):</span>
+            <span>฿${taxableVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+            <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
+            <span>฿${vatVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; border-top:1px solid #000; padding-top:0.4rem; margin-top:0.2rem;">
+            <span>ยอดชำระสุทธิ (Grand Total):</span>
+            <span>฿${subtotal.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment details & Warranty notice -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; font-size:0.75rem; border-top:1px solid #ccc; padding-top:0.8rem; color:#555;">
+        <div>
+          <strong>เงื่อนไขการชำระเงินและการรับประกัน:</strong>
+          <ul style="margin:0.2rem 0 0 1rem; padding:0; line-height:1.3;">
+            <li>ชำระเงินเรียบร้อยแล้วโดยวิธี: <strong>${sale.paymentMethod === 'cash' ? 'เงินสด (Cash)' : sale.paymentMethod === 'transfer' ? 'โอนเงิน / QR' : sale.paymentMethod === 'credit_card' ? 'บัตรเครดิต' : 'จัดไฟแนนซ์ (' + (sale.financeDetails ? sale.financeDetails.companyName : 'ไฟแนนซ์') + ')'}</strong></li>
+            <li>สินค้าไอทีและสมาร์ทโฟน มีการรับประกันตามเงื่อนไขอย่างเป็นทางการของบริษัท</li>
+          </ul>
+        </div>
+        <div style="text-align:right; font-size:0.75rem;">
+          เจ้าหน้าที่ผู้ดำเนินการ: ____________________________<br>
+          <span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:0.2rem;">(${seller.fullName || seller.username || 'ผู้ดำเนินการขาย'})</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="openFullTaxInvoiceDetailsModal(window.currentReceiptSale)">ย้อนกลับ</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบกำกับภาษี</button>
+  `;
+
+  openModal(`ใบกำกับภาษีเต็มรูปแบบ: ${sale.receiptNumber}`, bodyHtml, footerHtml);
 }
 
 /* ==========================================================================
@@ -2891,7 +3258,7 @@ async function submitBranchAuditFormSilent() {
 /* ==========================================================================
    VIEW: BRANCH PURCHASE ORDERS (สั่งซื้อสินค้าลงสาขา)
    ========================================================================== */
-async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
+async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScroll = false) {
   const container = document.getElementById('content-container');
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการสั่งซื้อสินค้าลงสาขาและแดชบอร์ดฝ่ายจัดซื้อ...</div>`;
 
@@ -3035,7 +3402,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
                     <button class="btn btn-primary btn-sm" style="flex:1; font-size:0.8rem; font-weight:700;" onclick="openCreatePurchaseOrderModal('${b._id}')">
                       <i class="fa-solid fa-cart-plus"></i> + สั่งซื้อลงสาขานี้
                     </button>
-                    <button class="btn btn-secondary btn-sm" style="font-size:0.8rem; font-weight:700;" onclick="renderBranchPurchaseOrdersView('${b._id}')">
+                    <button class="btn btn-secondary btn-sm" style="font-size:0.8rem; font-weight:700;" onclick="renderBranchPurchaseOrdersView('${b._id}', true)">
                       <i class="fa-solid fa-list-check"></i> ดูใบสั่งซื้อ
                     </button>
                   </div>
@@ -3047,7 +3414,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
       ` : ''}
 
       <!-- Action Bar & Filter -->
-      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <div id="po-list-section" class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-cart-flatbed" style="color:var(--accent-primary);"></i> รายการใบสั่งซื้อสินค้าลงสาขา (${displayedOrders.length} รายการ)
@@ -3135,6 +3502,15 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null) {
         </table>
       </div>
     `;
+
+    if (shouldScroll) {
+      setTimeout(() => {
+        const el = document.getElementById('po-list-section');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดใบสั่งซื้อ: ${err.message}</div>`;
   }
@@ -6945,10 +7321,197 @@ async function submitCostReturn(saleId) {
 }
 
 
+async function renderSalesHistoryView(selectedBranchId = null, filterStatus = '') {
+  const container = document.getElementById('content-container');
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดประวัติการขายสินค้า...</div>`;
+
+  try {
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+    const hasVoidPermission = (state.user && state.user.role === 'admin') || (state.user && Array.isArray(state.user.allowedMenus) && state.user.allowedMenus.includes('void-sale'));
+
+    let branchIdParam = selectedBranchId;
+    if (isAdminOrHq && branchIdParam === null) {
+      branchIdParam = 'all';
+    }
+
+    const queryParams = new URLSearchParams();
+    if (branchIdParam && branchIdParam !== 'all') {
+      queryParams.append('branchId', branchIdParam);
+    }
+    if (filterStatus) {
+      queryParams.append('status', filterStatus);
+    }
+
+    const res = await apiRequest(`/pos/history?${queryParams.toString()}`);
+    const sales = res.sales || [];
+    state.salesCache = sales;
+
+    const currentBranchName = branchIdParam === 'all' ? 'ทุกสาขา' : 
+      (state.masterOptions.branches && state.masterOptions.branches.find(b => b._id === branchIdParam) ? state.masterOptions.branches.find(b => b._id === branchIdParam).name : 'สาขาของคุณ');
+
+    container.innerHTML = `
+      <!-- Filter Bar -->
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);"></i> ประวัติการขายสินค้า: ${currentBranchName}
+          </h3>
+          <p style="font-size:0.85rem; color:var(--text-muted);">รายการประวัติบิลขายและใบเสร็จรับเงินทั้งหมด (รวม ${sales.length} รายการ)</p>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+          ${isAdminOrHq ? `
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">เลือกสาขา:</label>
+              <select id="sh-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView(this.value, document.getElementById('sh-status-select').value)">
+                <option value="all" ${branchIdParam === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
+                ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${branchIdParam === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
+              </select>
+            </div>
+          ` : ''}
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">สถานะบิล:</label>
+            <select id="sh-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', this.value)">
+              <option value="" ${filterStatus === '' ? 'selected' : ''}>-- ทุกสถานะ --</option>
+              <option value="completed" ${filterStatus === 'completed' ? 'selected' : ''}>ทำรายการสำเร็จ</option>
+              <option value="voided" ${filterStatus === 'voided' ? 'selected' : ''}>ยกเลิกบิลแล้ว</option>
+            </select>
+          </div>
+          <input type="text" id="sh-search-input" class="form-control" placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, IMEI..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSalesHistoryTable()">
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-container">
+        <table class="data-table" id="sh-table">
+          <thead>
+            <tr>
+              <th style="width:50px; text-align:center;">#</th>
+              <th>เลขที่ใบเสร็จ</th>
+              <th>วันที่ / เวลา</th>
+              ${branchIdParam === 'all' ? '<th>สาขา</th>' : ''}
+              <th>ลูกค้า</th>
+              <th>ยอดเงินสุทธิ</th>
+              <th>ชำระโดย</th>
+              <th>ผู้ขาย</th>
+              <th style="text-align:center;">สถานะ</th>
+              <th style="text-align:center;">ดำเนินการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sales.length === 0 ? `<tr><td colspan="${branchIdParam === 'all' ? 10 : 9}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลประวัติการขายสินค้า</td></tr>` : ''}
+            ${sales.map((sale, idx) => {
+              const customer = sale.customer || {};
+              const seller = sale.soldBy || {};
+              const branch = sale.branch || {};
+              const formattedDate = new Date(sale.createdAt).toLocaleDateString('th-TH') + ' ' + new Date(sale.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+
+              let payMethodText = '-';
+              if (sale.paymentMethod === 'cash') payMethodText = 'เงินสด';
+              else if (sale.paymentMethod === 'transfer') payMethodText = 'โอนเงิน';
+              else if (sale.paymentMethod === 'credit_card') payMethodText = 'บัตรเครดิต';
+              else if (sale.paymentMethod === 'finance') payMethodText = `จัดไฟแนนซ์ (${sale.financeDetails ? sale.financeDetails.companyName : ''})`;
+
+              return `
+                <tr class="sh-row" data-search="${(sale.receiptNumber + ' ' + (customer.name || '') + ' ' + (customer.phone || '') + ' ' + (sale.items ? sale.items.map(item => item.imei).join(' ') : '')).toLowerCase()}">
+                  <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
+                  <td><strong style="color:#38bdf8; font-family:monospace;">${sale.receiptNumber}</strong></td>
+                  <td><span style="font-size:0.82rem;">${formattedDate}</span></td>
+                  ${branchIdParam === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${branch.name || '-'}</span></td>` : ''}
+                  <td>
+                    <strong>${customer.name || 'ลูกค้าทั่วไป'}</strong>
+                    ${customer.phone && customer.phone !== '-' ? `<br><span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone"></i> ${customer.phone}</span>` : ''}
+                  </td>
+                  <td><strong style="color:#34d399;">฿${(sale.grandTotal || 0).toLocaleString()}</strong></td>
+                  <td><span style="font-size:0.82rem;">${payMethodText}</span></td>
+                  <td><span style="font-size:0.82rem;">${seller.fullName || seller.username || 'Staff'}</span></td>
+                  <td style="text-align:center;">
+                    <span class="badge badge-${sale.status === 'completed' ? 'green' : 'red'}">
+                      ${sale.status === 'completed' ? 'สำเร็จ' : 'ยกเลิกบิล'}
+                    </span>
+                  </td>
+                  <td style="text-align:center; white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="reprintReceiptVoucher(${idx})">
+                      <i class="fa-solid fa-print"></i> พิมพ์บิล
+                    </button>
+                    ${sale.status === 'completed' && hasVoidPermission ? `
+                      <button class="btn btn-danger btn-sm" style="margin-left: 0.35rem;" onclick="voidSaleAction('${sale._id}', '${sale.receiptNumber}')">
+                        <i class="fa-solid fa-ban"></i> ยกเลิกบิล
+                      </button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดประวัติการขายสินค้า: ${err.message}</div>`;
+  }
+}
+
+function voidSaleAction(saleId, receiptNumber) {
+  window.currentVoidBranchFilter = document.getElementById('sh-branch-select') ? document.getElementById('sh-branch-select').value : null;
+  window.currentVoidStatusFilter = document.getElementById('sh-status-select') ? document.getElementById('sh-status-select').value : '';
+
+  const bodyHtml = `
+    <div style="text-align:center; padding:0.5rem 0;">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:#eab308; margin-bottom:0.8rem; display:block;"></i>
+      <h4 style="font-size:1.1rem; font-weight:800; color:#fff; margin-bottom:0.6rem;">คุณแน่ใจหรือไม่ที่จะยกเลิกบิลขายนี้?</h4>
+      <div style="font-size:1.15rem; font-weight:800; color:#38bdf8; font-family:monospace; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.08); padding:0.5rem; border-radius:6px; margin:0.8rem auto; max-width:320px; letter-spacing:0.5px;">
+        ${receiptNumber}
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); line-height:1.5; margin:0;">
+        เมื่อทำรายการสำเร็จ สถานะบิลจะถูกเปลี่ยนเป็น "ยกเลิกบิล"<br>
+        และระบบจะทำการ<strong style="color:#ef4444;">คืนสินค้าทั้งหมดในบิลเข้าคลังสต็อกของแต่ละสาขา</strong>ให้โดยอัตโนมัติ
+      </p>
+      <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); color:#fca5a5; padding:0.6rem 0.8rem; border-radius:6px; font-size:0.78rem; font-weight:600; margin-top:1rem; line-height:1.4;">
+        ⚠️ คำเตือน: รายการที่ยกเลิกแล้วจะไม่สามารถกู้คืนหรือแก้ไขสถานะได้อีก!
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>
+    <button class="btn btn-danger" onclick="submitVoidSale('${saleId}', '${receiptNumber}')"><i class="fa-solid fa-ban"></i> ยืนยันการยกเลิกบิล</button>
+  `;
+
+  openModal(`ยืนยันการยกเลิกบิลขาย`, bodyHtml, footerHtml);
+}
+
+async function submitVoidSale(saleId, receiptNumber) {
+  try {
+    const res = await apiRequest(`/pos/void/${saleId}`, 'PUT');
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      renderSalesHistoryView(window.currentVoidBranchFilter, window.currentVoidStatusFilter);
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+function filterSalesHistoryTable() {
+  const query = document.getElementById('sh-search-input').value.toLowerCase().trim();
+  document.querySelectorAll('.sh-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    if (searchData.includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+
 function reprintReceiptVoucher(index) {
   const sale = (state.salesCache || [])[index];
   if (sale) {
-    openReceiptVoucherModal(sale);
+    openSelectReceiptTypeModal(sale);
   } else {
     showToast('ไม่พบข้อมูลบิลขายนี้ในระบบแคช กรุณารีเฟรชหน้าเว็บ', 'error');
   }

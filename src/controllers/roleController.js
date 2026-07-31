@@ -17,7 +17,9 @@ const SYSTEM_MENUS = [
   { key: 'employees', name: 'จัดการพนักงาน', icon: 'fa-users-gear' },
   { key: 'roles-permissions', name: 'จัดการสิทธิ์และตำแหน่ง', icon: 'fa-user-shield' },
   { key: 'edit-branch-inventory', name: 'แก้ไขข้อมูลสินค้าในสาขา', icon: 'fa-pen-to-square' },
-  { key: 'system-logs', name: 'ประวัติกิจกรรมระบบ (Logs)', icon: 'fa-clock-rotate-left' }
+  { key: 'system-logs', name: 'ประวัติกิจกรรมระบบ (Logs)', icon: 'fa-clock-rotate-left' },
+  { key: 'sales-history', name: 'ประวัติการขายสินค้า', icon: 'fa-clock-rotate-left' },
+  { key: 'void-sale', name: 'อนุมัติยกเลิกบิลขาย (Void)', icon: 'fa-ban' }
 ];
 
 // Helper to seed default system roles if database is empty

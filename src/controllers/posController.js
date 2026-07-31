@@ -3,6 +3,7 @@ const Stock = require('../models/Stock');
 const Product = require('../models/Product');
 const Branch = require('../models/Branch');
 const AuditLog = require('../models/AuditLog');
+const Role = require('../models/Role');
 
 // Process POS Checkout & Stock Deduction (Atomic checkout per IMEI)
 const createSale = async (req, res, next) => {
@@ -13,9 +14,12 @@ const createSale = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'กรุณาเลือกรายการสินค้าในตะกร้าอย่างน้อย 1 รายการ' });
     }
 
-    const branch = await Branch.findById(branchId || (req.user.branch ? req.user.branch._id : null));
-    if (!branch) {
-      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลสาขาที่ทำรายการ' });
+    let branch = null;
+    if (branchId && branchId !== 'all') {
+      branch = await Branch.findById(branchId);
+      if (!branch) {
+        return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลสาขาที่ทำรายการ' });
+      }
     }
 
     let calculatedSubtotal = 0;
@@ -31,17 +35,30 @@ const createSale = async (req, res, next) => {
       }
 
       // Atomic find and mark sold
-      const stockItem = await Stock.findOneAndUpdate(
-        { branch: branch._id, imei: targetImei, status: 'in_stock' },
-        { $set: { status: 'sold', sold_date: new Date() } },
-        { new: true }
-      ).populate('product');
+      let stockItem;
+      if (branch) {
+        stockItem = await Stock.findOneAndUpdate(
+          { branch: branch._id, imei: targetImei, status: 'in_stock' },
+          { $set: { status: 'sold', sold_date: new Date() } },
+          { new: true }
+        ).populate('product');
+      } else {
+        stockItem = await Stock.findOneAndUpdate(
+          { imei: targetImei, status: 'in_stock' },
+          { $set: { status: 'sold', sold_date: new Date() } },
+          { new: true }
+        ).populate('product');
+      }
 
       if (!stockItem) {
         return res.status(400).json({
           success: false,
-          message: `หมายเลข IMEI "${targetImei}" ไม่พบในคลังสาขา ${branch.name} หรือถูกขายไปแล้ว`
+          message: `หมายเลข IMEI "${targetImei}" ไม่พบในคลัง${branch ? 'สาขา ' + branch.name : 'ระบบ'} หรือถูกขายไปแล้ว`
         });
+      }
+
+      if (!branch) {
+        branch = await Branch.findById(stockItem.branch);
       }
 
       const costPrice = stockItem.purchase_price !== undefined ? stockItem.purchase_price : (item.costPrice || 0);
@@ -64,6 +81,10 @@ const createSale = async (req, res, next) => {
         totalPrice: itemTotal,
         profit: itemProfit
       });
+    }
+
+    if (!branch) {
+      return res.status(400).json({ success: false, message: 'ไม่พบข้อมูลสาขาสำหรับการขายนี้' });
     }
 
     const grandTotal = calculatedSubtotal - (discountTotal || 0);
@@ -177,22 +198,28 @@ const getSaleReceipt = async (req, res, next) => {
 // Get Sales History
 const getSalesHistory = async (req, res, next) => {
   try {
-    let query = { status: 'completed' };
+    let query = {};
 
-    // Branch filter: sales staff see only their branch
-    if (['branch_staff', 'technical_staff'].includes(req.user.role)) {
+    const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || isHqUser;
+
+    if (!isAdminOrHq) {
       if (req.user.branch) {
-        query.branch = req.user.branch;
+        query.branch = req.user.branch._id || req.user.branch;
       }
-    } else if (req.query.branchId) {
+    } else if (req.query.branchId && req.query.branchId !== 'all') {
       query.branch = req.query.branchId;
+    }
+
+    if (req.query.status) {
+      query.status = req.query.status;
     }
 
     const sales = await Sale.find(query)
       .populate('branch', 'name code phone')
       .populate('soldBy', 'fullName username')
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(200);
 
     res.json({
       success: true,
@@ -651,6 +678,64 @@ const returnCostToHq = async (req, res, next) => {
   }
 };
 
+const voidSale = async (req, res, next) => {
+  try {
+    const saleId = req.params.id;
+    const sale = await Sale.findById(saleId);
+    if (!sale) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการขายที่ต้องการยกเลิก' });
+    }
+
+    if (sale.status === 'voided') {
+      return res.status(400).json({ success: false, message: 'รายการขายนี้ถูกยกเลิกไปแล้ว' });
+    }
+
+    // Role Doc check
+    const roleDoc = await Role.findOne({ code: req.user.role });
+    const allowedMenus = roleDoc ? (roleDoc.allowedMenus || []) : [];
+    const hasVoidPermission = req.user.role === 'admin' || allowedMenus.includes('void-sale');
+
+    if (!hasVoidPermission) {
+      return res.status(403).json({ success: false, message: 'ตำแหน่งงานของคุณไม่มีสิทธิ์ในการยกเลิกรายการขาย' });
+    }
+
+    // Restore stock status from 'sold' to 'in_stock'
+    const imeis = sale.items.map(item => item.imei).filter(Boolean);
+    if (imeis.length > 0) {
+      await Stock.updateMany(
+        { imei: { $in: imeis }, status: 'sold' },
+        { $set: { status: 'in_stock', sold_date: null } }
+      );
+    }
+
+    // Update sale status
+    sale.status = 'voided';
+    await sale.save();
+
+    // Audit Log
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'VOID_SALE',
+      entity: 'Sale',
+      entityId: sale._id.toString(),
+      details: {
+        receiptNumber: sale.receiptNumber,
+        itemsCount: sale.items.length,
+        grandTotal: sale.grandTotal
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `ยกเลิกบิลขายเลขที่ ${sale.receiptNumber} คืนสินค้าเข้าคลังสต็อกเรียบร้อยแล้ว`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   returnCostToHq,
   createSale,
@@ -659,5 +744,6 @@ module.exports = {
   getFinanceProfitReport,
   updateFinancePayoutStatus,
   getExecutiveDashboard,
-  getExecutiveReportRange
+  getExecutiveReportRange,
+  voidSale
 };
