@@ -3076,14 +3076,13 @@ function openUploadImeiImageModal(serial, matchedIdx) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="font-weight:800; font-size:1.1rem; color:#38bdf8; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#fbbf24;">${serial}</span>
+        <i class="fa-solid fa-barcode"></i> IMEI : <span style="color:#fbbf24;">${serial}</span>
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:#fff;">
         สินค้า: ${item ? item.productName : 'สินค้าในสต็อก'} (IMEI: ${serial})
       </div>
       <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.4rem; line-height:1.4;">
-        <i class="fa-brands fa-google-drive" style="color:#34d399;"></i> รูปถ่ายจะถูกบันทึกลง Google Drive โฟลเดอร์: <br>
-        <strong style="color:#38bdf8;">เช็คสต็อกsilminbanana / ${auditDate}</strong>
+        <strong style="color:#38bdf8;">เช็คสต็อกประจำวันที่ ${auditDate}</strong>
       </div>
     </div>
 
@@ -3102,9 +3101,8 @@ function openUploadImeiImageModal(serial, matchedIdx) {
   `;
 
   const footerHtml = `
-    <button class="btn btn-secondary" onclick="confirmScanWithoutPhoto('${serial}', ${matchedIdx})">ข้ามการแนบรูป</button>
     <button class="btn btn-success" id="btn-upload-drive-confirm" onclick="submitImeiPhotoAndConfirm('${serial}', ${matchedIdx})">
-      <i class="fa-brands fa-google-drive"></i> อัปโหลดลง Google Drive & ยืนยัน
+      บันทึก
     </button>
   `;
 

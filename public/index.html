@@ -53,8 +53,8 @@
       </div>
     </div>
 
-    <!-- Main Application Shell -->
     <div id="main-view" class="app-wrapper" style="display: none;">
+      <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle-checkbox">
       <!-- Sidebar Navigation -->
       <aside class="sidebar">
         <div class="sidebar-header">
@@ -175,11 +175,15 @@
           </button>
         </div>
       </aside>
+      <label for="sidebar-toggle" class="sidebar-overlay"></label>
 
       <!-- Main Content Area -->
       <main class="main-content">
         <!-- Top Header Bar -->
         <header class="top-bar">
+          <label for="sidebar-toggle" class="sidebar-toggle-label">
+            <i class="fa-solid fa-bars"></i>
+          </label>
           <div class="page-title">
             <h1 id="page-heading">ภาพรวมระบบคลังสินค้า</h1>
             <p id="page-subheading">สรุปสถานะคลังสินค้าและการตรวจสอบสต็อกของทั้ง 5 สาขา</p>
@@ -215,5 +219,14 @@
 
   <!-- Application Script Bundles -->
   <script src="/js/app.js"></script>
+  <!-- UI Interaction Helper (Hamburger Auto-Close) -->
+  <script>
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.nav-link')) {
+        const toggle = document.getElementById('sidebar-toggle');
+        if (toggle) toggle.checked = false;
+      }
+    });
+  </script>
 </body>
 </html>
