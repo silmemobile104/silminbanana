@@ -91,6 +91,17 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
+function logout() {
+  state.token = null;
+  state.user = null;
+  localStorage.removeItem('silmin_token');
+  localStorage.removeItem('silmin_user');
+  const mainView = document.getElementById('main-view');
+  const authView = document.getElementById('auth-view');
+  if (mainView) mainView.style.display = 'none';
+  if (authView) authView.style.display = 'flex';
+}
+
 // API Request Client
 async function apiRequest(endpoint, method = 'GET', data = null, isFormData = false) {
   const headers = {};
@@ -111,12 +122,23 @@ async function apiRequest(endpoint, method = 'GET', data = null, isFormData = fa
 
   try {
     const res = await fetch(`/api${endpoint}`, config);
+    if (res.status === 401) {
+      logout();
+      showToast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', 'error');
+      throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    }
     const result = await res.json();
     if (!res.ok) {
+      if (result.message && (result.message.includes('เซสชันหมดอายุ') || result.message.includes('หมดอายุ') || result.message.includes('jwt expired') || result.message.includes('token'))) {
+        logout();
+      }
       throw new Error(result.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
     }
     return result;
   } catch (err) {
+    if (err.message && (err.message.includes('เซสชันหมดอายุ') || err.message.includes('หมดอายุ') || err.message.includes('jwt expired') || err.message.includes('token'))) {
+      logout();
+    }
     showToast(err.message, 'error');
     throw err;
   }
@@ -315,12 +337,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => {
-  state.token = null;
-  state.user = null;
-  localStorage.removeItem('silmin_token');
-  localStorage.removeItem('silmin_user');
-  document.getElementById('main-view').style.display = 'none';
-  document.getElementById('auth-view').style.display = 'flex';
+  logout();
   showToast('ออกจากระบบเรียบร้อยแล้ว');
 });
 

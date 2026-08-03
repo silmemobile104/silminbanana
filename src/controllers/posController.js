@@ -629,6 +629,10 @@ const returnCostToHq = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'ไม่พบรายการบิลขาย' });
     }
 
+    if (sale.status === 'voided') {
+      return res.status(400).json({ success: false, message: 'ไม่สามารถโอนคืนต้นทุนสำหรับบิลขายที่ถูกยกเลิกแล้ว' });
+    }
+
     if (sale.costReturnedStatus === 'returned') {
       return res.status(400).json({ success: false, message: 'รายการนี้ได้รับการโอนคืนต้นทุนแล้ว' });
     }
@@ -708,8 +712,21 @@ const voidSale = async (req, res, next) => {
       );
     }
 
+    // Revert branch credit limit if credit was restored
+    const branch = await Branch.findById(sale.branch);
+    let creditReverted = 0;
+    if (branch) {
+      const restoredCredit = sale.paymentMethod === 'finance' || sale.costReturnedStatus === 'returned';
+      if (restoredCredit) {
+        branch.usedCredit = (branch.usedCredit || 0) + (sale.totalCost || 0);
+        creditReverted = sale.totalCost || 0;
+        await branch.save();
+      }
+    }
+
     // Update sale status
     sale.status = 'voided';
+    sale.costReturnedStatus = 'not_applicable';
     await sale.save();
 
     // Audit Log
@@ -723,7 +740,9 @@ const voidSale = async (req, res, next) => {
       details: {
         receiptNumber: sale.receiptNumber,
         itemsCount: sale.items.length,
-        grandTotal: sale.grandTotal
+        grandTotal: sale.grandTotal,
+        creditReverted,
+        newUsedCredit: branch ? branch.usedCredit : 0
       }
     });
 
