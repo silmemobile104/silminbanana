@@ -875,7 +875,7 @@ function triggerCustomReportModal() {
 /* ==========================================================================
    VIEW 1.5: BRANCH INVENTORY VIEW
    ========================================================================== */
-async function renderBranchInventoryView(selectedBranchId = null) {
+async function renderBranchInventoryView(selectedBranchId = null, selectedStatus = 'in_stock') {
   const container = document.getElementById('content-container');
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
 
@@ -890,9 +890,22 @@ async function renderBranchInventoryView(selectedBranchId = null) {
 
     const queryParam = branchIdParam ? `?branchId=${branchIdParam}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
-    const activeStockList = (res.stock || []).filter(st => st.status === 'in_stock');
+    
+    // Filter stock list based on selected status
+    const activeStockList = (res.stock || []).filter(st => {
+      if (selectedStatus === 'all') return true;
+      return st.status === selectedStatus;
+    });
+    
     state.branchStockCache = res.stock || [];
     const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
+
+    let statusLabel = 'พร้อมขาย';
+    if (selectedStatus === 'sold') statusLabel = 'ขายแล้ว';
+    else if (selectedStatus === 'in_transit') statusLabel = 'ระหว่างโอนย้าย';
+    else if (selectedStatus === 'transferred') statusLabel = 'โอนย้ายสำเร็จ';
+    else if (selectedStatus === 'missing') statusLabel = 'สูญหาย';
+    else if (selectedStatus === 'all') statusLabel = 'ทุกสถานะ';
 
     const canEdit = getUserAllowedMenus().includes('edit-branch-inventory');
 
@@ -902,15 +915,28 @@ async function renderBranchInventoryView(selectedBranchId = null) {
           <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้าพร้อมขายรายชิ้น (1 เครื่อง 1 IMEI) (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
+          <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้า${statusLabel} (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
           <button class="btn btn-success btn-sm" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">สถานะ:</label>
+            <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value)">
+              <option value="in_stock" ${selectedStatus === 'in_stock' ? 'selected' : ''}>พร้อมขาย</option>
+              <option value="sold" ${selectedStatus === 'sold' ? 'selected' : ''}>ขายแล้ว</option>
+              <option value="in_transit" ${selectedStatus === 'in_transit' ? 'selected' : ''}>ระหว่างโอนย้าย</option>
+              <option value="transferred" ${selectedStatus === 'transferred' ? 'selected' : ''}>โอนย้ายสำเร็จ</option>
+              <option value="missing" ${selectedStatus === 'missing' ? 'selected' : ''}>สูญหาย</option>
+              <option value="all" ${selectedStatus === 'all' ? 'selected' : ''}>ทุกสถานะ</option>
+            </select>
+          </div>
+
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
-              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value)">
+              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value, document.getElementById('bi-status-select').value)">
                 <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
@@ -936,7 +962,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
             </tr>
           </thead>
           <tbody>
-            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าคงเหลือในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
               const p = st.product || {};
               const imeiStr = st.imei;
@@ -945,6 +971,22 @@ async function renderBranchInventoryView(selectedBranchId = null) {
               const modelStr = st.model || p.model || '';
               const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
               const priceNum = st.selling_price || p.selling_price || 0;
+
+              // Render beautiful localized badges
+              let badgeHtml = '';
+              if (st.status === 'in_stock') {
+                badgeHtml = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> พร้อมขาย</span>`;
+              } else if (st.status === 'sold') {
+                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-dollar-to-slot"></i> ขายแล้ว</span>`;
+              } else if (st.status === 'in_transit') {
+                badgeHtml = `<span class="badge badge-yellow"><i class="fa-solid fa-truck-ramp-box"></i> ระหว่างโอนย้าย</span>`;
+              } else if (st.status === 'transferred') {
+                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check"></i> โอนย้ายสำเร็จ</span>`;
+              } else if (st.status === 'missing') {
+                badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> สูญหาย</span>`;
+              } else {
+                badgeHtml = `<span class="badge badge-gray">${st.status}</span>`;
+              }
 
               return `
                 <tr class="bi-row" data-search="${(imeiStr + ' ' + prodName + ' ' + brandStr + ' ' + modelStr + ' ' + specStr).toLowerCase()}">
@@ -956,9 +998,7 @@ async function renderBranchInventoryView(selectedBranchId = null) {
                   ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
                   <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
-                    <span class="badge badge-${st.status === 'in_stock' ? 'green' : st.status === 'in_transit' ? 'yellow' : 'gray'}">
-                      ${st.status === 'in_stock' ? 'พร้อมขาย' : st.status === 'in_transit' ? 'ระหว่างโอนย้าย' : st.status}
-                    </span>
+                    ${badgeHtml}
                   </td>
                   ${canEdit ? `
                     <td style="text-align:center;">
@@ -1055,7 +1095,6 @@ async function renderPosView(selectedBranchId = null) {
                     <th>รายการสินค้า</th>
                     <th>หมายเลข IMEI</th>
                     <th>ราคาขาย</th>
-                    <th>สถานะ</th>
                     <th style="text-align:center;">ดำเนินการ</th>
                   </tr>
                 </thead>
@@ -1075,17 +1114,11 @@ async function renderPosView(selectedBranchId = null) {
                           <i class="fa-solid fa-mobile-screen-button"></i>
                         </td>
                         <td>
-                          <strong>${productName}</strong><br>
-                          <span style="font-size:0.75rem; color:var(--text-muted);">${brandStr} ${specStr ? '• ' + specStr : ''}</span>
+                          <strong>${productName}</strong>
                           ${currentBranch._id === 'all' && st.branch ? `<br><span style="font-size:0.72rem; color:#a5b4fc; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:3px;">📍 ${st.branch.name || 'ไม่ระบุสาขา'}</span>` : ''}
                         </td>
                         <td><strong style="color:#fbbf24; font-family:monospace; font-size:0.92rem;">${imei}</strong></td>
                         <td><strong style="color:#34d399;">฿${sellingPrice.toLocaleString()}</strong></td>
-                        <td>
-                          <span class="badge badge-green">
-                            <i class="fa-solid fa-circle-check"></i> พร้อมขาย
-                          </span>
-                        </td>
                         <td style="text-align:center;">
                           <button class="btn btn-primary btn-sm" onclick="addToPosCart('${p._id || ''}', '${productName.replace(/'/g, "\\'")}', ${sellingPrice}, null, '${imei}')">
                             <i class="fa-solid fa-cart-plus"></i> เพิ่ม
@@ -2966,7 +2999,7 @@ async function renderBranchAuditView() {
               const diff = actual - item.expectedCount;
               const photoBtn = item.photoUrl ? `
                 <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
-                  <i class="fa-solid fa-image"></i> ดูรูปภาพ
+                  <i class="fa-solid fa-image"></i>
                 </button>
               ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
 
@@ -2984,9 +3017,9 @@ async function renderBranchAuditView() {
                     <span id="actual-val-${idx}" style="font-size:1.25rem; font-weight:800; color:#38bdf8;">${actual}</span>
                   </td>
                   <td id="variance-status-${idx}">
-                    ${diff === 0 ? `<span class="badge badge-green">ยอดตรงพอดี (0)</span>` :
-                      diff < 0 ? `<span class="badge badge-red">${actual === 0 ? 'ยังไม่ได้สแกน' : ''} (ขาด -${Math.abs(diff)})</span>` :
-                      `<span class="badge badge-yellow">เกิน +${diff}</span>`}
+                    ${diff === 0 ? `<span class="badge badge-green">สำเร็จ</span>` :
+                      diff < 0 ? `<span class="badge badge-yellow">รอดำเนินการ</span>` :
+                      `<span class="badge badge-red">ยอดเกิน</span>`}
                   </td>
                   <td id="photo-cell-${idx}" style="text-align:center; vertical-align:middle;">
                     ${photoBtn}
@@ -3043,11 +3076,11 @@ function updateRowVariance(idx) {
   const diff = actual - expected;
 
   if (diff === 0) {
-    statusTd.innerHTML = `<span class="badge badge-green">ยอดตรงพอดี (0)</span>`;
+    statusTd.innerHTML = `<span class="badge badge-green">สำเร็จ</span>`;
   } else if (diff < 0) {
-    statusTd.innerHTML = `<span class="badge badge-red">ขาด ${Math.abs(diff)} ชิ้น (${diff})</span>`;
+    statusTd.innerHTML = `<span class="badge badge-yellow">รอดำเนินการ</span>`;
   } else {
-    statusTd.innerHTML = `<span class="badge badge-yellow">เกิน ${diff} ชิ้น (+${diff})</span>`;
+    statusTd.innerHTML = `<span class="badge badge-red">ยอดเกิน</span>`;
   }
 
   // Update photo cell dynamically
@@ -3102,16 +3135,26 @@ function openUploadImeiImageModal(serial, matchedIdx) {
       </div>
     </div>
 
-    <form id="upload-imei-form">
-      <div class="form-group">
-        <label for="imei-photo-file" style="font-weight:700; color:#34d399;">
-          <i class="fa-solid fa-camera"></i> เลือก / ถ่ายรูปตัวเครื่อง หรือ ป้าย IMEI (จำเป็น)
+    <form id="upload-imei-form" style="text-align:center; padding:0.5rem 0;">
+      <div class="form-group" style="margin-bottom:0;">
+        <!-- Hidden raw file input -->
+        <input type="file" id="imei-photo-file" accept="image/*" capture="environment" onchange="previewImeiPhoto(this)" required style="display:none;">
+        
+        <!-- Premium Camera Upload Trigger Card -->
+        <label for="imei-photo-file" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.8rem; padding:2rem 1.5rem; border:2px dashed rgba(99,102,241,0.4); border-radius:12px; background:rgba(99,102,241,0.03); cursor:pointer; transition:all 0.25s ease; max-width:340px; margin:0 auto;" 
+               onmouseover="this.style.borderColor='#6366f1'; this.style.background='rgba(99,102,241,0.08)'; this.style.boxShadow='0 0 20px rgba(99,102,241,0.25)';"
+               onmouseout="this.style.borderColor='rgba(99,102,241,0.4)'; this.style.background='rgba(99,102,241,0.03)'; this.style.boxShadow='none';">
+          <div style="width:54px; height:54px; border-radius:50%; background:linear-gradient(135deg, #6366f1, #06b6d4); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 4px 15px rgba(99,102,241,0.4);">
+            <i class="fa-solid fa-camera" style="font-size:1.5rem;"></i>
+          </div>
+          <div style="font-size:1rem; font-weight:800; color:#fff; margin-top:0.2rem;">เปิดกล้องถ่ายภาพ / เลือกรูปภาพ</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">แตะเพื่อแนบรูปถ่ายตัวเครื่องหรือป้าย IMEI</div>
         </label>
-        <input type="file" id="imei-photo-file" class="form-control" accept="image/*" capture="environment" onchange="previewImeiPhoto(this)" required>
       </div>
 
-      <div id="imei-photo-preview-container" style="display:none; text-align:center; margin-top:1rem; background:rgba(0,0,0,0.3); padding:0.5rem; border-radius:6px;">
-        <img id="imei-photo-preview" src="" style="max-height:200px; max-width:100%; border-radius:4px; border:2px solid var(--accent-primary);">
+      <div id="imei-photo-preview-container" style="display:none; text-align:center; margin-top:1.5rem; background:rgba(0,0,0,0.35); padding:0.8rem; border-radius:8px; border:1px dashed rgba(255,255,255,0.15);">
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem; font-weight:600;">— ตัวอย่างรูปถ่ายที่เลือก —</div>
+        <img id="imei-photo-preview" src="" style="max-height:240px; max-width:100%; border-radius:6px; border:2px solid #34d399; box-shadow:0 4px 15px rgba(0,0,0,0.5);">
       </div>
     </form>
   `;
