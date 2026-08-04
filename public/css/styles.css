@@ -721,6 +721,17 @@ body {
   border-color: rgba(99, 102, 241, 0.3);
 }
 
+/* ==========================================================================
+   Responsive Grid Utility Classes
+   ========================================================================== */
+.grid-2col { display: grid; grid-template-columns: 1fr 1fr; }
+.grid-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.grid-4col { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; }
+.grid-1_3-1 { display: grid; grid-template-columns: 1.3fr 1fr; }
+.grid-1_5-1 { display: grid; grid-template-columns: 1.5fr 1fr; }
+.grid-2_5-1 { display: grid; grid-template-columns: 2.5fr 1fr; }
+.grid-form-row { display: grid; grid-template-columns: 1.2fr 2fr 1fr auto; }
+
 /* Overlay to close sidebar on tap */
 .sidebar-overlay {
   display: none;
@@ -790,17 +801,12 @@ body {
 }
 
 @media (max-width: 768px) {
-  /* Stack inline display grid layouts on mobile */
-  div[style*="grid-template-columns: 1.3fr 1fr"] {
+  /* Collapse all grid utility classes to single column on mobile */
+  .grid-2col, .grid-3col, .grid-4col,
+  .grid-1_3-1, .grid-1_5-1, .grid-2_5-1 {
     grid-template-columns: 1fr !important;
   }
-  div[style*="grid-template-columns: 1.5fr 1fr"] {
-    grid-template-columns: 1fr !important;
-  }
-  div[style*="grid-template-columns: 1fr 1fr"] {
-    grid-template-columns: 1fr !important;
-  }
-  form[style*="grid-template-columns: 1.2fr 2fr 1fr auto"] {
+  .grid-form-row {
     grid-template-columns: 1fr !important;
     align-items: stretch !important;
   }
@@ -866,7 +872,7 @@ body {
     font-size: 1.15rem !important;
   }
   /* Stacking the cashier cash/change grid on micro devices */
-  div[id="pos-cash-container"][style*="grid-template-columns: 1fr 1fr"] {
+  #pos-cash-container {
     grid-template-columns: 1fr !important;
   }
 }

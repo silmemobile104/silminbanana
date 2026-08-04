@@ -231,7 +231,7 @@ function navigateTo(viewName) {
 
   switch (viewName) {
     case 'dashboard':
-      heading.innerText = 'แดชบอร์ดผู้บริหาร (Executive Dashboard)';
+      heading.innerText = 'แดชบอร์ดผู้บริหาร';
       subheading.innerText = 'สรุปยอดขาย ประสิทธิภาพรายสาขา มูลค่าสต็อกสินค้าคงคลัง และสถานะการนับสต็อกประจำวันเรียลไทม์';
       renderDashboardView();
       break;
@@ -379,7 +379,7 @@ function initAppSession() {
    ========================================================================== */
 async function renderDashboardView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร (Executive Dashboard)...</span></div>`;
+  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร</span></div>`;
 
   try {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -408,9 +408,8 @@ async function renderDashboardView() {
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem;">
         <div>
           <h3 style="font-size:1.25rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);"></i> ภาพรวมแดชบอร์ดผู้บริหาร (Executive Dashboard)
+            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);"></i> ภาพรวมแดชบอร์ดผู้บริหาร
           </h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">วิเคราะห์สถิติจำนวนสินค้า ยอดขาย รายได้ และสถานะการนับสต็อกเรียลไทม์</p>
         </div>
 
         <div>
@@ -475,13 +474,13 @@ async function renderDashboardView() {
       </div>
 
       <!-- Charts & Widgets Middle Grid -->
-      <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1.2rem; margin-bottom:1.5rem; align-items:stretch;">
+      <div class="grid-1_5-1" style="gap:1.2rem; margin-bottom:1.5rem; align-items:stretch;">
         
         <!-- Interactive Chart: Revenue & Stock Value per Branch -->
         <div class="card" style="display:flex; flex-direction:column;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
             <h3 style="font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก 5 สาขา
+              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก
             </h3>
             <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#34d399;"></i> ข้อมูลประจำวันวันนี้</span>
           </div>
@@ -539,7 +538,7 @@ async function renderDashboardView() {
       <!-- Real-time 5-Branch Operational & Audit Health Grid -->
       <div class="card" style="margin-bottom: 1.5rem;">
         <h3 style="font-size: 1.1rem; font-weight:700; margin-bottom: 1rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สถานะการนับสต็อกประจำวันเรียลไทม์ 5 สาขา (${todayStr})
+          <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สถานะการนับสต็อกประจำวัน (${todayStr})
         </h3>
         
         <div class="audit-grid">
@@ -645,7 +644,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
   const startVal = startDate || todayStr;
   const endVal = endDate || todayStr;
 
-  const modalTitle = `📊 สรุปรายงานผู้บริหาร (Executive Report)`;
+  const modalTitle = `📊 สรุปรายงานผู้บริหาร`;
 
   openModal(modalTitle, `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังรวบรวมรายงานสรุปผู้บริหาร (${startVal} ถึง ${endVal})...</span></div>`);
 
@@ -697,7 +696,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
           <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.25); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
             <div>
               <h4 style="font-size:1.05rem; font-weight:800; color:#fff; margin-bottom:0.15rem;">
-                <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร (Executive Performance Report)
+                <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร
               </h4>
               <div style="font-size:0.83rem; color:var(--text-muted);">
                 ประจำช่วงวันที่: <strong style="color:#fbbf24;">${startVal}</strong> ถึง <strong style="color:#fbbf24;">${endVal}</strong>
@@ -712,21 +711,21 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:0.8rem; margin-bottom:1.5rem;">
             
             <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:0.8rem; border-radius:8px;">
-              <div style="font-size:0.78rem; color:var(--text-muted);">ยอดขายรวมสุทธิ (Total Revenue)</div>
+              <div style="font-size:0.78rem; color:var(--text-muted);">ยอดขายรวมสุทธิ</div>
               <div style="font-size:1.55rem; font-weight:800; color:#34d399; margin:0.2rem 0;">฿${totalRev.toLocaleString()}</div>
               <div style="font-size:0.72rem; color:var(--text-muted);">สด/โอน: ฿${cashRev.toLocaleString()} | ไฟแนนซ์: ฿${finRev.toLocaleString()}</div>
             </div>
 
             <div style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:0.8rem; border-radius:8px;">
-              <div style="font-size:0.78rem; color:var(--text-muted);">กำไรขั้นต้นรวม (Gross Profit)</div>
+              <div style="font-size:0.78rem; color:var(--text-muted);">กำไรขั้นต้นรวม</div>
               <div style="font-size:1.55rem; font-weight:800; color:#38bdf8; margin:0.2rem 0;">฿${totalProf.toLocaleString()}</div>
-              <div style="font-size:0.72rem; color:var(--text-muted);">อัตรากำไร (Margin): <strong style="color:#34d399;">${margin.toFixed(1)}%</strong></div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">อัตรากำไร : <strong style="color:#34d399;">${margin.toFixed(1)}%</strong></div>
             </div>
 
             <div style="background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.3); padding:0.8rem; border-radius:8px;">
-              <div style="font-size:0.78rem; color:var(--text-muted);">จำนวนรายการขาย (Total Bills)</div>
+              <div style="font-size:0.78rem; color:var(--text-muted);">จำนวนรายการขาย</div>
               <div style="font-size:1.55rem; font-weight:800; color:#fbbf24; margin:0.2rem 0;">${totalBills} <span style="font-size:0.8rem;">บิล</span></div>
-              <div style="font-size:0.72rem; color:var(--text-muted);">ยอดเฉลี่ยต่อบิล (AOV): ฿${Math.round(aov).toLocaleString()}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">ยอดเฉลี่ยต่อบิล : ฿${Math.round(aov).toLocaleString()}</div>
             </div>
 
             <div style="background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.3); padding:0.8rem; border-radius:8px;">
@@ -1014,7 +1013,7 @@ async function renderPosView(selectedBranchId = null) {
     const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
 
     container.innerHTML = `
-      <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:1.2rem; align-items:start;">
+      <div class="grid-1_3-1" style="gap:1.2rem; align-items:start;">
         <!-- Left Side: Product Selection & Barcode Scanner -->
         <div>
           <div class="card" style="margin-bottom:1rem;">
@@ -1116,7 +1115,7 @@ async function renderPosView(selectedBranchId = null) {
               <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--accent-secondary);">
                 <i class="fa-solid fa-user-tag"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ)
               </div>
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem;">
+              <div class="grid-2col" style="gap:0.6rem;">
                 <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (เช่น ลูกค้าทั่วไป)" value="ลูกค้าทั่วไป">
                 <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (ถ้ามี)">
               </div>
@@ -1155,7 +1154,7 @@ async function renderPosView(selectedBranchId = null) {
               </select>
             </div>
 
-            <div id="pos-cash-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem; margin-bottom:1rem;">
+            <div id="pos-cash-container" class="grid-2col" style="gap:0.6rem; margin-bottom:1rem;">
               <div>
                 <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">รับเงินมา (บาท)</label>
                 <input type="number" id="pos-received-input" class="form-control" placeholder="0" min="0" oninput="updatePosCartTotals()">
@@ -1633,7 +1632,7 @@ function openFullTaxInvoiceDetailsModal(sale) {
         <input type="text" id="tax-name" class="form-control" value="${customer.name || ''}" placeholder="เช่น นายสมชาย ดีมาก หรือ บริษัท กขค จำกัด" required autofocus>
       </div>
 
-      <div style="display:grid; grid-template-columns: 2.5fr 1fr; gap:0.8rem;">
+      <div class="grid-2_5-1" style="gap:0.8rem;">
         <div class="form-group">
           <label for="tax-id">เลขประจำตัวผู้เสียภาษี (13 หลัก) <span style="color:#ef4444;">*</span></label>
           <input type="text" id="tax-id" class="form-control" maxlength="13" placeholder="ระบุเลขประจำตัวผู้เสียภาษี 13 หลัก" required>
@@ -2160,7 +2159,7 @@ async function renderMasterSettingsView() {
           เมื่อเพิ่มแล้ว ตัวเลือกจะประกอบเป็น <strong>ชื่อสินค้าแบบเต็ม</strong> ให้ทันที
         </p>
 
-        <form id="add-master-form" style="display:grid; grid-template-columns: 1.2fr 2fr 1fr auto; gap:1rem; align-items:end;">
+        <form id="add-master-form" class="grid-form-row" style="gap:1rem; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label for="mo-type">เลือกประเภทตัวเลือก</label>
             <select id="mo-type" class="form-select" onchange="toggleMasterParentField(this.value)" required>
@@ -2819,7 +2818,7 @@ function openImeiInspectionModal(imei) {
       เลือกลงความเห็นผลการตรวจสอบสำหรับเครื่องนี้:
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.8rem;">
+    <div class="grid-3col" style="gap:0.8rem;">
       <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
         <i class="fa-solid fa-circle-check"></i> 1. ผ่าน (Pass)
       </button>
@@ -3363,7 +3362,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                       <div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden; margin-bottom:0.6rem;">
                         <div style="width:${bPct}%; background:${bPct >= 90 ? '#ef4444' : bPct >= 70 ? '#fbbf24' : '#34d399'}; height:100%; border-radius:4px;"></div>
                       </div>
-                      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.4rem; font-size:0.75rem; text-align:center;">
+                      <div class="grid-3col" style="gap:0.4rem; font-size:0.75rem; text-align:center;">
                         <div>
                           <div style="color:var(--text-muted); font-size:0.7rem;">วงเงินอนุมัติ</div>
                           <div style="font-weight:700; color:#818cf8;">฿${bLimit.toLocaleString()}</div>
@@ -3380,7 +3379,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                     </div>
 
                     <!-- Key Purchasing & Inventory Metrics -->
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem; margin-bottom:1rem; font-size:0.8rem;">
+                    <div class="grid-2col" style="gap:0.6rem; margin-bottom:1rem; font-size:0.8rem;">
                       <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                         <div style="color:var(--text-muted); font-size:0.73rem;">📦 สต็อกพร้อมขายในสาขา</div>
                         <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.2rem;">
@@ -3497,7 +3496,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                     ${isPending ? `
                       <div style="display:flex; flex-direction:column; gap:0.3rem; margin-top:0.4rem; align-items:center;">
                         <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; width:100%; font-weight:700;" onclick="openFillImeiAndReceiveModal('${order._id}')">
-                          <i class="fa-solid fa-barcode"></i> สแกนเติม IMEI & รับเข้าสต็อก
+                          <i class="fa-solid fa-barcode"></i> สแกน IMEI รับสินค้าเข้าสต็อกสาขา
                         </button>
                         <div style="display:flex; gap:0.3rem; width:100%;">
                           <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.4rem; font-size:0.75rem; flex:1; font-weight:700;" onclick="openEditPurchaseOrderModal('${order._id}')">
@@ -3650,7 +3649,7 @@ function renderPoItemRowsUI() {
         </div>
 
         <!-- Specs Grid (Mandatory Selection) -->
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:0.6rem; margin-bottom:0.8rem;">
+        <div class="grid-4col" style="gap:0.6rem; margin-bottom:0.8rem;">
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ยี่ห้อ <span style="color:#ef4444;">*</span></label>
             <select class="form-select" style="font-size:0.82rem; padding:0.35rem 0.4rem;" onchange="onPoItemDropdownChange(${idx}, 'brand', this.value)">
@@ -3682,7 +3681,7 @@ function renderPoItemRowsUI() {
         </div>
 
         <!-- Quantity & Price Inputs -->
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:0.6rem; background:rgba(0,0,0,0.15); padding:0.65rem; border-radius:6px; align-items:center;">
+        <div class="grid-3col" style="gap:0.6rem; background:rgba(0,0,0,0.15); padding:0.65rem; border-radius:6px; align-items:center;">
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">จำนวน (เครื่อง) <span style="color:#ef4444;">*</span></label>
             <input type="number" class="form-control po-qty-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#38bdf8;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
@@ -4246,14 +4245,14 @@ async function renderGoodsReceiptView() {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
             <h4 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติรายการรับสินค้าเข้าสต็อกที่คีย์ไว้
+              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติรายการรับสินค้าเข้าสต็อก
             </h4>
             <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0.2rem;">
               รายการที่ขึ้นสถานะ <span class="badge badge-yellow" style="font-size:0.7rem;">🟡 รอตั้งราคา / ยืนยัน</span> สามารถกดแก้ไขข้อมูล/IMEI ได้ ก่อนที่ฝ่ายจัดซื้อจะยืนยันเข้าสต็อกจริง
             </p>
           </div>
           <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <button id="toggle-gr-form-btn" class="btn btn-warning btn-sm" onclick="toggleGrManualForm()" style="font-weight:700;"><i class="fa-solid fa-plus"></i> คีย์รับเข้าแมนนวล (คละรุ่น)</button>
+            <button id="toggle-gr-form-btn" class="btn btn-warning btn-sm" onclick="toggleGrManualForm()" style="font-weight:700;"><i class="fa-solid fa-plus"></i> เพิ่มสินค้านอกใบสั่งซื้อ</button>
             <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
             <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
           </div>
@@ -4343,7 +4342,7 @@ async function renderGoodsReceiptView() {
               <i class="fa-solid fa-plus-circle"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="grid-2col" style="gap:1rem;">
               <div class="form-group">
                 <label for="gr-brand">ยี่ห้อ</label>
                 <select id="gr-brand" class="form-select" onchange="recalculateGrAutoFields()">
@@ -4361,7 +4360,7 @@ async function renderGoodsReceiptView() {
               </div>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="grid-2col" style="gap:1rem;">
               <div class="form-group">
                 <label for="gr-capacity">ความจุ</label>
                 <select id="gr-capacity" class="form-select" onchange="recalculateGrAutoFields()">
@@ -4379,7 +4378,7 @@ async function renderGoodsReceiptView() {
               </div>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="grid-2col" style="gap:1rem;">
               <div class="form-group">
                 <label for="gr-category">หมวดหมู่สินค้า</label>
                 <select id="gr-category" class="form-select">
@@ -4477,7 +4476,7 @@ function openEditGoodsReceiptModal(receiptId) {
     </div>
 
     <form id="edit-gr-modal-form" onsubmit="event.preventDefault(); submitEditGoodsReceipt('${receipt._id}');">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+      <div class="grid-2col" style="gap:0.8rem;">
         <div class="form-group">
           <label for="edit-gr-brand">ยี่ห้อ</label>
           <select id="edit-gr-brand" class="form-select" onchange="recalculateEditGrAutoFields()" required>
@@ -4493,7 +4492,7 @@ function openEditGoodsReceiptModal(receiptId) {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+      <div class="grid-2col" style="gap:0.8rem;">
         <div class="form-group">
           <label for="edit-gr-capacity">ความจุ</label>
           <select id="edit-gr-capacity" class="form-select" onchange="recalculateEditGrAutoFields()">
@@ -4667,7 +4666,7 @@ function openEditStagedItemModal(idx) {
 
   const bodyHtml = `
     <form id="edit-staged-item-form" onsubmit="event.preventDefault(); submitEditStagedItem(${idx});">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+      <div class="grid-2col" style="gap:0.8rem;">
         <div class="form-group">
           <label for="edit-staged-brand">ยี่ห้อ</label>
           <select id="edit-staged-brand" class="form-select" onchange="recalculateEditStagedAutoFields()" required>
@@ -4683,7 +4682,7 @@ function openEditStagedItemModal(idx) {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem;">
+      <div class="grid-2col" style="gap:0.8rem;">
         <div class="form-group">
           <label for="edit-staged-capacity">ความจุ</label>
           <select id="edit-staged-capacity" class="form-select" onchange="recalculateEditStagedAutoFields()">
@@ -5130,7 +5129,7 @@ function openBatchConfirmReceiptModal() {
           <span class="badge badge-gold" style="font-size:0.78rem; font-weight:700;">${group.receiptIds.length} เครื่อง</span>
         </div>
         
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="grid-2col" style="gap:1rem;">
           <div class="form-group" style="margin-bottom:0;">
             <label style="font-size:0.78rem; color:var(--text-muted);">ราคาทุน (บาท)</label>
             <input type="number" id="crb-pprice-${safeKey}" class="form-control" min="0" value="${pPriceVal}" placeholder="0" required ${gIdx === 0 ? 'autofocus' : ''}>
@@ -5214,7 +5213,7 @@ function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchase
     </div>
 
     <form id="confirm-receipt-form">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="cr-pprice">กำหนดราคาทุน (บาท)</label>
           <input type="number" id="cr-pprice" class="form-control" min="0" value="${pPriceVal}" placeholder="0" required autofocus>
@@ -5482,7 +5481,7 @@ async function printTransferDoc(transferId) {
           </div>
 
           <!-- Branches Details Grid -->
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+          <div class="grid-2col" style="gap:1.5rem; margin-bottom:1.5rem;">
             <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
               <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#0284c7;">
                 <i class="fa-solid fa-arrow-up-from-bracket"></i> สาขาต้นทาง (ผู้จัดส่ง)
@@ -5669,7 +5668,7 @@ function openCreateProductModal() {
 
   const bodyHtml = `
     <form id="new-product-form">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="prod-brand">ยี่ห้อ (เลือกจาก Master List)</label>
           <select id="prod-brand" class="form-select" onchange="recalculateAutoFields()" required>
@@ -5687,7 +5686,7 @@ function openCreateProductModal() {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="prod-capacity">ความจุ (เลือกจาก Master List)</label>
           <select id="prod-capacity" class="form-select" onchange="recalculateAutoFields()" required>
@@ -5719,7 +5718,7 @@ function openCreateProductModal() {
         <span style="font-size:0.75rem; color:var(--text-muted);">ระบบประกอบชื่อสินค้าแบบเต็มให้อัตโนมัติจากตัวเลือกด้านบน</span>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="prod-pprice">ราคาทุน (บาท)</label>
           <input type="number" id="prod-pprice" class="form-control" min="0" placeholder="0" required>
@@ -5756,7 +5755,7 @@ async function openEditProductModal(productId) {
 
     const bodyHtml = `
       <form id="edit-product-form">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="grid-2col" style="gap:1rem;">
           <div class="form-group">
             <label for="prod-brand">ยี่ห้อ (เลือกจาก Master List)</label>
             <select id="prod-brand" class="form-select" onchange="recalculateAutoFields()" required>
@@ -5774,7 +5773,7 @@ async function openEditProductModal(productId) {
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="grid-2col" style="gap:1rem;">
           <div class="form-group">
             <label for="prod-capacity">ความจุ (เลือกจาก Master List)</label>
             <select id="prod-capacity" class="form-select" onchange="recalculateAutoFields()" required>
@@ -5805,7 +5804,7 @@ async function openEditProductModal(productId) {
           <input type="text" id="prod-name" class="form-control" value="${product.name}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="grid-2col" style="gap:1rem;">
           <div class="form-group">
             <label for="prod-pprice">ราคาทุน (บาท)</label>
             <input type="number" id="prod-pprice" class="form-control" min="0" value="${product.purchase_price}" required>
@@ -6237,7 +6236,7 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
 
   const bodyHtml = `
     <form id="new-emp-form" onsubmit="event.preventDefault(); submitAddEmp();">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="me-empid" style="font-weight:700;">รหัสพนักงาน (Emp ID)</label>
           <input type="text" id="me-empid" class="form-control" placeholder="เช่น EMP-0010">
@@ -6248,7 +6247,7 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="me-username" style="font-weight:700;">ชื่อผู้ใช้งาน (Username สำหรับล็อกอิน) <span style="color:#ef4444;">*</span></label>
           <input type="text" id="me-username" class="form-control" placeholder="เช่น prasert.s" required style="font-weight:700;">
@@ -7026,7 +7025,7 @@ async function openEditStockModal(stockId) {
 
   const bodyHtml = `
     <form id="edit-stock-form" onsubmit="event.preventDefault(); submitEditStock('${stock._id}');">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; text-align:left;">
+      <div class="grid-2col" style="gap:1rem; text-align:left;">
         <div class="form-group">
           <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">หมายเลข IMEI</label>
           <input type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px;">
