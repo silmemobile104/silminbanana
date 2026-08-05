@@ -207,7 +207,17 @@ function updateSidebarMenuByRole(userRole) {
 }
 
 // Client Router & View Switcher
-function navigateTo(viewName) {
+function showPageLoading() {
+  const overlay = document.getElementById('page-loading-overlay');
+  if (overlay) overlay.classList.add('active');
+}
+
+function hidePageLoading() {
+  const overlay = document.getElementById('page-loading-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function navigateTo(viewName) {
   const userRole = state.user ? (state.user ? state.user.role : 'admin') : 'branch_staff';
   const allowedViews = getUserAllowedMenus(userRole);
 
@@ -229,87 +239,93 @@ function navigateTo(viewName) {
   const heading = document.getElementById('page-heading');
   const subheading = document.getElementById('page-subheading');
 
-  switch (viewName) {
-    case 'dashboard':
-      heading.innerText = 'แดชบอร์ดผู้บริหาร';
-      subheading.innerText = 'สรุปยอดขาย ประสิทธิภาพรายสาขา มูลค่าสต็อกสินค้าคงคลัง และสถานะการนับสต็อกประจำวันเรียลไทม์';
-      renderDashboardView();
-      break;
-    case 'pos':
-      heading.innerText = 'ขายสินค้าหน้าร้าน & ออกใบเสร็จ';
-      subheading.innerText = 'ระบบขายสินค้า ตัดสต็อก ตัด IMEI อัตโนมัติ พร้อมออกใบเสร็จรับเงินอย่างย่อ';
-      renderPosView();
-      break;
-    case 'finance':
-      heading.innerText = 'รายงานการเงิน & กำไรจากการขาย';
-      subheading.innerText = 'สรุปยอดขาย ต้นทุน กำไรสุทธิ ทั้งแบบสด/โอน และแบบจัดไฟแนนซ์ (พร้อมระบบบันทึกวันที่รับเงินไฟแนนซ์)';
-      renderFinanceView();
-      break;
-    case 'branch-inventory':
-      heading.innerText = 'สินค้าในสาขา';
-      subheading.innerText = 'รายการสินค้าคงคลังที่มีอยู่จริงในสาขาของคุณ';
-      renderBranchInventoryView();
-      break;
-    case 'hq-audit':
-      heading.innerText = 'แดชบอร์ดตรวจสอบสต็อก';
-      subheading.innerText = 'ตรวจสอบและอนุมัติการนับสต็อกประจำวันของสาขาทั้งหมดพร้อมระบบแจ้งเตือนสี';
-      renderHqAuditView();
-      break;
-    case 'branch-audit':
-      heading.innerText = 'นับสต็อกประจำวัน';
-      subheading.innerText = 'สแกน IMEI/ซีเรียล หรือระบุจำนวนนับจริงเพื่อคำนวณ ยอดที่ขาด/เกิน';
-      renderBranchAuditView();
-      break;
-    case 'goods-receipt':
-      heading.innerText = 'รับสินค้าเข้าสต็อก';
-      subheading.innerText = 'บันทึกรายการนำเข้าสินค้าโดยระบุตัวเลือกยี่ห้อ รุ่น ความจุ สี และ IMEI ประจำเครื่อง';
-      renderGoodsReceiptView();
-      break;
-    case 'purchase-orders':
-      heading.innerText = 'สั่งซื้อสินค้าลงสาขา';
-      subheading.innerText = 'สั่งซื้อสินค้าจากส่วนกลางลงสาขา หักเงินจากวงเงินสาขาอัตโนมัติ';
-      renderBranchPurchaseOrdersView();
-      break;
-    case 'receipt-verification':
-      heading.innerText = 'ตรวจสอบรายการรับสินค้าเข้าสต็อก';
-      subheading.innerText = 'ตรวจสอบรายการรับสินค้าจากหน้าร้าน กำหนดราคาทุนและราคาขาย พร้อมกดยืนยันเข้าสต็อก';
-      renderReceiptVerificationView();
-      break;
-    case 'transfers':
-      heading.innerText = 'โอนย้ายสินค้าระหว่างสาขา';
-      subheading.innerText = 'สร้างรายการโอนย้ายสินค้าและพิมพ์ ใบโอนย้ายสินค้าระหว่างสาขา';
-      renderTransfersView();
-      break;
-    case 'master-settings':
-      heading.innerText = 'ตั้งค่าตัวเลือก Master Data';
-      subheading.innerText = 'เพิ่มและจัดการ ยี่ห้อ, ชื่อรุ่น, ความจุ, สีสินค้า และ หมวดหมู่สินค้า เพื่อใช้งานทั่วทั้งระบบโดยไม่ต้องแก้โค้ด';
-      renderMasterSettingsView();
-      break;
-    case 'branches':
-      heading.innerText = 'จัดการสาขา';
-      subheading.innerText = 'เพิ่ม แก้ไข และเปิด/ปิดการใช้งานสาขาในระบบ';
-      renderBranchManagementView();
-      break;
-    case 'employees':
-      heading.innerText = 'จัดการพนักงาน';
-      subheading.innerText = 'จัดการพนักงาน กำหนดสิทธิ์ และมอบหมายสาขาประจำ';
-      renderEmployeeManagementView();
-      break;
-    case 'roles-permissions':
-      heading.innerText = 'จัดการสิทธิ์และตำแหน่งงาน';
-      subheading.innerText = 'สร้างตำแหน่งงานใหม่ กำหนดและปรับปรุงสิทธิ์การเข้าถึงเมนูต่าง ๆ ในระบบ';
-      renderRolesPermissionsView();
-      break;
-    case 'system-logs':
-      heading.innerText = 'ประวัติกิจกรรมระบบ (System Audit Logs)';
-      subheading.innerText = 'ประวัติการดำเนินกิจกรรมที่สำคัญทั้งหมดในระบบ เช่น การขายสินค้า การโอนย้าย และการแก้ไขข้อมูลสินค้า';
-      renderSystemLogsView();
-      break;
-    case 'sales-history':
-      heading.innerText = 'ประวัติการขายสินค้า';
-      subheading.innerText = 'ประวัติการขายสินค้าและออกใบเสร็จย้อนหลังแยกตามสาขา';
-      renderSalesHistoryView();
-      break;
+  showPageLoading();
+
+  try {
+    switch (viewName) {
+      case 'dashboard':
+        heading.innerText = 'แดชบอร์ดผู้บริหาร';
+        subheading.innerText = 'สรุปยอดขาย ประสิทธิภาพรายสาขา มูลค่าสต็อกสินค้าคงคลัง และสถานะการนับสต็อกประจำวันเรียลไทม์';
+        await renderDashboardView();
+        break;
+      case 'pos':
+        heading.innerText = 'ขายสินค้าหน้าร้าน & ออกใบเสร็จ';
+        subheading.innerText = 'ระบบขายสินค้า ตัดสต็อก ตัด IMEI อัตโนมัติ พร้อมออกใบเสร็จรับเงินอย่างย่อ';
+        await renderPosView();
+        break;
+      case 'finance':
+        heading.innerText = 'รายงานการเงิน & กำไรจากการขาย';
+        subheading.innerText = 'สรุปยอดขาย ต้นทุน กำไรสุทธิ ทั้งแบบสด/โอน และแบบจัดไฟแนนซ์ (พร้อมระบบบันทึกวันที่รับเงินไฟแนนซ์)';
+        await renderFinanceView();
+        break;
+      case 'branch-inventory':
+        heading.innerText = 'สินค้าในสาขา';
+        subheading.innerText = 'รายการสินค้าคงคลังที่มีอยู่จริงในสาขาของคุณ';
+        await renderBranchInventoryView();
+        break;
+      case 'hq-audit':
+        heading.innerText = 'แดชบอร์ดตรวจสอบสต็อก';
+        subheading.innerText = 'ตรวจสอบและอนุมัติการนับสต็อกประจำวันของสาขาทั้งหมดพร้อมระบบแจ้งเตือนสี';
+        await renderHqAuditView();
+        break;
+      case 'branch-audit':
+        heading.innerText = 'นับสต็อกประจำวัน';
+        subheading.innerText = 'สแกน IMEI/ซีเรียล หรือระบุจำนวนนับจริงเพื่อคำนวณ ยอดที่ขาด/เกิน';
+        await renderBranchAuditView();
+        break;
+      case 'goods-receipt':
+        heading.innerText = 'รับสินค้าเข้าสต็อก';
+        subheading.innerText = 'บันทึกรายการนำเข้าสินค้าโดยระบุตัวเลือกยี่ห้อ รุ่น ความจุ สี และ IMEI ประจำเครื่อง';
+        await renderGoodsReceiptView();
+        break;
+      case 'purchase-orders':
+        heading.innerText = 'สั่งซื้อสินค้าลงสาขา';
+        subheading.innerText = 'สั่งซื้อสินค้าจากส่วนกลางลงสาขา หักเงินจากวงเงินสาขาอัตโนมัติ';
+        await renderBranchPurchaseOrdersView();
+        break;
+      case 'receipt-verification':
+        heading.innerText = 'ตรวจสอบรายการรับสินค้าเข้าสต็อก';
+        subheading.innerText = 'ตรวจสอบรายการรับสินค้าจากหน้าร้าน กำหนดราคาทุนและราคาขาย พร้อมกดยืนยันเข้าสต็อก';
+        await renderReceiptVerificationView();
+        break;
+      case 'transfers':
+        heading.innerText = 'โอนย้ายสินค้าระหว่างสาขา';
+        subheading.innerText = 'สร้างรายการโอนย้ายสินค้าและพิมพ์ ใบโอนย้ายสินค้าระหว่างสาขา';
+        await renderTransfersView();
+        break;
+      case 'master-settings':
+        heading.innerText = 'ตั้งค่าตัวเลือก Master Data';
+        subheading.innerText = 'เพิ่มและจัดการ ยี่ห้อ, ชื่อรุ่น, ความจุ, สีสินค้า และ หมวดหมู่สินค้า เพื่อใช้งานทั่วทั้งระบบโดยไม่ต้องแก้โค้ด';
+        await renderMasterSettingsView();
+        break;
+      case 'branches':
+        heading.innerText = 'จัดการสาขา';
+        subheading.innerText = 'เพิ่ม แก้ไข และเปิด/ปิดการใช้งานสาขาในระบบ';
+        await renderBranchManagementView();
+        break;
+      case 'employees':
+        heading.innerText = 'จัดการพนักงาน';
+        subheading.innerText = 'จัดการพนักงาน กำหนดสิทธิ์ และมอบหมายสาขาประจำ';
+        await renderEmployeeManagementView();
+        break;
+      case 'roles-permissions':
+        heading.innerText = 'จัดการสิทธิ์และตำแหน่งงาน';
+        subheading.innerText = 'สร้างตำแหน่งงานใหม่ กำหนดและปรับปรุงสิทธิ์การเข้าถึงเมนูต่าง ๆ ในระบบ';
+        await renderRolesPermissionsView();
+        break;
+      case 'system-logs':
+        heading.innerText = 'ประวัติกิจกรรมระบบ (System Audit Logs)';
+        subheading.innerText = 'ประวัติการดำเนินกิจกรรมที่สำคัญทั้งหมดในระบบ เช่น การขายสินค้า การโอนย้าย และการแก้ไขข้อมูลสินค้า';
+        await renderSystemLogsView();
+        break;
+      case 'sales-history':
+        heading.innerText = 'ประวัติการขายสินค้า';
+        subheading.innerText = 'ประวัติการขายสินค้าและออกใบเสร็จย้อนหลังแยกตามสาขา';
+        await renderSalesHistoryView();
+        break;
+    }
+  } finally {
+    hidePageLoading();
   }
 }
 
@@ -379,6 +395,13 @@ function initAppSession() {
    ========================================================================== */
 async function renderDashboardView() {
   const container = document.getElementById('content-container');
+
+  // Destroy previous chart instance BEFORE replacing DOM to prevent flicker
+  if (window._execBranchChart) {
+    window._execBranchChart.destroy();
+    window._execBranchChart = null;
+  }
+
   container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร</span></div>`;
 
   try {
@@ -577,15 +600,15 @@ async function renderDashboardView() {
       </div>
     `;
 
-    // Render Chart.js Chart
-    setTimeout(() => {
+    // Render Chart.js Chart (no setTimeout — render immediately to avoid blank flash)
+    requestAnimationFrame(() => {
       const ctx = document.getElementById('executive-branch-chart');
       if (ctx && window.Chart) {
         const labels = branchPerformance.map(b => b.name.replace('บานาน่า ', ''));
         const revenues = branchPerformance.map(b => b.revenue);
         const stockValues = branchPerformance.map(b => b.stockValue);
 
-        new window.Chart(ctx, {
+        window._execBranchChart = new window.Chart(ctx, {
           type: 'bar',
           data: {
             labels: labels.length > 0 ? labels : ['เบตง', 'ยะลา', 'ปัตตานี', 'นราธิวาส', 'หาดใหญ่'],
@@ -611,6 +634,7 @@ async function renderDashboardView() {
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: {
               legend: {
                 labels: { color: '#e2e8f0', font: { family: 'Prompt', size: 12 } }
@@ -629,7 +653,7 @@ async function renderDashboardView() {
           }
         });
       }
-    }, 100);
+    });
 
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดผู้บริหาร: ${err.message}</div>`;
@@ -2077,7 +2101,7 @@ async function renderFinanceView(filterParams = {}) {
                   </td>
                   <td style="text-align:center; vertical-align:middle;">
                     <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
-                      <i class="fa-solid fa-print"></i> พิมพ์บิลซ้ำ
+                      <i class="fa-solid fa-print"></i> พิมพ์
                     </button>
                   </td>
                 </tr>
@@ -2507,6 +2531,10 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
 
   const detailContainer = document.getElementById('hq-audit-detail-container');
   if (!detailContainer) {
+    navigateTo('hq-audit');
+    setTimeout(() => {
+      inspectBranchAudit(targetId, shouldScroll);
+    }, 350);
     return;
   }
 
@@ -2770,7 +2798,7 @@ function resolveDriveImageUrl(imgObj) {
   let fileId = '';
   if (typeof imgObj === 'object') {
     if (imgObj.fileId) fileId = imgObj.fileId;
-    else imgObj = imgObj.url || imgObj.webViewLink || imgObj.webContentLink || '';
+    else imgObj = imgObj.url || imgObj.imageUrl || imgObj.webViewLink || imgObj.webContentLink || '';
   }
   if (!fileId && typeof imgObj === 'string') {
     const match = String(imgObj).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(imgObj).match(/id=([a-zA-Z0-9_-]+)/) || String(imgObj).match(/\/drive-image\/([a-zA-Z0-9_-]+)/);
@@ -3184,6 +3212,56 @@ function previewImeiPhoto(input) {
   }
 }
 
+// Client-side image compression using HTML5 Canvas
+function compressImage(file, maxWidth, maxHeight, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions maintaining aspect ratio
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: file.type || 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          } else {
+            reject(new Error('Canvas toBlob failed'));
+          }
+        }, file.type || 'image/jpeg', quality);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+}
+
 async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
   const fileInput = document.getElementById('imei-photo-file');
   if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
@@ -3194,13 +3272,28 @@ async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
   const btn = document.getElementById('btn-upload-drive-confirm');
   if (btn) {
     btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังบีบอัดรูปภาพ...`;
+  }
+
+  const rawFile = fileInput.files[0];
+  let uploadFile = rawFile;
+
+  if (rawFile.type && rawFile.type.startsWith('image/')) {
+    try {
+      uploadFile = await compressImage(rawFile, 1000, 1000, 0.75);
+    } catch (compressErr) {
+      console.warn('Image compression failed, using raw image:', compressErr);
+    }
+  }
+
+  if (btn) {
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังอัปโหลดลง Google Drive...`;
   }
 
   const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
 
   const formData = new FormData();
-  formData.append('image', fileInput.files[0]);
+  formData.append('image', uploadFile);
   formData.append('imei', serial);
   formData.append('auditDate', auditDate);
 

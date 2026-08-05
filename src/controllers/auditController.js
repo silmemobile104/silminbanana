@@ -31,10 +31,15 @@ const getBranchExpectedStock = async (req, res, next) => {
         audit.items.forEach(item => {
           (item.scannedImeis || []).forEach(im => scannedImeiSet.add(im));
           (item.imeiImages || []).forEach(img => {
-            const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
-            const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
-            if (img.imei && imgUrl) {
-              imeiImageMap.set(img.imei, imgUrl);
+            if (img.imei) {
+              const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
+              const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
+              imeiImageMap.set(img.imei, {
+                imei: img.imei,
+                fileId: fid || img.fileId || '',
+                url: imgUrl,
+                imageUrl: imgUrl
+              });
             }
           });
         });
@@ -52,7 +57,8 @@ const getBranchExpectedStock = async (req, res, next) => {
       const pName = st.product ? st.product.name : (st.productName || 'สินค้าไม่ระบุชื่อ');
       const imei = st.imei || '';
       const isScanned = imei ? scannedImeiSet.has(imei) : false;
-      const photoUrl = imei ? imeiImageMap.get(imei) || null : null;
+      const imgObj = imei ? imeiImageMap.get(imei) || null : null;
+      const photoUrl = imgObj ? imgObj.url : null;
 
       return {
         stockId: st._id,
@@ -66,7 +72,7 @@ const getBranchExpectedStock = async (req, res, next) => {
         scannedImeis: isScanned ? [imei] : [],
         isScanned,
         photoUrl,
-        imeiImages: photoUrl ? [{ imei, imageUrl: photoUrl }] : []
+        imeiImages: imgObj ? [imgObj] : []
       };
     });
 

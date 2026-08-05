@@ -438,6 +438,8 @@ const getExecutiveDashboard = async (req, res, next) => {
     let totalStockCost = 0;
     const lowStockAlerts = [];
 
+    const branchProductCount = {};
+
     allStock.forEach(st => {
       const qty = 1;
       const sellPrice = st.selling_price || (st.product ? st.product.selling_price : 0);
@@ -447,11 +449,39 @@ const getExecutiveDashboard = async (req, res, next) => {
       totalStockValue += sellPrice;
       totalStockCost += buyPrice;
 
-      if (st.branch && branchSalesMap[st.branch._id.toString()]) {
-        branchSalesMap[st.branch._id.toString()].stockItems += qty;
-        branchSalesMap[st.branch._id.toString()].stockValue += sellPrice;
+      if (st.branch) {
+        const bIdStr = st.branch._id.toString();
+        if (branchSalesMap[bIdStr]) {
+          branchSalesMap[bIdStr].stockItems += qty;
+          branchSalesMap[bIdStr].stockValue += sellPrice;
+        }
+
+        if (st.product) {
+          const pIdStr = st.product._id.toString();
+          const key = `${bIdStr}_${pIdStr}`;
+          if (!branchProductCount[key]) {
+            branchProductCount[key] = {
+              branchId: bIdStr,
+              branchName: st.branch.name,
+              productId: pIdStr,
+              productName: st.productName || st.product.name || 'สินค้าไม่ระบุชื่อ',
+              quantity: 0
+            };
+          }
+          branchProductCount[key].quantity += 1;
+        }
       }
     });
+
+    // Filter products with stock <= 2
+    Object.values(branchProductCount).forEach(item => {
+      if (item.quantity <= 2) {
+        lowStockAlerts.push(item);
+      }
+    });
+
+    // Sort ascending by quantity so lowest stock items show first
+    lowStockAlerts.sort((a, b) => a.quantity - b.quantity);
 
     // 3. Top Selling Products
     const productSalesCount = {};
