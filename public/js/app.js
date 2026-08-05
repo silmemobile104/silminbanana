@@ -314,7 +314,7 @@ async function navigateTo(viewName) {
         await renderRolesPermissionsView();
         break;
       case 'system-logs':
-        heading.innerText = 'ประวัติกิจกรรมระบบ (System Audit Logs)';
+        heading.innerText = 'ประวัติกิจกรรมระบบ';
         subheading.innerText = 'ประวัติการดำเนินกิจกรรมที่สำคัญทั้งหมดในระบบ เช่น การขายสินค้า การโอนย้าย และการแก้ไขข้อมูลสินค้า';
         await renderSystemLogsView();
         break;
@@ -2980,7 +2980,7 @@ async function renderBranchAuditView() {
       <div class="card" style="margin-bottom: 1.5rem;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <div>
-            <h3 style="font-size:1.1rem; font-weight:700;">แบบฟอร์ม นับสต็อกประจำวัน (Branch Daily Stock Check)</h3>
+            <h3 style="font-size:1.1rem; font-weight:700;">แบบฟอร์ม นับสต็อกประจำวัน</h3>
             <p style="font-size:0.85rem; color:var(--text-muted);">สแกนบาร์โค้ด IMEI/ซีเรียล หรือพิมพ์เพื่อตรวจนับสินค้า ระบบจะคำนวณ ยอดที่ขาด/เกิน ให้อัตโนมัติ</p>
           </div>
           <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -3450,7 +3450,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
             <div>
               <h3 style="font-size:1.15rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
-                <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ (Purchasing Overview)
+                <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ
               </h3>
               <p style="font-size:0.8rem; color:var(--text-muted);">วงเงินคงเหลือ, สต็อกพร้อมขายในสาขา, รายการสั่งซื้อค้างส่ง และปุ่มทางด่วนสั่งซื้อ</p>
             </div>
@@ -5101,7 +5101,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.1rem; font-weight:700;">ตรวจสอบรายการรับสินค้าเข้าสต็อก (Stock Receipt Verification)</h3>
+          <h3 style="font-size:1.1rem; font-weight:700;">ตรวจสอบรายการรับสินค้าเข้าสต็อก</h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">
             ฝ่ายสต็อกและจัดซื้อจะเข้ามาตรวจสอบ ใส่ราคาทุนและราคาขาย (1 รายการ ต่อ 1 IMEI) และกดยืนยันเข้าสต็อก
           </p>
@@ -6078,7 +6078,7 @@ async function renderBranchManagementView() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3 style="font-size:1.1rem; font-weight:700;">จัดการข้อมูลสาขา (Branch Management)</h3>
+          <h3 style="font-size:1.1rem; font-weight:700;">จัดการข้อมูลสาขา</h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">รายการสาขาทั้งหมดในระบบ และการเปิด/ปิดใช้งานสาขา</p>
         </div>
         ${isAdmin ? `
@@ -6090,10 +6090,10 @@ async function renderBranchManagementView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัสสาขา (Branch Code)</th>
-              <th>ชื่อสาขา (Branch Name)</th>
-              <th>ที่ตั้ง / เบอร์ติดต่อ (Location / Contact)</th>
-              <th>สถานะ (Status)</th>
+              <th>รหัสสาขา</th>
+              <th>ชื่อสาขา</th>
+              <th>ที่ตั้ง / เบอร์ติดต่อ</th>
+              <th>สถานะ</th>
               ${isAdmin ? `<th>การจัดการ</th>` : ''}
             </tr>
           </thead>
@@ -6831,7 +6831,7 @@ async function renderRolesPermissionsView() {
       <div class="card" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1.2rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.2rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.6rem; margin:0 0 0.2rem 0;">
-            <i class="fa-solid fa-sliders" style="color:var(--accent-gold);"></i> จัดการสิทธิ์การมองเห็นเมนู (Menu Permissions)
+            <i class="fa-solid fa-sliders" style="color:var(--accent-gold);"></i> จัดการสิทธิ์การมองเห็นเมนู
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
             ติ๊กเลือกเปิดหรือปิดเมนูที่คุณต้องการให้แต่ละตำแหน่งมองเห็น เมนูที่ถูกปิดจะถูกซ่อนจากพนักงานในตำแหน่งนั้นทันที
@@ -7277,7 +7277,7 @@ async function renderSystemLogsView() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติกิจกรรมระบบ (System Audit Logs)</h3>
+          <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติกิจกรรมระบบ</h3>
           <p style="font-size:0.83rem; color:var(--text-muted);">ระบบบันทึกความเคลื่อนไหว กิจกรรมการแก้ไข ข้อมูลทางการเงิน และประวัติการจัดส่งเรียลไทม์</p>
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
