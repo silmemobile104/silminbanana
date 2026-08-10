@@ -156,7 +156,14 @@ const getGoodsReceipts = async (req, res, next) => {
       query.status = status;
     }
 
-    if (branchId) {
+    const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || isHqUser;
+
+    if (!isAdminOrHq) {
+      if (req.user.branch) {
+        query.branch = req.user.branch._id || req.user.branch;
+      }
+    } else if (branchId) {
       query.branch = branchId;
     }
 

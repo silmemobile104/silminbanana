@@ -215,11 +215,22 @@ const getSalesHistory = async (req, res, next) => {
       query.status = req.query.status;
     }
 
+    if (req.query.startDate || req.query.endDate) {
+      query.createdAt = {};
+      if (req.query.startDate) {
+        query.createdAt.$gte = new Date(req.query.startDate + 'T00:00:00.000Z');
+      }
+      if (req.query.endDate) {
+        // Set to end of day local or UTC depending on frontend
+        query.createdAt.$lte = new Date(req.query.endDate + 'T23:59:59.999Z');
+      }
+    }
+
     const sales = await Sale.find(query)
       .populate('branch', 'name code phone')
       .populate('soldBy', 'fullName username')
       .sort({ createdAt: -1 })
-      .limit(200);
+      .limit(1000);
 
     res.json({
       success: true,

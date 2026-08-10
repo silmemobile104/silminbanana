@@ -1770,7 +1770,7 @@ function openFullTaxInvoiceModal(sale, tax) {
             <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:50px; width:50px; object-fit:contain;">
             <div>
               <h1 style="font-size:1.6rem; font-weight:900; margin:0; color:#000;">SILMIN BANANA</h1>
-              <span style="font-size:0.72rem; color:#444;">บริษัท ซิลมิน บานาน่า จำกัด (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
+              <span style="font-size:0.72rem; color:#444;">ซิลมิน บานาน่า (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
             </div>
           </div>
           <div style="font-size:0.8rem; color:#333;">
@@ -2007,9 +2007,28 @@ async function renderFinanceView(filterParams = {}) {
               </select>
             </div>
 
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">เริ่มวันที่:</label>
+              <input type="date" id="fin-start-date" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">ถึงวันที่:</label>
+              <input type="date" id="fin-end-date" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <input type="text" id="fin-search-input" class="form-control" placeholder="ค้นหาบิล, ลูกค้า, IMEI..." style="width:180px; padding:0.3rem 0.6rem; font-size:0.82rem;" onkeyup="filterFinanceTable()">
+            </div>
+
             <button class="btn btn-primary btn-sm" onclick="applyFinanceFilters()">
               <i class="fa-solid fa-magnifying-glass"></i> ค้นหา
             </button>
+            ${(filterParams.branchId || filterParams.paymentMethod || filterParams.payoutStatus || filterParams.startDate || filterParams.endDate) ? `
+              <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
+                <i class="fa-solid fa-rotate-left"></i> ล้างตัวกรอง
+              </button>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -2047,7 +2066,7 @@ async function renderFinanceView(filterParams = {}) {
               const profitTotal = s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal);
 
               return `
-                <tr style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
+                <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
                   <td>
                     <strong>${s.receiptNumber}</strong>
                     ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
@@ -2120,13 +2139,29 @@ function applyFinanceFilters() {
   const branchSelect = document.getElementById('fin-branch-filter');
   const paymentSelect = document.getElementById('fin-payment-filter');
   const payoutSelect = document.getElementById('fin-payout-filter');
+  const startDateInput = document.getElementById('fin-start-date');
+  const endDateInput = document.getElementById('fin-end-date');
 
   const filterParams = {};
   if (branchSelect && branchSelect.value) filterParams.branchId = branchSelect.value;
   if (paymentSelect && paymentSelect.value) filterParams.paymentMethod = paymentSelect.value;
   if (payoutSelect && payoutSelect.value) filterParams.payoutStatus = payoutSelect.value;
+  if (startDateInput && startDateInput.value) filterParams.startDate = startDateInput.value;
+  if (endDateInput && endDateInput.value) filterParams.endDate = endDateInput.value;
 
   renderFinanceView(filterParams);
+}
+
+function filterFinanceTable() {
+  const query = document.getElementById('fin-search-input').value.toLowerCase().trim();
+  document.querySelectorAll('.fin-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    if (searchData.includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName) {
@@ -3574,6 +3609,17 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="openCreatePurchaseOrderModal(${selectedBranchId ? `'${selectedBranchId}'` : ''})"><i class="fa-solid fa-plus"></i> สั่งซื้อสินค้าลงสาขาใหม่</button>
+          
+          <div style="display:flex; align-items:center; gap:0.3rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
+            <input type="date" id="po-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
+          </div>
+          <div style="display:flex; align-items:center; gap:0.3rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
+            <input type="date" id="po-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
+          </div>
+          <input type="text" id="po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สินค้า, ผู้สั่ง..." style="width:190px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterPoTable()">
+
           ${branches.length > 0 ? `
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ตัวกรองสาขา:</label>
@@ -3606,6 +3652,9 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
               const isPending = order.status === 'pending_imei';
               const itemsList = order.items || [];
               const totalQty = itemsList.reduce((sum, item) => sum + (item.quantity || 0), 0);
+              const dateObj = new Date(order.createdAt);
+              const isoDate = dateObj.toISOString().split('T')[0];
+              const itemsNamesStr = itemsList.map(it => it.productName).join(' ');
 
               let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเข้าสต็อกแล้ว</span>';
               if (isPending) {
@@ -3615,10 +3664,10 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
               }
 
               return `
-                <tr>
+                <tr class="po-row" data-search="${(order.orderNumber + ' ' + (order.branchName || '') + ' ' + itemsNamesStr + ' ' + (order.orderedByName || '')).toLowerCase()}" data-date="${isoDate}">
                   <td>
                     <strong style="color:var(--accent-secondary); font-size:0.92rem;">${order.orderNumber}</strong><br>
-                    <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(order.createdAt).toLocaleString('th-TH')}</span>
+                    <span style="font-size:0.78rem; color:var(--text-muted);">${dateObj.toLocaleString('th-TH')}</span>
                   </td>
                   <td><strong>${order.branchName || 'สาขา'}</strong></td>
                   <td>
@@ -3644,6 +3693,9 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                         </div>
                       </div>
                     ` : ''}
+                    <button class="btn btn-secondary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-top:0.3rem; font-weight:700; width:100%;" onclick="printPurchaseOrderDoc('${order._id}')">
+                      <i class="fa-solid fa-print"></i> พิมพ์ใบสั่งซื้อ
+                    </button>
                   </td>
                 </tr>
               `;
@@ -3664,6 +3716,29 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดใบสั่งซื้อ: ${err.message}</div>`;
   }
+}
+
+function filterPoTable() {
+  const query = document.getElementById('po-search-input') ? document.getElementById('po-search-input').value.toLowerCase().trim() : '';
+  const startDate = document.getElementById('po-start-date') ? document.getElementById('po-start-date').value : '';
+  const endDate = document.getElementById('po-end-date') ? document.getElementById('po-end-date').value : '';
+
+  document.querySelectorAll('.po-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowDate = row.getAttribute('data-date') || '';
+    
+    let matchSearch = searchData.includes(query);
+    let matchDate = true;
+
+    if (startDate && rowDate < startDate) matchDate = false;
+    if (endDate && rowDate > endDate) matchDate = false;
+
+    if (matchSearch && matchDate) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 function openCreatePurchaseOrderModal(preselectedBranchId = null) {
@@ -4255,6 +4330,159 @@ async function submitFillImeiAndReceive(orderId) {
   }
 }
 
+async function printPurchaseOrderDoc(orderId) {
+  openModal('กำลังโหลดเอกสารใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+
+  try {
+    const res = await apiRequest(`/purchase-orders/${orderId}`);
+    const order = res.order;
+    if (!order) {
+      showToast('ไม่พบข้อมูลใบสั่งซื้อ', 'error');
+      return;
+    }
+
+    const branches = state.masterOptions.branches || [];
+    const branch = branches.find(b => String(b._id) === String(order.branch ? (order.branch._id || order.branch) : '')) || order.branch || {};
+    const itemsList = order.items || [];
+    const totalQty = itemsList.reduce((sum, it) => sum + (it.quantity || 0), 0);
+    const orderDate = new Date(order.createdAt);
+
+    let statusLabel = 'รอสาขาเติม IMEI';
+    let statusColor = '#b45309';
+    if (order.status === 'received') { statusLabel = 'รับเข้าสต็อกแล้ว'; statusColor = '#15803d'; }
+    else if (order.status === 'cancelled') { statusLabel = 'ยกเลิก'; statusColor = '#b91c1c'; }
+
+    const bodyHtml = `
+      <div id="printable-voucher" class="printable-area" style="background:#fff; color:#000; padding:2.2rem; border:1px solid #ccc; border-radius:8px; font-family:'Sarabun','Prompt',sans-serif; max-width:800px; margin:0 auto 3rem auto; box-shadow:0 0 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; min-height:auto; justify-content:flex-start; box-sizing:border-box;">
+        <div>
+          <!-- Header -->
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #000; padding-bottom:1.2rem; margin-bottom:1.5rem;">
+            <div style="display:flex; gap:1.2rem; align-items:center;">
+              <img src="/image/icon_silminbanana.png" style="height:70px; width:auto; object-fit:contain;" alt="Logo">
+              <div>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมิน บานาน่า</h2>
+                <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
+                  สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000<br>
+                  เลขประจำตัวผู้เสียภาษี: 0000000000000
+                </p>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <span style="display:inline-block; border:2px solid #000; padding:0.5rem 1rem; font-weight:800; font-size:1.1rem; background:#f0f9ff; margin-bottom:0.5rem; border-radius:4px;">
+                ใบสั่งซื้อสินค้า
+              </span>
+              <div style="font-size:0.85rem; color:#333; line-height:1.6;">
+                <div><strong>เลขที่ใบสั่งซื้อ:</strong> ${order.orderNumber}</div>
+                <div><strong>วันที่สั่งซื้อ:</strong> ${orderDate.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Branch & Orderer Info -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+            <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
+              <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#0284c7;">
+                <i class="fa-solid fa-building"></i> ผู้สั่งซื้อ (สำนักงานใหญ่)
+              </div>
+              <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
+                <tr><td style="width:75px; color:#555;">ผู้สั่งซื้อ:</td><td><strong>${order.orderedByName || '-'}</strong></td></tr>
+                <tr><td style="color:#555;">วันเวลา:</td><td>${orderDate.toLocaleString('th-TH')}</td></tr>
+                <tr><td style="color:#555;">หมายเหตุ:</td><td>${order.note || '-'}</td></tr>
+              </table>
+            </div>
+
+            <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
+              <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#16a34a;">
+                <i class="fa-solid fa-store"></i> สาขาปลายทาง (ผู้รับสินค้า)
+              </div>
+              <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
+                <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${branch.name || order.branchName || '-'}</strong></td></tr>
+                <tr><td style="color:#555;">ที่อยู่:</td><td>${branch.address || '-'}</td></tr>
+                <tr><td style="color:#555;">เบอร์โทร:</td><td>${branch.phone || '-'}</td></tr>
+                ${order.status === 'received' ? `<tr><td style="color:#555;">ผู้รับสินค้า:</td><td><strong>${order.receivedByName || '-'}</strong></td></tr>` : ''}
+              </table>
+            </div>
+          </div>
+
+          <!-- Items Table -->
+          <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
+            <thead>
+              <tr style="background:#e5e7eb; color:#000; border-top:1px solid #000; border-bottom:1px solid #000;">
+                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:45px;">ลำดับ</th>
+                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
+                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:65px;">จำนวน</th>
+                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">ราคา/ชิ้น (฿)</th>
+                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">รวม (฿)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsList.map((item, idx) => {
+                const imeiList = (item.imeis && item.imeis.length > 0) ? item.imeis : [];
+                return `
+                  <tr style="color:#000; border-bottom:1px solid #eee;">
+                    <td style="padding:10px 8px; text-align:center; color:#555;">${idx + 1}</td>
+                    <td style="padding:10px 8px;">
+                      <strong>${item.productName || '-'}</strong>
+                      ${imeiList.length > 0 ? `<div style="font-size:0.78rem; color:#555; margin-top:0.3rem; font-family:monospace;">IMEI: ${imeiList.join(', ')}</div>` : ''}
+                    </td>
+                    <td style="padding:10px 8px; text-align:center;">${item.quantity}</td>
+                    <td style="padding:10px 8px; text-align:right;">฿${(item.unitPrice || 0).toLocaleString()}</td>
+                    <td style="padding:10px 8px; text-align:right; font-weight:700;">฿${(item.totalPrice || (item.quantity * item.unitPrice) || 0).toLocaleString()}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="background:#f0fdf4; font-weight:700; border-top:1px solid #000; color:#000;">
+                <td colspan="2" style="padding:10px 8px; text-align:right;">จำนวนรวมทั้งสิ้น:</td>
+                <td style="padding:10px 8px; text-align:center; font-weight:800;">${totalQty} เครื่อง</td>
+                <td style="padding:10px 8px; text-align:right;"></td>
+                <td style="padding:10px 8px; text-align:right; font-weight:800; font-size:1.05rem; color:#15803d;">฿${(order.totalAmount || 0).toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Credit Summary -->
+          ${branch.creditLimit ? `
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.7rem 1rem; font-size:0.82rem; margin-bottom:1.5rem; color:#1e3a5f;">
+              <strong>สรุปวงเงินเครดิตสาขา:</strong>
+              วงเงินอนุมัติ ฿${(branch.creditLimit || 0).toLocaleString()} |
+              ใช้ไปแล้ว ฿${(branch.usedCredit || 0).toLocaleString()} |
+              คงเหลือ ฿${Math.max(0, (branch.creditLimit || 0) - (branch.usedCredit || 0)).toLocaleString()}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Signature Section -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; text-align:center; font-size:0.85rem; color:#000; margin-top:3rem; padding-top:1.5rem; border-top:1px dashed #ccc;">
+          <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div style="font-weight:700; margin-bottom:2rem;">ผู้สั่งซื้อ / ผู้อนุมัติ</div>
+            <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
+            <div>( ${order.orderedByName || '____________________________________'} )</div>
+            <div style="font-size:0.78rem; color:#555; margin-top:0.4rem;">วันที่ ${orderDate.toLocaleDateString('th-TH')}</div>
+          </div>
+
+          <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div style="font-weight:700; margin-bottom:2rem;">ผู้รับสินค้า (สาขาปลายทาง)</div>
+            <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
+            <div>( ${order.status === 'received' && order.receivedByName ? order.receivedByName : '____________________________________'} )</div>
+            <div style="font-size:0.78rem; color:#555; margin-top:0.4rem;">วันที่ ${order.receivedAt ? new Date(order.receivedAt).toLocaleDateString('th-TH') : '_____ / _____ / ________'}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footerHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบสั่งซื้อสินค้า</button>
+    `;
+
+    openModal(`เอกสาร: ${order.orderNumber}`, bodyHtml, footerHtml);
+  } catch (err) {
+    openModal('เกิดข้อผิดพลาด', `<p style="color:#ef4444;">${err.message}</p>`);
+  }
+}
+
 /* ==========================================================================
    VIEW 4: GOODS RECEIPT (DIRECT PRODUCT SPEC ENTRY BY STORE STAFF)
    ========================================================================== */
@@ -4265,6 +4493,9 @@ async function renderGoodsReceiptView() {
   try {
     await loadMasterOptions();
     const { brands = [], models = [], capacities = [], colors = [], categories = [], branches = [] } = state.masterOptions;
+
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
 
     // Fetch past goods receipts
     let receipts = [];
@@ -4324,9 +4555,12 @@ async function renderGoodsReceiptView() {
       const poRows = pendingPoOrders.map(order => {
         const totalQty = (order.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
         const itemNames = (order.items || []).map(it => it.productName).join(', ');
-        const dateStr = new Date(order.createdAt).toLocaleDateString('th-TH');
+        const dateObj = new Date(order.createdAt);
+        const dateStr = dateObj.toLocaleDateString('th-TH');
+        const isoDate = dateObj.toISOString().split('T')[0];
+        const branchId = order.branch ? (order.branch._id || order.branch) : '';
         return `
-          <tr>
+          <tr class="gr-pending-po-row" data-search="${(order.orderNumber + ' ' + (order.branchName || '') + ' ' + itemNames).toLowerCase()}" data-date="${isoDate}" data-branch-id="${branchId}">
             <td>
               <strong style="color:#38bdf8;">${order.orderNumber}</strong><br>
               <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
@@ -4347,10 +4581,33 @@ async function renderGoodsReceiptView() {
 
       pendingPoSectionHtml = `
         <div class="card gr-pending-po-card" style="width: 100%; margin:0 auto 1.5rem auto;">
-          <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.8rem;">
-            <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;"></i>
-            <h4 style="font-size:1.05rem; font-weight:800; color:#fbbf24; margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
-            <span class="badge badge-yellow" style="font-size:0.82rem;">${pendingPoOrders.length} ใบ</span>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; flex-wrap:wrap; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.6rem;">
+              <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;"></i>
+              <h4 style="font-size:1.05rem; font-weight:800; color:#fbbf24; margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
+              <span id="gr-pending-po-count-badge" class="badge badge-yellow" style="font-size:0.82rem;">${pendingPoOrders.length} ใบ</span>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              ${isAdminOrHq ? `
+                <div style="display:flex; align-items:center; gap:0.3rem;">
+                  <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
+                  <select id="gr-po-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterGrPendingPoTable()">
+                    <option value="">-- ทุกสาขา --</option>
+                    ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}">${b.name}</option>`).join('') : ''}
+                  </select>
+                </div>
+              ` : ''}
+              <div style="display:flex; align-items:center; gap:0.3rem;">
+                <label style="font-size:0.75rem; color:var(--text-muted);">เริ่มวันที่:</label>
+                <input type="date" id="gr-po-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
+              </div>
+              <div style="display:flex; align-items:center; gap:0.3rem;">
+                <label style="font-size:0.75rem; color:var(--text-muted);">ถึงวันที่:</label>
+                <input type="date" id="gr-po-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
+              </div>
+              <input type="text" id="gr-po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สาขา..." style="width:180px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrPendingPoTable()">
+            </div>
           </div>
           <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:0.8rem;">
             ใบสั่งซื้อเหล่านี้ได้รับการอนุมัติและหักวงเงินแล้ว กรุณากดปุ่ม <strong style="color:#34d399;">สแกนเติม IMEI</strong> เพื่อบันทึกสินค้าเข้าสต็อก
@@ -4378,7 +4635,7 @@ async function renderGoodsReceiptView() {
       
       <!-- History & Editing Section -->
       <div class="card gr-history-card" style="width: 100%; margin: 0 auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.8rem; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.8rem;">
           <div>
             <h4 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
               <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติรายการรับสินค้าเข้าสต็อก
@@ -4392,6 +4649,28 @@ async function renderGoodsReceiptView() {
             <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
             <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
           </div>
+        </div>
+        
+        <!-- History Filters Toolbar -->
+        <div style="display:flex; justify-content:flex-end; align-items:center; gap:0.8rem; flex-wrap:wrap; margin-bottom:1rem; background:rgba(255,255,255,0.02); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+          ${isAdminOrHq ? `
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
+              <select id="gr-hist-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterGrReceiptHistoryTable()">
+                <option value="">-- ทุกสาขา --</option>
+                ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}">${b.name}</option>`).join('') : ''}
+              </select>
+            </div>
+          ` : ''}
+          <div style="display:flex; align-items:center; gap:0.3rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
+            <input type="date" id="gr-hist-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
+          </div>
+          <div style="display:flex; align-items:center; gap:0.3rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
+            <input type="date" id="gr-hist-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
+          </div>
+          <input type="text" id="gr-hist-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สาขา, สินค้า, IMEI..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrReceiptHistoryTable()">
         </div>
 
         <div class="table-container">
@@ -4412,10 +4691,13 @@ async function renderGoodsReceiptView() {
                 const p = r.productInfo || {};
                 const isPending = r.status === 'pending_pricing';
                 const isConfirmed = r.status === 'confirmed';
-                const dateStr = new Date(r.createdAt).toLocaleString('th-TH');
+                const dateObj = new Date(r.createdAt);
+                const dateStr = dateObj.toLocaleString('th-TH');
+                const isoDate = dateObj.toISOString().split('T')[0];
+                const branchId = r.branch ? (r.branch._id || r.branch) : '';
 
                 return `
-                  <tr class="receipt-history-row gr-table-row">
+                  <tr class="receipt-history-row gr-table-row" data-search="${(r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + (p.brand || '') + ' ' + (p.model || '') + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase()}" data-date="${isoDate}" data-branch-id="${branchId}">
                     <td>
                       <strong style="color:#38bdf8;">${r.receiptNumber}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
@@ -4586,6 +4868,67 @@ async function renderGoodsReceiptView() {
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444;">${err.message}</div>`;
   }
+}
+
+function filterGrPendingPoTable() {
+  const query = document.getElementById('gr-po-search-input') ? document.getElementById('gr-po-search-input').value.toLowerCase().trim() : '';
+  const startDate = document.getElementById('gr-po-start-date') ? document.getElementById('gr-po-start-date').value : '';
+  const endDate = document.getElementById('gr-po-end-date') ? document.getElementById('gr-po-end-date').value : '';
+  const branchFilter = document.getElementById('gr-po-branch-filter') ? document.getElementById('gr-po-branch-filter').value : '';
+
+  let visibleCount = 0;
+  document.querySelectorAll('.gr-pending-po-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowDate = row.getAttribute('data-date') || '';
+    const rowBranchId = row.getAttribute('data-branch-id') || '';
+    
+    let matchSearch = searchData.includes(query);
+    let matchDate = true;
+    let matchBranch = true;
+
+    if (startDate && rowDate < startDate) matchDate = false;
+    if (endDate && rowDate > endDate) matchDate = false;
+    if (branchFilter && rowBranchId !== branchFilter) matchBranch = false;
+
+    if (matchSearch && matchDate && matchBranch) {
+      row.style.display = '';
+      visibleCount++;
+    } else {
+      row.style.display = 'none';
+    }
+  });
+
+  const badge = document.getElementById('gr-pending-po-count-badge');
+  if (badge) {
+    badge.innerText = `${visibleCount} ใบ`;
+  }
+}
+
+function filterGrReceiptHistoryTable() {
+  const query = document.getElementById('gr-hist-search-input') ? document.getElementById('gr-hist-search-input').value.toLowerCase().trim() : '';
+  const startDate = document.getElementById('gr-hist-start-date') ? document.getElementById('gr-hist-start-date').value : '';
+  const endDate = document.getElementById('gr-hist-end-date') ? document.getElementById('gr-hist-end-date').value : '';
+  const branchFilter = document.getElementById('gr-hist-branch-filter') ? document.getElementById('gr-hist-branch-filter').value : '';
+
+  document.querySelectorAll('.receipt-history-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowDate = row.getAttribute('data-date') || '';
+    const rowBranchId = row.getAttribute('data-branch-id') || '';
+    
+    let matchSearch = searchData.includes(query);
+    let matchDate = true;
+    let matchBranch = true;
+
+    if (startDate && rowDate < startDate) matchDate = false;
+    if (endDate && rowDate > endDate) matchDate = false;
+    if (branchFilter && rowBranchId !== branchFilter) matchBranch = false;
+
+    if (matchSearch && matchDate && matchBranch) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 function openEditGoodsReceiptModal(receiptId) {
@@ -5090,7 +5433,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการรับสินค้าเข้าสต็อก...</div>`;
 
   try {
-    const res = await apiRequest(`/stock/receipts?status=${filterStatus}`);
+    const res = await apiRequest(`/stock/receipts`);
     const receipts = res.receipts || [];
     state.pendingReceiptsCache = receipts;
 
@@ -5113,14 +5456,43 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
               <i class="fa-solid fa-layer-group"></i> กำหนดราคาแบบเลือกกลุ่ม (${pendingCount} รายการรอ)
             </button>
           ` : ''}
-          <button class="btn ${filterStatus === 'all' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="renderReceiptVerificationView('all')">รายการทั้งหมด</button>
-          <button class="btn ${filterStatus === 'pending_pricing' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="renderReceiptVerificationView('pending_pricing')">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value=''; filterRcptVerifyTable();">รายการทั้งหมด</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value='pending_pricing'; filterRcptVerifyTable();">
             <i class="fa-solid fa-clock"></i> รอตั้งราคา (${pendingCount})
           </button>
-          <button class="btn ${filterStatus === 'confirmed' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="renderReceiptVerificationView('confirmed')">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value='confirmed'; filterRcptVerifyTable();">
             <i class="fa-solid fa-check-double"></i> ยืนยันแล้ว
           </button>
         </div>
+      </div>
+
+      <!-- Verification Filters Toolbar -->
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:0.8rem; flex-wrap:wrap; margin-bottom:1rem; background:rgba(255,255,255,0.02); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สถานะ:</label>
+          <select id="rcpt-verify-status-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterRcptVerifyTable()">
+            <option value="">-- ทั้งหมด --</option>
+            <option value="pending_pricing" ${filterStatus === 'pending_pricing' ? 'selected' : ''}>รอตั้งราคา</option>
+            <option value="confirmed" ${filterStatus === 'confirmed' ? 'selected' : ''}>ยืนยันแล้ว</option>
+            <option value="rejected" ${filterStatus === 'rejected' ? 'selected' : ''}>ถูกปฏิเสธ</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
+          <select id="rcpt-verify-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterRcptVerifyTable()">
+            <option value="">-- ทุกสาขา --</option>
+            ${state.masterOptions && state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}">${b.name}</option>`).join('') : ''}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
+          <input type="date" id="rcpt-verify-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
+          <input type="date" id="rcpt-verify-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
+        </div>
+        <input type="text" id="rcpt-verify-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สินค้า, IMEI, ผู้รับ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterRcptVerifyTable()">
       </div>
 
       <div class="table-container">
@@ -5142,9 +5514,13 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
             ${receipts.map(r => {
               const p = r.productInfo || {};
               const isPending = r.status === 'pending_pricing';
+              const dateObj = new Date(r.createdAt);
+              const isoDate = dateObj.toISOString().split('T')[0];
+              const branchId = r.branch ? (r.branch._id || r.branch) : '';
+              const searchStr = (r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase();
 
               return `
-                <tr>
+                <tr class="rcpt-verify-row" data-search="${searchStr}" data-date="${isoDate}" data-branch-id="${branchId}" data-status="${r.status}">
                   ${isHqOrPurchasing ? `
                     <td style="text-align:center;">
                       ${isPending ? `<input type="checkbox" class="rcpt-checkbox" value="${r._id}">` : ''}
@@ -5152,7 +5528,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                   ` : ''}
                   <td>
                     <strong>${r.receiptNumber}</strong><br>
-                    <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(r.createdAt).toLocaleString('th-TH')}</span>
+                    <span style="font-size:0.78rem; color:var(--text-muted);">${dateObj.toLocaleString('th-TH')}</span>
                   </td>
                   <td>
                     <strong>${r.branch ? r.branch.name : 'สาขาทั่วไป'}</strong><br>
@@ -5190,9 +5566,43 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
         </table>
       </div>
     `;
+
+    // Apply initial filter if any is selected
+    filterRcptVerifyTable();
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดตรวจสอบรายการรับสินค้า: ${err.message}</div>`;
   }
+}
+
+function filterRcptVerifyTable() {
+  const query = document.getElementById('rcpt-verify-search-input') ? document.getElementById('rcpt-verify-search-input').value.toLowerCase().trim() : '';
+  const startDate = document.getElementById('rcpt-verify-start-date') ? document.getElementById('rcpt-verify-start-date').value : '';
+  const endDate = document.getElementById('rcpt-verify-end-date') ? document.getElementById('rcpt-verify-end-date').value : '';
+  const branchFilter = document.getElementById('rcpt-verify-branch-filter') ? document.getElementById('rcpt-verify-branch-filter').value : '';
+  const statusFilter = document.getElementById('rcpt-verify-status-filter') ? document.getElementById('rcpt-verify-status-filter').value : '';
+
+  document.querySelectorAll('.rcpt-verify-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowDate = row.getAttribute('data-date') || '';
+    const rowBranchId = row.getAttribute('data-branch-id') || '';
+    const rowStatus = row.getAttribute('data-status') || '';
+    
+    let matchSearch = searchData.includes(query);
+    let matchDate = true;
+    let matchBranch = true;
+    let matchStatus = true;
+
+    if (startDate && rowDate < startDate) matchDate = false;
+    if (endDate && rowDate > endDate) matchDate = false;
+    if (branchFilter && rowBranchId !== branchFilter) matchBranch = false;
+    if (statusFilter && rowStatus !== statusFilter) matchStatus = false;
+
+    if (matchSearch && matchDate && matchBranch && matchStatus) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 function toggleSelectAllReceipts(checked) {
@@ -5588,7 +5998,7 @@ async function printTransferDoc(transferId) {
     const doc = res.document;
 
     const bodyHtml = `
-      <div id="printable-voucher" class="printable-area" style="background:#fff; color:#000; padding:2.2rem; border:1px solid #ccc; border-radius:8px; font-family:'Sarabun','Prompt',sans-serif; max-width:800px; margin:0 auto; box-shadow:0 0 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; min-height:277mm; justify-content:space-between; box-sizing:border-box;">
+      <div id="printable-voucher" class="printable-area" style="background:#fff; color:#000; padding:2.2rem; border:1px solid #ccc; border-radius:8px; font-family:'Sarabun','Prompt',sans-serif; max-width:800px; margin:0 auto 3rem auto; box-shadow:0 0 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; min-height:auto; justify-content:flex-start; box-sizing:border-box;">
         
         <!-- Top & Middle Content Area -->
         <div>
@@ -5597,10 +6007,10 @@ async function printTransferDoc(transferId) {
             <div style="display:flex; gap:1.2rem; align-items:center;">
               <img src="/image/icon_silminbanana.png" style="height:70px; width:auto; object-fit:contain;" alt="Logo">
               <div>
-                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">บริษัท ซิลมิน บานาน่า จำกัด</h2>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมิน บานาน่า</h2>
                 <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
-                  สำนักงานใหญ่: 88/8 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110<br>
-                  เลขประจำตัวผู้เสียภาษี: 0105563000123
+                  สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000<br>
+                  เลขประจำตัวผู้เสียภาษี: 0000000000000
                 </p>
               </div>
             </div>
@@ -5683,7 +6093,7 @@ async function printTransferDoc(transferId) {
         </div>
 
         <!-- Signature Section (Always Pushed to Bottom of Page) -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; text-align:center; font-size:0.85rem; color:#000; margin-top:auto; padding-top:1.5rem; border-top:1px dashed #ccc;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; text-align:center; font-size:0.85rem; color:#000; margin-top:3rem; padding-top:1.5rem; border-top:1px dashed #ccc;">
           <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
             <div style="font-weight:700; margin-bottom:2rem;">ผู้จัดส่งสินค้า (สาขาต้นทาง)</div>
             <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
@@ -5692,7 +6102,7 @@ async function printTransferDoc(transferId) {
           </div>
           
           <div style="border:1px solid #ccc; padding:1.5rem 1rem; border-radius:6px; background:#fafafa; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-            <div style="font-weight:700; margin-bottom:2rem;">ผู้รับสินค้า (สาขาปลายทาง)</div>
+            <div style="font-weight:700; margin-bottom:2rem;">ผู้รับสินค้า</div>
             <div style="width:200px; border-bottom:1px dashed #000; margin-bottom:0.5rem;"></div>
             <div>( ${doc.status === 'completed' && doc.approvedBy ? doc.approvedBy : '____________________________________'} )</div>
             <div style="font-size:0.78rem; color:#555; margin-top:0.4rem;">วันที่ _____ / _____ / ________</div>
@@ -6287,6 +6697,26 @@ async function renderEmployeeManagementView() {
         ` : ''}
       </div>
 
+      <!-- Employee Filters Toolbar -->
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:0.8rem; flex-wrap:wrap; margin-bottom:1rem; background:rgba(255,255,255,0.02); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขาประจำ:</label>
+          <select id="emp-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterEmployeeTable()">
+            <option value="">-- ทุกสาขา --</option>
+            <option value="hq">ส่วนกลาง (สำนักงานใหญ่)</option>
+            ${branches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.3rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ตำแหน่ง:</label>
+          <select id="emp-role-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterEmployeeTable()">
+            <option value="">-- ทุกตำแหน่ง --</option>
+            ${roles.map(r => `<option value="${r.code}">${r.name}</option>`).join('')}
+          </select>
+        </div>
+        <input type="text" id="emp-search-input" class="form-control" placeholder="ค้นหาชื่อ, รหัสพนักงาน, อีเมล..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterEmployeeTable()">
+      </div>
+
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -6301,33 +6731,37 @@ async function renderEmployeeManagementView() {
           </thead>
           <tbody>
             ${users.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลพนักงานในระบบ</td></tr>` : ''}
-            ${users.map(u => `
-              <tr>
-                <td><strong style="color:var(--accent-secondary); font-family:monospace;">${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
-                <td>
-                  <strong style="color:#fff;">${u.fullName || u.username}</strong><br>
-                  <span style="font-size:0.78rem; color:var(--text-muted);">${u.email}</span>
-                </td>
-                <td>
-                  <span class="badge badge-purple" style="font-size:0.8rem; font-weight:700;">
-                    <i class="fa-solid fa-user-shield"></i> ${formatRoleName(u.role, roles)}
-                  </span>
-                </td>
-                <td><strong>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
-                <td>
-                  <span class="badge badge-${u.isActive ? 'green' : 'red'}">
-                    ${u.isActive ? 'ปกติ' : 'ถูกระงับ'}
-                  </span>
-                </td>
-                ${isAdmin ? `
-                  <td style="text-align:center;">
-                    <button class="btn btn-warning btn-sm" style="font-weight:700; font-size:0.78rem; padding:0.25rem 0.6rem;" onclick="openEditEmpModal('${u._id}', '${u.fullName || u.username}', '${u.role}', '${u.branch ? u.branch._id : ''}', ${u.isActive})">
-                      <i class="fa-solid fa-pen-to-square"></i> แก้ไข
-                    </button>
+            ${users.map(u => {
+              const userBranchId = u.branch ? (u.branch._id || u.branch) : 'hq';
+              const searchStr = (u.fullName + ' ' + u.username + ' ' + (u.empId || '') + ' ' + u.email + ' ' + (u.branch ? u.branch.name : 'ส่วนกลาง')).toLowerCase();
+              return `
+                <tr class="emp-row" data-search="${searchStr}" data-branch-id="${userBranchId}" data-role="${u.role}">
+                  <td><strong style="color:var(--accent-secondary); font-family:monospace;">${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
+                  <td>
+                    <strong style="color:#fff;">${u.fullName || u.username}</strong><br>
+                    <span style="font-size:0.78rem; color:var(--text-muted);">${u.email}</span>
                   </td>
-                ` : ''}
-              </tr>
-            `).join('')}
+                  <td>
+                    <span class="badge badge-purple" style="font-size:0.8rem; font-weight:700;">
+                      <i class="fa-solid fa-user-shield"></i> ${formatRoleName(u.role, roles)}
+                    </span>
+                  </td>
+                  <td><strong>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
+                  <td>
+                    <span class="badge badge-${u.isActive ? 'green' : 'red'}">
+                      ${u.isActive ? 'ปกติ' : 'ถูกระงับ'}
+                    </span>
+                  </td>
+                  ${isAdmin ? `
+                    <td style="text-align:center;">
+                      <button class="btn btn-warning btn-sm" style="font-weight:700; font-size:0.78rem; padding:0.25rem 0.6rem;" onclick="openEditEmpModal('${u._id}', '${u.fullName || u.username}', '${u.role}', '${u.branch ? u.branch._id : ''}', ${u.isActive})">
+                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                      </button>
+                    </td>
+                  ` : ''}
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -6342,6 +6776,31 @@ async function renderEmployeeManagementView() {
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดข้อมูลพนักงาน: ${err.message}</div>`;
   }
+}
+
+function filterEmployeeTable() {
+  const query = document.getElementById('emp-search-input') ? document.getElementById('emp-search-input').value.toLowerCase().trim() : '';
+  const branchFilter = document.getElementById('emp-branch-filter') ? document.getElementById('emp-branch-filter').value : '';
+  const roleFilter = document.getElementById('emp-role-filter') ? document.getElementById('emp-role-filter').value : '';
+
+  document.querySelectorAll('.emp-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowBranchId = row.getAttribute('data-branch-id') || '';
+    const rowRole = row.getAttribute('data-role') || '';
+    
+    let matchSearch = searchData.includes(query);
+    let matchBranch = true;
+    let matchRole = true;
+
+    if (branchFilter && rowBranchId !== branchFilter) matchBranch = false;
+    if (roleFilter && rowRole !== roleFilter) matchRole = false;
+
+    if (matchSearch && matchBranch && matchRole) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 async function openAddEmpModal(branchesList = [], rolesList = []) {
@@ -7280,12 +7739,43 @@ async function renderSystemLogsView() {
           <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติกิจกรรมระบบ</h3>
           <p style="font-size:0.83rem; color:var(--text-muted);">ระบบบันทึกความเคลื่อนไหว กิจกรรมการแก้ไข ข้อมูลทางการเงิน และประวัติการจัดส่งเรียลไทม์</p>
         </div>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <select id="sl-action-filter" class="form-select" style="width:auto; font-size:0.82rem;" onchange="filterSystemLogsTable()">
+      </div>
+
+      <!-- Logs Filters Toolbar -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.8rem; margin-bottom:1.5rem; background:rgba(255,255,255,0.02); padding:0.8rem; border-radius:8px; border:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex; flex-direction:column; gap:0.25rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ประเภทกิจกรรม:</label>
+          <select id="sl-action-filter" class="form-select" style="font-size:0.82rem;" onchange="filterSystemLogsTable()">
             <option value="all">-- แสดงทุกกิจกรรม --</option>
             ${uniqueActions.map(act => `<option value="${act}">${act}</option>`).join('')}
           </select>
-          <input type="text" id="sl-search-input" class="form-control" placeholder="ค้นหาชื่อผู้ทำ, รายละเอียด..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSystemLogsTable()">
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:0.25rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ระดับสิทธิ์ผู้ทำ:</label>
+          <select id="sl-role-filter" class="form-select" style="font-size:0.82rem;" onchange="filterSystemLogsTable()">
+            <option value="">-- ทุกระดับสิทธิ์ --</option>
+            <option value="Admin">ผู้ดูแลระบบ (Admin)</option>
+            <option value="Branch Staff">พนักงานประจำสาขา</option>
+            <option value="Technical Staff">ช่างเทคนิค</option>
+            <option value="Purchasing Staff">พนักงานฝ่ายจัดซื้อ</option>
+            <option value="HQ Stock">พนักงานคลังสินค้าส่วนกลาง</option>
+          </select>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.25rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
+          <input type="date" id="sl-start-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.25rem;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
+          <input type="date" id="sl-end-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.25rem; grid-column: 1 / -1;">
+          <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ค้นหาข้อมูลคำสำคัญ:</label>
+          <input type="text" id="sl-search-input" class="form-control" placeholder="ค้นหาชื่อผู้ดำเนินการ, สิทธิ์, กิจกรรม, รหัสเป้าหมาย หรือรายละเอียดกิจกรรมทั้งหมด..." style="font-size:0.82rem; padding:0.35rem 0.6rem;" onkeyup="filterSystemLogsTable()">
         </div>
       </div>
 
@@ -7303,14 +7793,20 @@ async function renderSystemLogsView() {
           <tbody>
             ${logs.length === 0 ? `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบประวัติกิจกรรมใดๆ ในระบบ</td></tr>` : ''}
             ${logs.map(l => {
-              const dt = new Date(l.createdAt).toLocaleString('th-TH');
+              const dateObj = new Date(l.createdAt);
+              const dt = dateObj.toLocaleString('th-TH');
+              const isoDate = dateObj.toISOString().split('T')[0];
               const usrStr = `<strong>${l.username}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">${l.userRole}</span>`;
               const actionBadge = `<span class="badge" style="background:${getLogActionBg(l.action)}; color:#fff; font-weight:700;">${l.action}</span>`;
               const entityStr = `<strong>${l.entity || '-'}</strong><br><span style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;">ID: ${l.entityId || '-'}</span>`;
               const detailsHtml = formatLogDetails(l);
+              
+              // Extract plain text details for search matching
+              const detailsText = detailsHtml.replace(/<[^>]*>/g, ' ');
+              const searchStr = (l.username + ' ' + l.userRole + ' ' + l.action + ' ' + (l.entity || '') + ' ' + (l.entityId || '') + ' ' + detailsText).toLowerCase();
 
               return `
-                <tr class="sl-row" data-action="${l.action}" data-search="${(l.username + ' ' + l.userRole + ' ' + l.action + ' ' + (l.entity || '')).toLowerCase()}">
+                <tr class="sl-row" data-action="${l.action}" data-role="${l.userRole || ''}" data-search="${searchStr}" data-date="${isoDate}">
                   <td style="font-size:0.82rem; color:var(--text-muted);">${dt}</td>
                   <td>${usrStr}</td>
                   <td>${actionBadge}</td>
@@ -7373,16 +7869,26 @@ function formatLogDetails(log) {
 
 function filterSystemLogsTable() {
   const filterVal = document.getElementById('sl-action-filter').value;
+  const roleFilterVal = document.getElementById('sl-role-filter').value;
+  const startDate = document.getElementById('sl-start-date').value;
+  const endDate = document.getElementById('sl-end-date').value;
   const searchVal = document.getElementById('sl-search-input').value.toLowerCase().trim();
 
   document.querySelectorAll('.sl-row').forEach(row => {
     const act = row.getAttribute('data-action') || '';
+    const role = row.getAttribute('data-role') || '';
     const searchData = row.getAttribute('data-search') || '';
+    const rowDate = row.getAttribute('data-date') || '';
 
-    const matchesFilter = (filterVal === 'all' || act === filterVal);
-    const matchesSearch = (!searchVal || searchData.includes(searchVal));
+    let matchesFilter = (filterVal === 'all' || act === filterVal);
+    let matchesRole = (!roleFilterVal || role.toLowerCase() === roleFilterVal.toLowerCase());
+    let matchesDate = true;
+    let matchesSearch = (!searchVal || searchData.includes(searchVal));
 
-    if (matchesFilter && matchesSearch) {
+    if (startDate && rowDate < startDate) matchesDate = false;
+    if (endDate && rowDate > endDate) matchesDate = false;
+
+    if (matchesFilter && matchesRole && matchesDate && matchesSearch) {
       row.style.display = '';
     } else {
       row.style.display = 'none';
@@ -7471,7 +7977,7 @@ async function submitCostReturn(saleId) {
 }
 
 
-async function renderSalesHistoryView(selectedBranchId = null, filterStatus = '') {
+async function renderSalesHistoryView(selectedBranchId = null, filterStatus = '', startDate = '', endDate = '') {
   const container = document.getElementById('content-container');
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดประวัติการขายสินค้า...</div>`;
 
@@ -7491,6 +7997,12 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
     }
     if (filterStatus) {
       queryParams.append('status', filterStatus);
+    }
+    if (startDate) {
+      queryParams.append('startDate', startDate);
+    }
+    if (endDate) {
+      queryParams.append('endDate', endDate);
     }
 
     const res = await apiRequest(`/pos/history?${queryParams.toString()}`);
@@ -7514,7 +8026,7 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">เลือกสาขา:</label>
-              <select id="sh-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView(this.value, document.getElementById('sh-status-select').value)">
+              <select id="sh-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView(this.value, document.getElementById('sh-status-select').value, document.getElementById('sh-start-date').value, document.getElementById('sh-end-date').value)">
                 <option value="all" ${branchIdParam === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${branchIdParam === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
@@ -7522,12 +8034,25 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
           ` : ''}
           <div style="display:flex; align-items:center; gap:0.4rem;">
             <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">สถานะบิล:</label>
-            <select id="sh-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', this.value)">
+            <select id="sh-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', this.value, document.getElementById('sh-start-date').value, document.getElementById('sh-end-date').value)">
               <option value="" ${filterStatus === '' ? 'selected' : ''}>-- ทุกสถานะ --</option>
               <option value="completed" ${filterStatus === 'completed' ? 'selected' : ''}>ทำรายการสำเร็จ</option>
               <option value="voided" ${filterStatus === 'voided' ? 'selected' : ''}>ยกเลิกบิลแล้ว</option>
             </select>
           </div>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">เริ่มวันที่:</label>
+            <input type="date" id="sh-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, this.value, document.getElementById('sh-end-date').value)">
+          </div>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ถึงวันที่:</label>
+            <input type="date" id="sh-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, document.getElementById('sh-start-date').value, this.value)">
+          </div>
+          ${(startDate || endDate) ? `
+            <button class="btn btn-secondary btn-sm" onclick="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, '', '')" style="font-size:0.82rem; padding:0.25rem 0.5rem; font-weight:700;">
+              <i class="fa-solid fa-rotate-left"></i> ล้างวันที่
+            </button>
+          ` : ''}
           <input type="text" id="sh-search-input" class="form-control" placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, IMEI..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSalesHistoryTable()">
         </div>
       </div>
@@ -7606,6 +8131,8 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
 function voidSaleAction(saleId, receiptNumber) {
   window.currentVoidBranchFilter = document.getElementById('sh-branch-select') ? document.getElementById('sh-branch-select').value : null;
   window.currentVoidStatusFilter = document.getElementById('sh-status-select') ? document.getElementById('sh-status-select').value : '';
+  window.currentVoidStartDateFilter = document.getElementById('sh-start-date') ? document.getElementById('sh-start-date').value : '';
+  window.currentVoidEndDateFilter = document.getElementById('sh-end-date') ? document.getElementById('sh-end-date').value : '';
 
   const bodyHtml = `
     <div style="text-align:center; padding:0.5rem 0;">
@@ -7638,7 +8165,7 @@ async function submitVoidSale(saleId, receiptNumber) {
     if (res.success) {
       showToast(res.message);
       closeModal();
-      renderSalesHistoryView(window.currentVoidBranchFilter, window.currentVoidStatusFilter);
+      renderSalesHistoryView(window.currentVoidBranchFilter, window.currentVoidStatusFilter, window.currentVoidStartDateFilter, window.currentVoidEndDateFilter);
     }
   } catch (err) {
     // Handled
