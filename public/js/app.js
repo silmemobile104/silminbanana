@@ -4536,8 +4536,8 @@ async function renderGoodsReceiptView() {
       const poRes = await apiRequest('/purchase-orders');
       if (poRes.success) {
         pendingPoOrders = (poRes.orders || []).filter(o => o.status === 'pending_imei');
-        // If branch_staff / technical_staff, filter to own branch only
-        if (state.user && state.user.branch && ['branch_staff', 'technical_staff'].includes((state.user ? state.user.role : 'admin'))) {
+        // Filter to own branch only for non-HQ/non-Admin staff
+        if (!isAdminOrHq && state.user && state.user.branch) {
           const userBranchId = String(state.user.branch._id || state.user.branch);
           pendingPoOrders = pendingPoOrders.filter(o => {
             const oBranchId = o.branch ? String(o.branch._id || o.branch) : '';

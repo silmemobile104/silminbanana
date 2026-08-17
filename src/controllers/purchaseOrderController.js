@@ -10,7 +10,10 @@ const getPurchaseOrders = async (req, res, next) => {
     const { branchId, status } = req.query;
     let query = {};
 
-    if (req.user.role === 'branch_staff') {
+    const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || req.user.role === 'purchase_staff' || isHqUser;
+
+    if (!isAdminOrHq) {
       const userBranchId = req.user.branch ? (req.user.branch._id || req.user.branch) : null;
       if (userBranchId) query.branch = userBranchId;
     } else if (branchId) {
