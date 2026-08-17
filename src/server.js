@@ -18,6 +18,7 @@ const branchRoutes = require('./routes/branchRoutes');
 const userRoutes = require('./routes/userRoutes');
 const posRoutes = require('./routes/posRoutes');
 const purchaseOrderRoutes = require('./routes/purchaseOrderRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
 
 const roleRoutes = require('./routes/roleRoutes');
 const { seedDefaultRolesIfEmpty } = require('./controllers/roleController');
@@ -56,6 +57,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // Health Check API
 app.get('/api/health', (req, res) => {

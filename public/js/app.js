@@ -1917,21 +1917,67 @@ async function renderFinanceView(filterParams = {}) {
     const res = await apiRequest(`/pos/finance-report?${queryParams}`);
     const summary = res.summary || {};
     const sales = res.sales || [];
+    const expenses = res.expenses || [];
     state.salesCache = sales;
+    state.expensesCache = expenses;
 
     const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
 
     container.innerHTML = `
       <!-- Summary Cards -->
-      <div class="grid-cards" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+      <div class="grid-cards" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">รายได้ & กำไรสุทธิรวม</span>
+            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">ยอดขายรวม (Revenue)</span>
+            <i class="fa-solid fa-cart-shopping" style="color: var(--accent-primary); font-size:1.3rem;"></i>
+          </div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#fff;">฿${(summary.totalRevenue || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
+            จำนวนบิลสำเร็จ: ${summary.totalSalesCount || 0} บิล
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขั้นต้น (Gross Profit)</span>
             <i class="fa-solid fa-coins" style="color: var(--accent-gold); font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#34d399;">฿${(summary.totalProfit || 0).toLocaleString()}</div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top:0.2rem;">
-            ยอดขายรวม: ฿${(summary.totalRevenue || 0).toLocaleString()} (ทุนรวม: ฿${(summary.totalCost || 0).toLocaleString()})
+          <div style="font-size: 1.6rem; font-weight:800; color:#fbbf24;">฿${(summary.totalProfit || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
+            ทุนรวมสินค้า: ฿${(summary.totalCost || 0).toLocaleString()}
+          </p>
+        </div>
+
+        <div class="card" style="border: 1px solid ${(summary.totalExpenses || 0) > 0 ? '#ef4444' : 'rgba(255,255,255,0.1)'};">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">รายจ่ายรวม (Expenses)</span>
+            <i class="fa-solid fa-receipt" style="color: #ef4444; font-size:1.3rem;"></i>
+          </div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#ef4444;">฿${(summary.totalExpenses || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
+            รายจ่ายดำเนินงานทั่วไป
+          </p>
+        </div>
+
+        <div class="card" style="border: 1px solid #34d399; background: rgba(52, 211, 153, 0.02);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรสุทธิ (Net Profit)</span>
+            <i class="fa-solid fa-hand-holding-dollar" style="color: #34d399; font-size:1.3rem;"></i>
+          </div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#34d399;">฿${(summary.netProfit || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
+            กำไรหลังหักราคาทุนและรายจ่าย
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรที่รอรับจากไฟแนนซ์</span>
+            <i class="fa-solid fa-clock-rotate-left" style="color: #fbbf24; font-size:1.3rem;"></i>
+          </div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#fbbf24;">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
+            ${summary.pendingFinanceCount || 0} รายการไฟแนนซ์รอโอนเงิน
           </p>
         </div>
 
@@ -1940,37 +1986,15 @@ async function renderFinanceView(filterParams = {}) {
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขายสด / โอน / บัตร</span>
             <i class="fa-solid fa-money-bill-wave" style="color: var(--accent-primary); font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800;">฿${(summary.cashProfit || 0).toLocaleString()}</div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top:0.2rem;">
+          <div style="font-size: 1.6rem; font-weight:800; color:#fff;">฿${(summary.cashProfit || 0).toLocaleString()}</div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             ยอดขายสดรวม: ฿${(summary.cashRevenue || 0).toLocaleString()}
-          </p>
-        </div>
-
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขายจัดไฟแนนซ์</span>
-            <i class="fa-solid fa-file-contract" style="color: #c084fc; font-size:1.3rem;"></i>
-          </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#c084fc;">฿${(summary.financeProfit || 0).toLocaleString()}</div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top:0.2rem;">
-            ยอดขายไฟแนนซ์รวม: ฿${(summary.financeRevenue || 0).toLocaleString()}
-          </p>
-        </div>
-
-        <div class="card" style="border: 1px solid ${summary.pendingFinanceCount > 0 ? '#fbbf24' : 'rgba(255,255,255,0.1)'};">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">ยอดกำไรที่รอรับจากไฟแนนซ์</span>
-            <i class="fa-solid fa-clock-rotate-left" style="color: #fbbf24; font-size:1.3rem;"></i>
-          </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#fbbf24;">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
-          <p style="font-size: 0.8rem; color: #fbbf24; margin-top:0.2rem; font-weight:600;">
-            ${summary.pendingFinanceCount || 0} รายการรอรับเงินกำไรจากไฟแนนซ์
           </p>
         </div>
       </div>
 
       <!-- Filter Controls -->
-      <div class="card" style="margin-bottom:1.5rem;">
+      <div id="fin-filter-panel" class="card" style="margin-bottom:1.5rem;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <h3 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-filter" style="color:var(--accent-primary);"></i> กรองข้อมูลรายงานการเงิน
@@ -2033,103 +2057,278 @@ async function renderFinanceView(filterParams = {}) {
         </div>
       </div>
 
-      <!-- Finance Sales Table -->
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>เลขที่ใบเสร็จ / วันเวลา</th>
-              <th>สาขา & ลูกค้า</th>
-              <th>รายการสินค้า (IMEI)</th>
-              <th>ช่องทางชำระเงิน</th>
-              <th>ราคาต้นทุน (บาท)</th>
-              <th>ราคาขาย (บาท)</th>
-              <th>กำไรสุทธิ (บาท)</th>
-              <th style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
-              <th style="text-align:center;">การคืนเงินทุนสาขา</th>
-              <th style="text-align:center;">ดำเนินการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${sales.length === 0 ? `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
-            ${sales.map((s, idx) => {
-              const itemsStr = (s.items || []).map(i => `${i.productName} (${i.imei})`).join('<br>');
-              const isFinance = s.paymentMethod === 'finance';
-              const finDetails = s.financeDetails || {};
-              const isVoided = s.status === 'voided';
-              const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
+      <!-- Tab Selection -->
+      <div style="display:flex; gap:0.5rem; margin-bottom:1.2rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.6rem;">
+        <button id="fin-tab-sales" class="btn btn-primary btn-sm" onclick="switchFinanceTab('sales')" style="font-weight:700; border-radius:4px 4px 0 0; padding:0.5rem 1.2rem;">
+          <i class="fa-solid fa-cash-register"></i> รายการขายสินค้า & กำไร
+        </button>
+        <button id="fin-tab-expenses" class="btn btn-secondary btn-sm" onclick="switchFinanceTab('expenses')" style="font-weight:700; border-radius:4px 4px 0 0; padding:0.5rem 1.2rem;">
+          <i class="fa-solid fa-receipt"></i> บันทึกรายจ่ายดำเนินงาน
+        </button>
+      </div>
 
-              let costTotal = s.totalCost || 0;
-              if (!costTotal && s.items) {
-                costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
-              }
-              const profitTotal = s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal);
+      <!-- Sales Tab Panel -->
+      <div id="fin-sales-panel">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>เลขที่ใบเสร็จ / วันเวลา</th>
+                <th>สาขา & ลูกค้า</th>
+                <th>รายการสินค้า (IMEI)</th>
+                <th>ช่องทางชำระเงิน</th>
+                <th>ราคาต้นทุน (บาท)</th>
+                <th>ราคาขาย (บาท)</th>
+                <th>กำไรสุทธิ (บาท)</th>
+                <th style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
+                <th style="text-align:center;">การคืนเงินทุนสาขา</th>
+                <th style="text-align:center;">ดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sales.length === 0 ? `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
+              ${sales.map((s, idx) => {
+                const itemsStr = (s.items || []).map(i => `${i.productName} (${i.imei})`).join('<br>');
+                const isFinance = s.paymentMethod === 'finance';
+                const finDetails = s.financeDetails || {};
+                const isVoided = s.status === 'voided';
+                const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
 
-              return `
-                <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
-                  <td>
-                    <strong>${s.receiptNumber}</strong>
-                    ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
-                    <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(s.createdAt).toLocaleString('th-TH')}</span>
-                  </td>
-                  <td>
-                    <strong>${s.branch ? s.branch.name : 'สาขาทั่วไป'}</strong><br>
-                    <span style="font-size:0.78rem; color:var(--text-muted);">ลูกค้า: ${s.customer ? s.customer.name : 'ทั่วไป'}</span>
-                  </td>
-                  <td style="font-size:0.82rem;">${itemsStr}</td>
-                  <td>
-                    ${s.paymentMethod === 'cash' ? '<span class="badge badge-green">เงินสด</span>' :
-                      s.paymentMethod === 'transfer' ? '<span class="badge badge-blue">โอนเงิน</span>' :
-                      s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
-                      `<span class="badge badge-gold"><i class="fa-solid fa-file-contract"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
-                  </td>
-                  <td>฿${costTotal.toLocaleString()}</td>
-                  <td>฿${s.grandTotal.toLocaleString()}</td>
-                  <td><strong style="color:#34d399; font-size:0.95rem;">฿${profitTotal.toLocaleString()}</strong></td>
-                  <td style="text-align:center;">
-                    ${isFinance ? `
-                      ${isPending ? `
-                        <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอรับเงินกำไรจากไฟแนนซ์</span><br>
-                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordFinancePayoutModal('${s._id}', '${s.receiptNumber}', ${profitTotal}, '${(finDetails.companyName || '').replace(/'/g, "\\'")}')">
-                          <i class="fa-solid fa-calendar-check"></i> บันทึกรับเงินกำไร (฿${profitTotal.toLocaleString()})
-                        </button>
+                let costTotal = s.totalCost || 0;
+                if (!costTotal && s.items) {
+                  costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
+                }
+                const profitTotal = s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal);
+
+                return `
+                  <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
+                    <td>
+                      <strong>${s.receiptNumber}</strong>
+                      ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(s.createdAt).toLocaleString('th-TH')}</span>
+                    </td>
+                    <td>
+                      <strong>${s.branch ? s.branch.name : 'สาขาทั่วไป'}</strong><br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">ลูกค้า: ${s.customer ? s.customer.name : 'ทั่วไป'}</span>
+                    </td>
+                    <td style="font-size:0.82rem;">${itemsStr}</td>
+                    <td>
+                      ${s.paymentMethod === 'cash' ? '<span class="badge badge-green">เงินสด</span>' :
+                        s.paymentMethod === 'transfer' ? '<span class="badge badge-blue">โอนเงิน</span>' :
+                        s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
+                        `<span class="badge badge-gold"><i class="fa-solid fa-file-contract"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
+                    </td>
+                    <td>฿${costTotal.toLocaleString()}</td>
+                    <td>฿${s.grandTotal.toLocaleString()}</td>
+                    <td><strong style="color:#34d399; font-size:0.95rem;">฿${profitTotal.toLocaleString()}</strong></td>
+                    <td style="text-align:center;">
+                      ${isFinance ? `
+                        ${isPending ? `
+                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอรับเงินกำไรจากไฟแนนซ์</span><br>
+                          <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordFinancePayoutModal('${s._id}', '${s.receiptNumber}', ${profitTotal}, '${(finDetails.companyName || '').replace(/'/g, "\\'")}')">
+                            <i class="fa-solid fa-calendar-check"></i> บันทึกรับเงินกำไร (฿${profitTotal.toLocaleString()})
+                          </button>
+                        ` : `
+                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเงินกำไรแล้ว</span><br>
+                          <span style="font-size:0.75rem; color:var(--text-muted);">
+                            วันที่รับ: ${finDetails.payoutReceivedDate ? new Date(finDetails.payoutReceivedDate).toLocaleDateString('th-TH') : '-'}
+                          </span>
+                        `}
+                      ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- (รับเงินสดแล้ว) -</span>`}
+                    </td>
+                    <td style="text-align:center; vertical-align:middle;">
+                      ${isFinance ? `
+                        <span style="color:var(--text-muted); font-size:0.8rem;">- (คืนวงเงินอัตโนมัติ) -</span>
                       ` : `
-                        <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเงินกำไรแล้ว</span><br>
-                        <span style="font-size:0.75rem; color:var(--text-muted);">
-                          วันที่รับ: ${finDetails.payoutReceivedDate ? new Date(finDetails.payoutReceivedDate).toLocaleDateString('th-TH') : '-'}
-                        </span>
+                        ${(s.costReturnedStatus || 'pending') === 'pending' ? `
+                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอโอนทุนคืน (฿${costTotal.toLocaleString()})</span><br>
+                          <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordCostReturnModal('${s._id}', '${s.receiptNumber}', ${costTotal})">
+                            <i class="fa-solid fa-check"></i> บันทึกโอนทุนคืน
+                          </button>
+                        ` : `
+                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว</span><br>
+                          <span style="font-size:0.75rem; color:var(--text-muted);">
+                            วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}
+                          </span>
+                        `}
                       `}
-                    ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- (รับเงินสดแล้ว) -</span>`}
-                  </td>
-                  <td style="text-align:center; vertical-align:middle;">
-                    ${isFinance ? `
-                      <span style="color:var(--text-muted); font-size:0.8rem;">- (คืนวงเงินอัตโนมัติ) -</span>
-                    ` : `
-                      ${(s.costReturnedStatus || 'pending') === 'pending' ? `
-                        <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอโอนทุนคืน (฿${costTotal.toLocaleString()})</span><br>
-                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordCostReturnModal('${s._id}', '${s.receiptNumber}', ${costTotal})">
-                          <i class="fa-solid fa-check"></i> บันทึกโอนทุนคืน
-                        </button>
-                      ` : `
-                        <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว</span><br>
-                        <span style="font-size:0.75rem; color:var(--text-muted);">
-                          วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}
-                        </span>
-                      `}
-                    `}
-                  </td>
-                  <td style="text-align:center; vertical-align:middle;">
-                    <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
-                      <i class="fa-solid fa-print"></i> พิมพ์
-                    </button>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+                    </td>
+                    <td style="text-align:center; vertical-align:middle;">
+                      <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
+                        <i class="fa-solid fa-print"></i> พิมพ์
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Expenses Tab Panel -->
+      <div id="fin-expenses-panel" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div style="font-weight:700; font-size:1.05rem; color:#fff;">
+            <i class="fa-solid fa-list-check" style="color:var(--accent-primary);"></i> ตารางรายการรายจ่ายระบบ
+          </div>
+          <button class="btn btn-danger btn-sm" style="font-weight:700;" onclick="openAddExpenseModal()">
+            <i class="fa-solid fa-plus-circle"></i> + บันทึกรายจ่ายใหม่
+          </button>
+        </div>
+
+        <!-- Dynamic Detailed Expense Filters -->
+        <div style="background:rgba(255,255,255,0.02); padding:1rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05); margin-bottom:1.5rem;">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem; margin-bottom:0.8rem;">
+            ${isAdminOrHq ? `
+              <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
+                <select id="exp-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+                  <option value="" ${!filterParams.branchId ? 'selected' : ''}>-- ทุกสาขา --</option>
+                  <option value="hq" ${filterParams.branchId === 'hq' ? 'selected' : ''}>ส่วนกลาง (สำนักงานใหญ่)</option>
+                  ${(state.masterOptions.branches || []).map(b => `<option value="${b._id}" ${filterParams.branchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
+                </select>
+              </div>
+            ` : ''}
+
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">หมวดหมู่:</label>
+              <select id="exp-category-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterExpenseTable()">
+                <option value="">-- ทั้งหมด --</option>
+                <option value="Rent">ค่าเช่าสถานที่</option>
+                <option value="Utilities">ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต</option>
+                <option value="Salary">เงินเดือน/ค่าจ้างพนักงาน</option>
+                <option value="Marketing">ค่าโฆษณา/การตลาด</option>
+                <option value="Repair/Maintenance">ค่าซ่อมแซม/บำรุงรักษา</option>
+                <option value="Other">อื่นๆ</option>
+                ${[...new Set(expenses.map(e => e.category))].filter(c => !['Rent', 'Utilities', 'Salary', 'Marketing', 'Repair/Maintenance', 'Other'].includes(c)).map(c => `<option value="${c}">${c}</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ผู้บันทึก:</label>
+              <select id="exp-recorded-by-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterExpenseTable()">
+                <option value="">-- ทั้งหมด --</option>
+                ${(() => {
+                  const uniqueRecoders = [];
+                  const recoderIds = new Set();
+                  expenses.forEach(e => {
+                    if (e.recordedBy) {
+                      const id = e.recordedBy._id || e.recordedBy;
+                      if (!recoderIds.has(id)) {
+                        recoderIds.add(id);
+                        uniqueRecoders.push(e.recordedBy);
+                      }
+                    }
+                  });
+                  return uniqueRecoders.map(u => `<option value="${u._id || u}">${u.fullName || u.username}</option>`).join('');
+                })()}
+              </select>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
+              <input type="date" id="exp-start-date" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
+              <input type="date" id="exp-end-date" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+            </div>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem;">
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">จำนวนเงินต่ำสุด:</label>
+              <input type="number" id="exp-min-amount" class="form-control" placeholder="Min" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">จำนวนเงินสูงสุด:</label>
+              <input type="number" id="exp-max-amount" class="form-control" placeholder="Max" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.3rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ค้นหาคำสำคัญ:</label>
+              <input type="text" id="exp-search-input" class="form-control" placeholder="ค้นหาเลขที่, ชื่อรายการ, หมายเหตุ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()">
+            </div>
+
+            <button class="btn btn-primary btn-sm" onclick="applyExpenseFilters()" style="padding:0.35rem 0.8rem; font-size:0.78rem; font-weight:700;">
+              <i class="fa-solid fa-magnifying-glass"></i> ค้นหาตามสาขา/วันที่
+            </button>
+            
+            ${(filterParams.branchId || filterParams.startDate || filterParams.endDate) ? `
+              <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="padding:0.35rem 0.8rem; font-size:0.78rem; font-weight:700;">
+                <i class="fa-solid fa-rotate-left"></i> ล้างตัวกรอง
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>เลขที่รายจ่าย / วันที่</th>
+                <th>ชื่อรายการ</th>
+                <th>สาขา</th>
+                <th>หมวดหมู่</th>
+                <th>จำนวนเงิน (บาท)</th>
+                <th>ผู้บันทึก</th>
+                <th>หมายเหตุ / รายละเอียด</th>
+                <th style="text-align:center;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="expenses-tbody">
+              ${expenses.length === 0 ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีรายการบันทึกรายจ่ายใดๆ</td></tr>` : ''}
+              ${expenses.map(exp => {
+                const dateStr = new Date(exp.expenseDate).toLocaleDateString('th-TH');
+                const isoDate = new Date(exp.expenseDate).toISOString().split('T')[0];
+                const searchStr = (exp.expenseNumber + ' ' + (exp.title || '') + ' ' + (exp.branch ? exp.branch.name : 'ส่วนกลาง') + ' ' + exp.category + ' ' + (exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : '') + ' ' + (exp.note || '')).toLowerCase();
+                const defaultCategories = {
+                  'Rent': 'ค่าเช่าสถานที่',
+                  'Utilities': 'ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต',
+                  'Salary': 'เงินเดือน/ค่าจ้างพนักงาน',
+                  'Marketing': 'ค่าโฆษณา/การตลาด',
+                  'Repair/Maintenance': 'ค่าซ่อมแซม/บำรุงรักษา',
+                  'Other': 'อื่นๆ'
+                };
+                const categoryThai = defaultCategories[exp.category] || exp.category;
+                const recUserId = exp.recordedBy ? exp.recordedBy._id || exp.recordedBy : '';
+
+                return `
+                  <tr class="exp-row" data-search="${searchStr}" data-category="${exp.category}" data-date="${isoDate}" data-recorded-by="${recUserId}" data-amount="${exp.amount || 0}">
+                    <td>
+                      <strong style="color:#f87171;">${exp.expenseNumber}</strong><br>
+                      <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
+                    </td>
+                    <td><strong style="color:#fff;">${exp.title || '-'}</strong></td>
+                    <td><strong>${exp.branch ? exp.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
+                    <td><span class="badge badge-gray">${categoryThai}</span></td>
+                    <td><strong style="color:#ef4444; font-size:0.95rem;">฿${(exp.amount || 0).toLocaleString()}</strong></td>
+                    <td><span style="font-size:0.83rem;">${exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน'}</span></td>
+                    <td style="font-size:0.83rem; max-width:250px; word-break:break-word;">${exp.note || '-'}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                      <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; font-weight:700; margin-right:0.25rem;" onclick="openEditExpenseModal('${exp._id}')">
+                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                      </button>
+                      <button class="btn btn-danger btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; font-weight:700;" onclick="deleteExpenseAction('${exp._id}')">
+                        <i class="fa-solid fa-trash-can"></i> ลบ
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
+
+    // Restore active tab state
+    if (state.activeFinanceTab === 'expenses') {
+      switchFinanceTab('expenses');
+    }
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดรายงานการเงิน: ${err.message}</div>`;
   }
@@ -2157,6 +2356,359 @@ function filterFinanceTable() {
   document.querySelectorAll('.fin-row').forEach(row => {
     const searchData = row.getAttribute('data-search') || '';
     if (searchData.includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+function switchFinanceTab(tabName) {
+  const salesPanel = document.getElementById('fin-sales-panel');
+  const expensesPanel = document.getElementById('fin-expenses-panel');
+  const salesTab = document.getElementById('fin-tab-sales');
+  const expensesTab = document.getElementById('fin-tab-expenses');
+  const filterPanel = document.getElementById('fin-filter-panel');
+
+  if (tabName === 'sales') {
+    if (salesPanel) salesPanel.style.display = 'block';
+    if (expensesPanel) expensesPanel.style.display = 'none';
+    if (salesTab) salesTab.className = 'btn btn-primary btn-sm';
+    if (expensesTab) expensesTab.className = 'btn btn-secondary btn-sm';
+    if (filterPanel) filterPanel.style.display = 'block';
+  } else {
+    if (salesPanel) salesPanel.style.display = 'none';
+    if (expensesPanel) expensesPanel.style.display = 'block';
+    if (salesTab) salesTab.className = 'btn btn-secondary btn-sm';
+    if (expensesTab) expensesTab.className = 'btn btn-primary btn-sm';
+    if (filterPanel) filterPanel.style.display = 'none';
+  }
+  state.activeFinanceTab = tabName;
+}
+
+function toggleCustomExpenseCategory() {
+  const catSelect = document.getElementById('exp-category');
+  const customGroup = document.getElementById('exp-custom-category-group');
+  const customInput = document.getElementById('exp-custom-category');
+  if (catSelect && catSelect.value === 'NEW_CATEGORY') {
+    if (customGroup) customGroup.style.display = 'block';
+    if (customInput) customInput.setAttribute('required', 'true');
+  } else {
+    if (customGroup) customGroup.style.display = 'none';
+    if (customInput) {
+      customInput.removeAttribute('required');
+      customInput.value = '';
+    }
+  }
+}
+
+function openAddExpenseModal() {
+  const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+  const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+  const branches = state.masterOptions.branches || [];
+
+  const expenses = state.expensesCache || [];
+  const uniqueCategories = [...new Set(expenses.map(e => e.category))];
+  const defaultCats = {
+    'Rent': 'ค่าเช่าสถานที่',
+    'Utilities': 'ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต',
+    'Salary': 'เงินเดือน/ค่าจ้างพนักงาน',
+    'Marketing': 'ค่าโฆษณา/การตลาด',
+    'Repair/Maintenance': 'ค่าซ่อมแซม/บำรุงรักษา',
+    'Other': 'อื่นๆ'
+  };
+
+  const bodyHtml = `
+    <form id="add-expense-form" onsubmit="event.preventDefault(); submitAddExpense();">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-title">ชื่อรายการรายจ่าย <span style="color:#ef4444;">*</span></label>
+        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตเดือน 8, ซื้อหลอดไฟใหม่..." required style="width:100%;">
+      </div>
+
+      ${isAdminOrHq ? `
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label for="exp-branch">สาขาที่รับผิดชอบรายจ่าย <span style="color:#ef4444;">*</span></label>
+          <select id="exp-branch" class="form-select" required style="width:100%;">
+            <option value="hq">ส่วนกลาง (สำนักงานใหญ่)</option>
+            ${branches.map(b => `<option value="${b._id}">${b.name}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-category">หมวดหมู่รายจ่าย <span style="color:#ef4444;">*</span></label>
+        <select id="exp-category" class="form-select" required style="width:100%;" onchange="toggleCustomExpenseCategory()">
+          <option value="Rent">ค่าเช่าสถานที่</option>
+          <option value="Utilities">ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต</option>
+          <option value="Salary">เงินเดือน/ค่าจ้างพนักงาน</option>
+          <option value="Marketing">ค่าโฆษณา/การตลาด</option>
+          <option value="Repair/Maintenance">ค่าซ่อมแซม/บำรุงรักษา</option>
+          <option value="Other">อื่นๆ</option>
+          ${uniqueCategories.filter(c => !Object.keys(defaultCats).includes(c)).map(c => `<option value="${c}">${c}</option>`).join('')}
+          <option value="NEW_CATEGORY" style="color:var(--accent-secondary); font-weight:700;">+ เพิ่มหมวดหมู่ใหม่...</option>
+        </select>
+        <div id="exp-custom-category-group" style="display:none; margin-top:0.5rem;">
+          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-amount">จำนวนเงิน (บาท) <span style="color:#ef4444;">*</span></label>
+        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" required style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-date">วันที่ทำรายการ</label>
+        <input type="date" id="exp-date" class="form-control" value="${new Date().toISOString().split('T')[0]}" style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-note">หมายเหตุ / รายละเอียดเพิ่มเติม</label>
+        <textarea id="exp-note" class="form-control" rows="3" placeholder="ระบุรายละเอียดรายจ่ายเพื่อการตรวจสอบ..." style="width:100%;"></textarea>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="submit" form="add-expense-form" class="btn btn-primary">
+      <i class="fa-solid fa-save"></i> บันทึกรายจ่าย
+    </button>
+  `;
+
+  openModal('บันทึกรายจ่ายใหม่', bodyHtml, footerHtml);
+}
+
+async function submitAddExpense() {
+  const branchEl = document.getElementById('exp-branch');
+  const branchId = branchEl ? branchEl.value : '';
+  const title = document.getElementById('exp-title').value.trim();
+  const amount = document.getElementById('exp-amount').value;
+  const expenseDate = document.getElementById('exp-date').value;
+  const note = document.getElementById('exp-note').value.trim();
+
+  let category = document.getElementById('exp-category').value;
+  if (category === 'NEW_CATEGORY') {
+    category = document.getElementById('exp-custom-category').value.trim();
+    if (!category) {
+      showToast('กรุณาระบุชื่อหมวดหมู่รายจ่ายใหม่', 'error');
+      return;
+    }
+  }
+
+  try {
+    const res = await apiRequest('/expenses', 'POST', {
+      branchId,
+      title,
+      category,
+      amount,
+      note,
+      expenseDate
+    });
+
+    if (res.success) {
+      showToast('บันทึกรายจ่ายเรียบร้อยแล้ว');
+      closeModal();
+      const activeBranchFilter = document.getElementById('fin-branch-filter') ? document.getElementById('fin-branch-filter').value : '';
+      const activeStartDate = document.getElementById('fin-start-date') ? document.getElementById('fin-start-date').value : '';
+      const activeEndDate = document.getElementById('fin-end-date') ? document.getElementById('fin-end-date').value : '';
+      renderFinanceView({
+        branchId: activeBranchFilter,
+        startDate: activeStartDate,
+        endDate: activeEndDate
+      });
+    }
+  } catch (err) {
+    // Handled by apiRequest
+  }
+}
+
+function openEditExpenseModal(expenseId) {
+  const expense = (state.expensesCache || []).find(e => e._id === expenseId);
+  if (!expense) {
+    showToast('ไม่พบข้อมูลรายจ่าย', 'error');
+    return;
+  }
+
+  const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+  const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+  const branches = state.masterOptions.branches || [];
+
+  const expenses = state.expensesCache || [];
+  const uniqueCategories = [...new Set(expenses.map(e => e.category))];
+  const defaultCats = {
+    'Rent': 'ค่าเช่าสถานที่',
+    'Utilities': 'ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต',
+    'Salary': 'เงินเดือน/ค่าจ้างพนักงาน',
+    'Marketing': 'ค่าโฆษณา/การตลาด',
+    'Repair/Maintenance': 'ค่าซ่อมแซม/บำรุงรักษา',
+    'Other': 'อื่นๆ'
+  };
+
+  const isoDate = new Date(expense.expenseDate).toISOString().split('T')[0];
+  const expenseBranchId = expense.branch ? (expense.branch._id || expense.branch) : '';
+
+  const bodyHtml = `
+    <form id="edit-expense-form" onsubmit="event.preventDefault(); submitEditExpense('${expenseId}');">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-title">ชื่อรายการรายจ่าย <span style="color:#ef4444;">*</span></label>
+        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตสาขาเดือน 8, ซื้อหลอดไฟใหม่..." value="${expense.title || ''}" required style="width:100%;">
+      </div>
+
+      ${isAdminOrHq ? `
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label for="exp-branch">สาขาที่รับผิดชอบรายจ่าย <span style="color:#ef4444;">*</span></label>
+          <select id="exp-branch" class="form-select" required style="width:100%;">
+            <option value="hq" ${expenseBranchId === '' ? 'selected' : ''}>ส่วนกลาง (สำนักงานใหญ่)</option>
+            ${branches.map(b => `<option value="${b._id}" ${String(b._id) === String(expenseBranchId) ? 'selected' : ''}>${b.name}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-category">หมวดหมู่รายจ่าย <span style="color:#ef4444;">*</span></label>
+        <select id="exp-category" class="form-select" required style="width:100%;" onchange="toggleCustomExpenseCategory()">
+          <option value="Rent" ${expense.category === 'Rent' ? 'selected' : ''}>ค่าเช่าสถานที่</option>
+          <option value="Utilities" ${expense.category === 'Utilities' ? 'selected' : ''}>ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต</option>
+          <option value="Salary" ${expense.category === 'Salary' ? 'selected' : ''}>เงินเดือน/ค่าจ้างพนักงาน</option>
+          <option value="Marketing" ${expense.category === 'Marketing' ? 'selected' : ''}>ค่าโฆษณา/การตลาด</option>
+          <option value="Repair/Maintenance" ${expense.category === 'Repair/Maintenance' ? 'selected' : ''}>ค่าซ่อมแซม/บำรุงรักษา</option>
+          <option value="Other" ${expense.category === 'Other' ? 'selected' : ''}>อื่นๆ</option>
+          ${uniqueCategories.filter(c => !Object.keys(defaultCats).includes(c)).map(c => `<option value="${c}" ${expense.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+          <option value="NEW_CATEGORY" style="color:var(--accent-secondary); font-weight:700;">+ เพิ่มหมวดหมู่ใหม่...</option>
+        </select>
+        <div id="exp-custom-category-group" style="display:none; margin-top:0.5rem;">
+          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-amount">จำนวนเงิน (บาท) <span style="color:#ef4444;">*</span></label>
+        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" value="${expense.amount || ''}" required style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-date">วันที่ทำรายการ</label>
+        <input type="date" id="exp-date" class="form-control" value="${isoDate}" style="width:100%;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="exp-note">หมายเหตุ / รายละเอียดเพิ่มเติม</label>
+        <textarea id="exp-note" class="form-control" rows="3" placeholder="ระบุรายละเอียดรายจ่ายเพื่อการตรวจสอบ..." style="width:100%;">${expense.note || ''}</textarea>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="submit" form="edit-expense-form" class="btn btn-primary">
+      <i class="fa-solid fa-save"></i> บันทึกการแก้ไข
+    </button>
+  `;
+
+  openModal('แก้ไขรายการรายจ่าย', bodyHtml, footerHtml);
+}
+
+async function submitEditExpense(expenseId) {
+  const branchEl = document.getElementById('exp-branch');
+  const branchId = branchEl ? branchEl.value : '';
+  const title = document.getElementById('exp-title').value.trim();
+  const amount = document.getElementById('exp-amount').value;
+  const expenseDate = document.getElementById('exp-date').value;
+  const note = document.getElementById('exp-note').value.trim();
+
+  let category = document.getElementById('exp-category').value;
+  if (category === 'NEW_CATEGORY') {
+    category = document.getElementById('exp-custom-category').value.trim();
+    if (!category) {
+      showToast('กรุณาระบุชื่อหมวดหมู่รายจ่ายใหม่', 'error');
+      return;
+    }
+  }
+
+  try {
+    const res = await apiRequest(`/expenses/${expenseId}`, 'PUT', {
+      branchId,
+      title,
+      category,
+      amount,
+      note,
+      expenseDate
+    });
+
+    if (res.success) {
+      showToast('แก้ไขข้อมูลรายจ่ายเรียบร้อยแล้ว');
+      closeModal();
+      const activeBranchFilter = document.getElementById('fin-branch-filter') ? document.getElementById('fin-branch-filter').value : '';
+      const activeStartDate = document.getElementById('fin-start-date') ? document.getElementById('fin-start-date').value : '';
+      const activeEndDate = document.getElementById('fin-end-date') ? document.getElementById('fin-end-date').value : '';
+      renderFinanceView({
+        branchId: activeBranchFilter,
+        startDate: activeStartDate,
+        endDate: activeEndDate
+      });
+    }
+  } catch (err) {
+    // Handled by apiRequest
+  }
+}
+
+async function deleteExpenseAction(id) {
+  if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการรายจ่ายนี้? (การลบรายการนี้จะไม่สามารถกู้คืนได้)')) {
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/expenses/${id}`, 'DELETE');
+    if (res.success) {
+      showToast('ลบรายการรายจ่ายเรียบร้อยแล้ว');
+      const activeBranchFilter = document.getElementById('fin-branch-filter') ? document.getElementById('fin-branch-filter').value : '';
+      const activeStartDate = document.getElementById('fin-start-date') ? document.getElementById('fin-start-date').value : '';
+      const activeEndDate = document.getElementById('fin-end-date') ? document.getElementById('fin-end-date').value : '';
+      renderFinanceView({
+        branchId: activeBranchFilter,
+        startDate: activeStartDate,
+        endDate: activeEndDate
+      });
+    }
+  } catch (err) {
+    // Handled by apiRequest
+  }
+}
+
+function applyExpenseFilters() {
+  const branchSelect = document.getElementById('exp-branch-filter');
+  const branchId = branchSelect ? branchSelect.value : '';
+  const startDate = document.getElementById('exp-start-date') ? document.getElementById('exp-start-date').value : '';
+  const endDate = document.getElementById('exp-end-date') ? document.getElementById('exp-end-date').value : '';
+
+  renderFinanceView({
+    branchId,
+    startDate,
+    endDate
+  });
+}
+
+function filterExpenseTable() {
+  const query = document.getElementById('exp-search-input') ? document.getElementById('exp-search-input').value.toLowerCase().trim() : '';
+  const categoryFilter = document.getElementById('exp-category-filter') ? document.getElementById('exp-category-filter').value : '';
+  const recordedByFilter = document.getElementById('exp-recorded-by-filter') ? document.getElementById('exp-recorded-by-filter').value : '';
+  const minAmount = document.getElementById('exp-min-amount') && document.getElementById('exp-min-amount').value ? Number(document.getElementById('exp-min-amount').value) : null;
+  const maxAmount = document.getElementById('exp-max-amount') && document.getElementById('exp-max-amount').value ? Number(document.getElementById('exp-max-amount').value) : null;
+
+  document.querySelectorAll('.exp-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    const rowCategory = row.getAttribute('data-category') || '';
+    const rowRecordedBy = row.getAttribute('data-recorded-by') || '';
+    const rowAmount = Number(row.getAttribute('data-amount') || '0');
+    
+    let matchSearch = searchData.includes(query);
+    let matchCategory = !categoryFilter || rowCategory === categoryFilter;
+    let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
+    let matchMinAmount = minAmount === null || rowAmount >= minAmount;
+    let matchMaxAmount = maxAmount === null || rowAmount <= maxAmount;
+
+    if (matchSearch && matchCategory && matchRecordedBy && matchMinAmount && matchMaxAmount) {
       row.style.display = '';
     } else {
       row.style.display = 'none';

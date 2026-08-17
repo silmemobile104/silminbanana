@@ -4,6 +4,7 @@ const Product = require('../models/Product');
 const Branch = require('../models/Branch');
 const AuditLog = require('../models/AuditLog');
 const Role = require('../models/Role');
+const Expense = require('../models/Expense');
 
 // Process POS Checkout & Stock Deduction (Atomic checkout per IMEI)
 const createSale = async (req, res, next) => {
@@ -249,8 +250,11 @@ const getFinanceProfitReport = async (req, res, next) => {
 
     let query = { status: 'completed' };
 
+    const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || req.user.role === 'purchase_staff' || isHqUser;
+
     // Branch filtering
-    if (['branch_staff', 'technical_staff'].includes(req.user.role)) {
+    if (!isAdminOrHq) {
       if (req.user.branch) {
         query.branch = req.user.branch._id || req.user.branch;
       }
@@ -279,6 +283,27 @@ const getFinanceProfitReport = async (req, res, next) => {
       .populate('branch', 'name code phone')
       .populate('soldBy', 'fullName username')
       .sort({ createdAt: -1 });
+
+    // Query expenses with same branch and date filtering
+    let queryExpense = {};
+    if (!isAdminOrHq) {
+      if (req.user.branch) {
+        queryExpense.branch = req.user.branch._id || req.user.branch;
+      }
+    } else if (branchId) {
+      queryExpense.branch = branchId === 'hq' ? null : branchId;
+    }
+
+    if (startDate || endDate) {
+      queryExpense.expenseDate = {};
+      if (startDate) queryExpense.expenseDate.$gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) queryExpense.expenseDate.$lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
+
+    const expensesList = await Expense.find(queryExpense)
+      .populate('branch', 'name code')
+      .populate('recordedBy', 'fullName username')
+      .sort({ expenseDate: -1 });
 
     // Calculate Summary Statistics
     let totalRevenue = 0;
@@ -322,6 +347,9 @@ const getFinanceProfitReport = async (req, res, next) => {
       }
     });
 
+    const totalExpenses = expensesList.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const netProfit = totalProfit - totalExpenses;
+
     res.json({
       success: true,
       summary: {
@@ -335,9 +363,12 @@ const getFinanceProfitReport = async (req, res, next) => {
         financeProfit,
         pendingFinanceAmount,
         receivedFinanceAmount,
-        pendingFinanceCount
+        pendingFinanceCount,
+        totalExpenses,
+        netProfit
       },
-      sales
+      sales,
+      expenses: expensesList
     });
   } catch (err) {
     next(err);
