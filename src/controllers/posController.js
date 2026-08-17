@@ -5,6 +5,7 @@ const Branch = require('../models/Branch');
 const AuditLog = require('../models/AuditLog');
 const Role = require('../models/Role');
 const Expense = require('../models/Expense');
+const DailyAudit = require('../models/DailyAudit');
 
 // Process POS Checkout & Stock Deduction (Atomic checkout per IMEI)
 const createSale = async (req, res, next) => {
@@ -827,6 +828,136 @@ const voidSale = async (req, res, next) => {
   }
 };
 
+const getStaffDashboard = async (req, res, next) => {
+  try {
+    const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
+    const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || req.user.role === 'purchase_staff' || isHqUser;
+
+    let branchId = null;
+    if (!isAdminOrHq) {
+      branchId = req.user.branch ? (req.user.branch._id || req.user.branch) : null;
+    } else if (req.query.branchId && req.query.branchId !== 'all') {
+      branchId = req.query.branchId;
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const salesQuery = { 
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+      status: { $ne: 'voided' }
+    };
+    if (branchId) {
+      salesQuery.branch = branchId;
+    }
+
+    const stockQuery = { status: 'in_stock' };
+    if (branchId) {
+      stockQuery.branch = branchId;
+    }
+
+    const auditQuery = {
+      auditDate: { $gte: todayStart, $lte: todayEnd }
+    };
+    if (branchId) {
+      auditQuery.branch = branchId;
+    }
+
+    const [todaySales, stockItems, todayAudits, activeBranches] = await Promise.all([
+      Sale.find(salesQuery).populate('soldBy', 'fullName username').populate('branch', 'name code').sort({ createdAt: -1 }),
+      Stock.find(stockQuery).populate('product'),
+      DailyAudit.find(auditQuery).sort({ createdAt: -1 }),
+      Branch.find(branchId ? { _id: branchId } : { isActive: true })
+    ]);
+
+    let todayRevenue = 0;
+    let todayProfit = 0;
+    todaySales.forEach(s => {
+      todayRevenue += s.grandTotal || 0;
+      todayProfit += s.totalProfit || 0;
+    });
+
+    const productCounts = {};
+    stockItems.forEach(st => {
+      if (st.product) {
+        const key = `${st.product.brand} ${st.product.model} ${st.product.variation || ''}`.trim();
+        productCounts[key] = (productCounts[key] || 0) + 1;
+      }
+    });
+
+    const stockSummary = Object.keys(productCounts).map(name => ({
+      productName: name,
+      count: productCounts[name]
+    })).sort((a, b) => b.count - a.count);
+
+    // Group calculations by branch for branch cards
+    const branchMap = {};
+
+    activeBranches.forEach(b => {
+      branchMap[b._id.toString()] = {
+        branchId: b._id,
+        branchName: b.name,
+        branchCode: b.code || 'BR',
+        totalStockCount: 0,
+        todaySalesAmount: 0,
+        todaySalesQty: 0
+      };
+    });
+
+    // Count stock items
+    stockItems.forEach(st => {
+      if (st.branch) {
+        const bKey = st.branch.toString();
+        if (branchMap[bKey]) {
+          branchMap[bKey].totalStockCount += 1;
+        }
+      }
+    });
+
+    // Sum sales and quantities
+    todaySales.forEach(s => {
+      if (s.branch) {
+        const bKey = s.branch._id.toString();
+        if (branchMap[bKey]) {
+          const bObj = branchMap[bKey];
+          bObj.todaySalesAmount += s.grandTotal || 0;
+          
+          let qty = 0;
+          if (Array.isArray(s.items)) {
+            qty = s.items.reduce((sum, item) => sum + (item.quantity || 1), 0);
+          }
+          bObj.todaySalesQty += qty;
+        }
+      }
+    });
+
+    const branchCards = Object.values(branchMap).map(card => ({
+      ...card,
+      totalStockToday: card.totalStockCount + card.todaySalesQty
+    }));
+
+    res.json({
+      success: true,
+      stats: {
+        todaySalesCount: todaySales.length,
+        todayRevenue,
+        todayProfit,
+        inStockCount: stockItems.length,
+        auditSubmitted: todayAudits.length > 0,
+        auditStatus: todayAudits.length > 0 ? todayAudits[0].status : 'pending',
+        recentSales: todaySales.slice(0, 5),
+        stockSummary: stockSummary.slice(0, 8),
+        branchCards
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   returnCostToHq,
   createSale,
@@ -836,5 +967,6 @@ module.exports = {
   updateFinancePayoutStatus,
   getExecutiveDashboard,
   getExecutiveReportRange,
-  voidSale
+  voidSale,
+  getStaffDashboard
 };

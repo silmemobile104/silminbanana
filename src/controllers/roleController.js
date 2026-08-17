@@ -3,6 +3,7 @@ const AuditLog = require('../models/AuditLog');
 
 const SYSTEM_MENUS = [
   { key: 'dashboard', name: 'แดชบอร์ด', icon: 'fa-chart-pie' },
+  { key: 'staff-dashboard', name: 'แดชบอร์ดพนักงาน', icon: 'fa-chart-line' },
   { key: 'pos', name: 'ขายสินค้า (POS)', icon: 'fa-cash-register' },
   { key: 'finance', name: 'รายงานการเงิน', icon: 'fa-coins' },
   { key: 'branch-inventory', name: 'สินค้าในสาขา', icon: 'fa-boxes-packing' },

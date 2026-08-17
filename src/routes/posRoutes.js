@@ -13,5 +13,6 @@ router.put('/return-cost/:saleId', authenticateToken, posController.returnCostTo
 router.put('/void/:id', authenticateToken, posController.voidSale);
 router.get('/executive-dashboard', authenticateToken, posController.getExecutiveDashboard);
 router.get('/executive-report', authenticateToken, posController.getExecutiveReportRange);
+router.get('/staff-dashboard', authenticateToken, posController.getStaffDashboard);
 
 module.exports = router;
