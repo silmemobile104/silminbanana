@@ -3810,10 +3810,12 @@ async function renderBranchAuditView() {
           ` : `
             <div style="flex:1; min-width:260px;">
               <label style="font-size:0.78rem; font-weight:700; color:var(--accent-secondary);">ช่องสแกนบาร์โค้ดรวดเร็ว (สแกน IMEI/ซีเรียลที่นี่)</label>
-              <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล แล้วกด Enter..." style="margin-top:0.3rem;" autofocus>
-            </div>
-            <div style="font-size:0.85rem; color:var(--text-muted);">
-              <i class="fa-solid fa-circle-info" style="color:var(--accent-primary);"></i> สแกนหมายเลข IMEI เพื่อตรวจนับสินค้าคงเหลือในสาขา
+              <div style="display:flex; gap:0.5rem; margin-top:0.3rem;">
+                <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล..." style="margin:0;" autofocus>
+                <button class="btn btn-primary" id="btn-submit-scan-imei" style="padding:0 1.2rem; font-weight:700; font-size:0.85rem; white-space:nowrap; display:flex; align-items:center; gap:0.4rem;">
+                  <i class="fa-solid fa-barcode"></i> ตรวจนับ
+                </button>
+              </div>
             </div>
           `}
         </div>
@@ -3874,18 +3876,34 @@ async function renderBranchAuditView() {
     `;
 
     const scannerInput = document.getElementById('barcode-scanner-input');
+    const scanBtn = document.getElementById('btn-submit-scan-imei');
+
+    const runScan = () => {
+      if (scannerInput) {
+        const scannedVal = scannerInput.value.trim();
+        if (scannedVal) {
+          processScannedSerial(scannedVal);
+          scannerInput.value = '';
+          setTimeout(() => scannerInput.focus(), 10);
+        }
+      }
+    };
+
     if (scannerInput) {
       setTimeout(() => scannerInput.focus(), 100);
       scannerInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          const scannedVal = scannerInput.value.trim();
-          if (scannedVal) {
-            processScannedSerial(scannedVal);
-            scannerInput.value = '';
-          }
+          runScan();
         }
       });
+    }
+
+    if (scanBtn) {
+      scanBtn.onclick = (e) => {
+        e.preventDefault();
+        runScan();
+      };
     }
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดรายการสต็อก: ${err.message}</div>`;
