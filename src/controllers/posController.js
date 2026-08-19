@@ -325,10 +325,13 @@ const getFinanceProfitReport = async (req, res, next) => {
 
     sales.forEach(sale => {
       let sCost = sale.totalCost || 0;
-      if (!sCost && sale.items && sale.items.length > 0) {
+      const isReturnedCost = sale.costReturnedStatus === 'returned' && sale.actualCostReturned !== undefined && sale.actualCostReturned !== 0;
+      if (isReturnedCost) {
+        sCost = sale.actualCostReturned;
+      } else if (!sCost && sale.items && sale.items.length > 0) {
         sCost = sale.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
       }
-      let sProfit = sale.totalProfit || (sale.grandTotal - sCost);
+      let sProfit = isReturnedCost ? (sale.grandTotal - sCost) : (sale.totalProfit || (sale.grandTotal - sCost));
 
       totalRevenue += sale.grandTotal;
       totalCost += sCost;
@@ -695,7 +698,7 @@ const getExecutiveReportRange = async (req, res, next) => {
 const returnCostToHq = async (req, res, next) => {
   try {
     const { saleId } = req.params;
-    const { payoutReceivedDate, remarks } = req.body;
+    const { payoutReceivedDate, remarks, actualCostReturned } = req.body;
 
     const dateVal = payoutReceivedDate || new Date();
 
@@ -716,8 +719,12 @@ const returnCostToHq = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'รายการจัดไฟแนนซ์คืนวงเงินอัตโนมัติแล้ว ไม่ต้องโอนคืนซ้ำ' });
     }
 
+    const returnedAmount = actualCostReturned !== undefined ? Number(actualCostReturned) : (sale.totalCost || 0);
+
     sale.costReturnedStatus = 'returned';
     sale.costReturnedDate = dateVal;
+    sale.actualCostReturned = returnedAmount;
+    sale.totalProfit = sale.grandTotal - returnedAmount;
     if (remarks !== undefined) {
       sale.costReturnedRemarks = remarks;
     }
@@ -727,8 +734,7 @@ const returnCostToHq = async (req, res, next) => {
     const branch = sale.branch;
     if (branch) {
       const currentUsed = branch.usedCredit || 0;
-      const refundAmount = sale.totalCost || 0;
-      branch.usedCredit = Math.max(0, currentUsed - refundAmount);
+      branch.usedCredit = Math.max(0, currentUsed - returnedAmount);
       await branch.save();
     }
 

@@ -2341,10 +2341,13 @@ async function renderFinanceView(filterParams = {}) {
                 const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
 
                 let costTotal = s.totalCost || 0;
-                if (!costTotal && s.items) {
+                const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
+                if (isReturnedCost) {
+                  costTotal = s.actualCostReturned;
+                } else if (!costTotal && s.items) {
                   costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
                 }
-                const profitTotal = s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal);
+                const profitTotal = isReturnedCost ? (s.grandTotal - costTotal) : (s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal));
 
                 return `
                   <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
@@ -2364,7 +2367,12 @@ async function renderFinanceView(filterParams = {}) {
                         s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
                         `<span class="badge badge-gold"><i class="fa-solid fa-file-contract"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
                     </td>
-                    <td>฿${costTotal.toLocaleString()}</td>
+                    <td>
+                      ฿${costTotal.toLocaleString()}
+                      ${s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== s.totalCost ? `
+                        <br><span style="font-size:0.72rem; color:var(--text-muted); text-decoration:line-through; display:block; margin-top:0.1rem;">เดิม: ฿${(s.totalCost || 0).toLocaleString()}</span>
+                      ` : ''}
+                    </td>
                     <td>฿${s.grandTotal.toLocaleString()}</td>
                     <td><strong style="color:#34d399; font-size:0.95rem;">฿${profitTotal.toLocaleString()}</strong></td>
                     <td style="text-align:center;">
@@ -2392,9 +2400,12 @@ async function renderFinanceView(filterParams = {}) {
                             <i class="fa-solid fa-check"></i> บันทึกโอนทุนคืน
                           </button>
                         ` : `
-                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว</span><br>
-                          <span style="font-size:0.75rem; color:var(--text-muted);">
-                            วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}
+                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว (฿${(s.actualCostReturned || s.totalCost || 0).toLocaleString()})</span><br>
+                          <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.15rem; line-height:1.35;">
+                            วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}<br>
+                            ${s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== costTotal ? `
+                              <span style="color:#fbbf24; font-weight:700;">ส่วนต่างทุน: ฿${(s.actualCostReturned - costTotal).toLocaleString()}</span>
+                            ` : ''}
                           </span>
                         `}
                       `}
@@ -8745,12 +8756,18 @@ function viewAuditPhoto(url) {
 function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:left;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.88rem;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:0.88rem;">
         <span>เลขที่ใบเสร็จ: <strong>${receiptNumber}</strong></span>
+        <span>ต้นทุนเดิมระบบ: ฿${Number(costAmount).toLocaleString()}</span>
       </div>
-      <div style="display:flex; justify-content:space-between; font-size:1.1rem; font-weight:800; color:#fbbf24;">
-        <span>ยอดเงินต้นทุนโอนคืนบริษัทใหญ่:</span>
-        <span>฿${Number(costAmount).toLocaleString()}</span>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <label for="cr-actual-cost" style="font-weight:700; color:#fbbf24; font-size:0.92rem;">
+          ยอดเงินต้นทุนที่โอนคืนจริง (Actual Cost Returned):
+        </label>
+        <div style="position:relative; display:flex; align-items:center;">
+          <span style="position:absolute; left:10px; font-weight:800; color:#fbbf24;">฿</span>
+          <input type="number" id="cr-actual-cost" class="form-control" value="${costAmount}" style="padding-left:1.8rem; font-weight:800; font-size:1.15rem; color:#fbbf24; background:rgba(0,0,0,0.3); border:1px solid rgba(251,191,36,0.35);" required min="0" step="0.01">
+        </div>
       </div>
     </div>
 
@@ -8760,7 +8777,7 @@ function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
           <i class="fa-solid fa-calendar-days"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="cr-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700; padding:0.5rem; border-radius:6px;">
-        <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาคุณเท่ากับยอดต้นทุนเครื่องนี้ทันที</span>
+        <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาคุณเท่ากับยอดต้นทุนที่โอนคืนจริงนี้ทันที</span>
       </div>
 
       <div class="form-group" style="text-align:left;">
@@ -8782,6 +8799,8 @@ async function submitCostReturn(saleId) {
   const dateInput = document.getElementById('cr-date');
   const payoutReceivedDate = dateInput ? dateInput.value.trim() : '';
   const remarks = document.getElementById('cr-remarks') ? document.getElementById('cr-remarks').value : '';
+  const actualCostInput = document.getElementById('cr-actual-cost');
+  const actualCostReturned = actualCostInput ? Number(actualCostInput.value) : 0;
 
   if (!payoutReceivedDate) {
     showToast('กรุณาระบุและเลือกวันที่โอนเงินคืนบริษัทจริงก่อนกดบันทึก', 'error');
@@ -8792,10 +8811,17 @@ async function submitCostReturn(saleId) {
     return;
   }
 
+  if (isNaN(actualCostReturned) || actualCostReturned < 0) {
+    showToast('กรุณาระบุยอดเงินต้นทุนโอนจริงที่ถูกต้อง', 'error');
+    if (actualCostInput) actualCostInput.focus();
+    return;
+  }
+
   try {
     const res = await apiRequest(`/pos/return-cost/${saleId}`, 'PUT', {
       payoutReceivedDate,
-      remarks
+      remarks,
+      actualCostReturned
     });
 
     if (res.success) {

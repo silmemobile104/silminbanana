@@ -86,6 +86,10 @@ const saleSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  actualCostReturned: {
+    type: Number,
+    default: 0
+  },
   costReturnedRemarks: {
     type: String,
     default: ''
