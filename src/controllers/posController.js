@@ -437,7 +437,7 @@ const getExecutiveDashboard = async (req, res, next) => {
     todayEnd.setHours(23, 59, 59, 999);
 
     const [todaySales, allStock, branches] = await Promise.all([
-      Sale.find({ createdAt: { $gte: todayStart, $lte: todayEnd } }).populate('branch'),
+      Sale.find({ createdAt: { $gte: todayStart, $lte: todayEnd }, status: { $ne: 'voided' } }).populate('branch'),
       Stock.find({ status: 'in_stock' }).populate('product').populate('branch'),
       Branch.find({ isActive: true })
     ]);
@@ -592,7 +592,7 @@ const getExecutiveReportRange = async (req, res, next) => {
     end.setHours(23, 59, 59, 999);
 
     const [sales, branches] = await Promise.all([
-      Sale.find({ createdAt: { $gte: start, $lte: end } }).populate('branch').populate('soldBy', 'fullName username'),
+      Sale.find({ createdAt: { $gte: start, $lte: end }, status: { $ne: 'voided' } }).populate('branch').populate('soldBy', 'fullName username'),
       Branch.find({ isActive: true })
     ]);
 
