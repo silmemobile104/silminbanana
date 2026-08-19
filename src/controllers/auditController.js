@@ -318,13 +318,13 @@ const getHqDashboard = async (req, res, next) => {
 
         if (rawStatus === 'Verified') {
           status = 'ตรวจสอบแล้ว';
-          colorCode = hasVariance ? 'yellow' : 'green';
+          colorCode = 'green';
         } else if (rawStatus === 'Rejected') {
           status = 'ข้อมูลไม่ตรง/ปฏิเสธ';
           colorCode = 'red';
         } else {
           status = 'รอการตรวจสอบ';
-          colorCode = hasVariance ? 'red' : 'green';
+          colorCode = 'yellow';
         }
       } else {
         const fallbackImeis = branchStocksMap.get(bIdStr) || [];
@@ -333,7 +333,7 @@ const getHqDashboard = async (req, res, next) => {
         totalVariance = totalExpected;
         hasVariance = totalExpected > 0;
         status = 'ยังไม่ได้ส่งรายงาน';
-        colorCode = 'yellow';
+        colorCode = 'red';
         items = [];
       }
 
@@ -596,6 +596,49 @@ const saveImeiDecision = async (req, res, next) => {
     audit.totalExpected = totalExp;
     audit.totalActual = totalAct;
     audit.totalVariance = totalVar;
+
+    // Check if all scanned IMEIs in the entire audit have final decisions recorded (passed or failed)
+    let allScannedDecided = true;
+    let hasScannedItems = false;
+    let hasResubmit = false;
+
+    audit.items.forEach(it => {
+      const scanned = it.scannedImeis || [];
+      const decisions = it.imeiDecisions || [];
+      
+      if (scanned.length > 0) {
+        hasScannedItems = true;
+      }
+      
+      scanned.forEach(imei => {
+        const found = decisions.find(d => d.imei === imei && d.decision);
+        if (!found) {
+          allScannedDecided = false;
+        }
+      });
+
+      decisions.forEach(d => {
+        if (d.decision === 'resubmit') {
+          hasResubmit = true;
+        }
+      });
+    });
+
+    if (hasScannedItems && allScannedDecided && !hasResubmit) {
+      audit.status = 'Verified';
+      audit.hqVerifiedBy = req.user._id;
+      audit.hqVerifiedAt = new Date();
+      audit.auditLog.push({
+        action: 'HQ_AUTO_VERIFY',
+        performedBy: req.user._id,
+        timestamp: new Date(),
+        notes: 'ระบบอนุมัติสถานะเป็น ตรวจสอบแล้ว อัตโนมัติเนื่องจากตรวจสอบและลงความเห็นครบทุกเครื่องแล้ว'
+      });
+    } else {
+      if (audit.status === 'Verified') {
+        audit.status = 'Pending Verification';
+      }
+    }
 
     await audit.save();
 

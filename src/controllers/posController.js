@@ -72,11 +72,13 @@ const createSale = async (req, res, next) => {
       calculatedSubtotal += (item.unitPrice * qty);
       calculatedTotalCost += itemCostTotal;
 
+      const stdPrice = item.standardPrice !== undefined ? Number(item.standardPrice) : (stockItem.selling_price || (stockItem.product ? stockItem.product.selling_price : 0) || item.unitPrice);
       saleItems.push({
         product: stockItem.product ? stockItem.product._id : null,
         productName: stockItem.productName || item.productName,
         imei: stockItem.imei,
         costPrice,
+        standardPrice: stdPrice,
         unitPrice: item.unitPrice,
         quantity: 1,
         discount: item.discount || 0,

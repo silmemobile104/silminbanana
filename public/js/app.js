@@ -1540,6 +1540,7 @@ function addToPosCart(productId, productName, unitPrice, selectIdx = null, custo
     productName,
     imei: targetImei || '',
     unitPrice: Number(unitPrice),
+    standardPrice: Number(unitPrice),
     quantity: 1,
     discount: 0,
     totalPrice: Number(unitPrice)
@@ -1567,13 +1568,14 @@ function renderPosCartUI() {
     container.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:1.5rem; font-size:0.85rem;">ยังไม่มีรายการสินค้าในตะกร้า</div>`;
   } else {
     container.innerHTML = state.posCart.map((item, idx) => `
-      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem;">
-        <div style="flex:1;">
-          <strong>${item.productName}</strong><br>
+      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem; gap:0.5rem;">
+        <div style="flex:1; min-width:0;">
+          <strong style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">${item.productName}</strong>
           <span style="font-size:0.75rem; color:var(--text-muted);">IMEI: ${item.imei || '-'}</span>
         </div>
-        <div style="text-align:right; margin-right:0.6rem;">
-          <strong style="color:#34d399;">฿${item.unitPrice.toLocaleString()}</strong>
+        <div style="text-align:right; display:flex; align-items:center; gap:0.3rem;">
+          <span style="color:#34d399; font-weight:700;">฿</span>
+          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:#34d399; margin:0;" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
         </div>
         <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="removeFromPosCart(${idx})">
           <i class="fa-solid fa-xmark"></i>
@@ -1582,6 +1584,15 @@ function renderPosCartUI() {
     `).join('');
   }
 
+  updatePosCartTotals();
+}
+
+function updateCartItemPrice(index, val) {
+  const price = Number(val) || 0;
+  if (state.posCart && state.posCart[index]) {
+    state.posCart[index].unitPrice = price;
+    state.posCart[index].totalPrice = price;
+  }
   updatePosCartTotals();
 }
 
@@ -2314,7 +2325,16 @@ async function renderFinanceView(filterParams = {}) {
             <tbody>
               ${sales.length === 0 ? `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
               ${sales.map((s, idx) => {
-                const itemsStr = (s.items || []).map(i => `${i.productName} (${i.imei})`).join('<br>');
+                const itemsStr = (s.items || []).map(i => {
+                  const std = i.standardPrice || i.unitPrice || 0;
+                  const act = i.unitPrice || 0;
+                  return `
+                    <strong>• ${i.productName}</strong> <span style="font-family:monospace; color:#fbbf24; font-size:0.78rem;">(${i.imei})</span><br>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">
+                      ราคาแนะนำ: ฿${std.toLocaleString()} | ขายจริง: <strong style="color:#34d399;">฿${act.toLocaleString()}</strong>
+                    </span>
+                  `;
+                }).join('<div style="margin: 0.35rem 0; border-top:1px dashed rgba(255,255,255,0.08);"></div>');
                 const isFinance = s.paymentMethod === 'finance';
                 const finDetails = s.financeDetails || {};
                 const isVoided = s.status === 'voided';
@@ -3309,7 +3329,6 @@ async function loadHqAuditGrid(dateStr) {
           <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.8rem;">
             <div>ผู้ส่งรายงาน: <strong>${b.submittedBy || 'ยังไม่ได้ส่งรายงาน'}</strong></div>
             ${b.hqVerifiedBy ? `<div>ผู้อนุมัติ (ส่วนกลาง): <strong>${b.hqVerifiedBy}</strong></div>` : ''}
-            ${b.hqComments ? `<div style="color:#fbbf24; margin-top:0.3rem;"><em>หมายเหตุ HQ: "${b.hqComments}"</em></div>` : ''}
           </div>
 
           <div style="display:flex; gap:0.5rem;">
@@ -3572,6 +3591,25 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
             </tbody>
           </table>
         </div>
+
+        <!-- Action Status for HQ Verification -->
+        ${branchItem.auditId ? `
+          ${branchItem.rawStatus === 'Verified' || branchItem.rawStatus === 'Rejected' ? `
+            <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1); align-items:center;">
+              <div style="font-size:0.88rem; color:var(--text-muted); display:flex; align-items:center; margin-right:auto;">
+                ${branchItem.rawStatus === 'Verified' ? `
+                  <span style="color:#34d399; font-weight:700;"><i class="fa-solid fa-circle-check"></i> รายงานสต็อกนี้ได้รับการตรวจสอบและอนุมัติเรียบร้อยแล้ว ${branchItem.hqVerifiedBy ? `โดย: ${branchItem.hqVerifiedBy}` : ''}</span>
+                ` : `
+                  <span style="color:#f87171; font-weight:700;"><i class="fa-solid fa-circle-xmark"></i> รายงานสต็อกนี้ถูกปฏิเสธ ${branchItem.hqVerifiedBy ? `โดย: ${branchItem.hqVerifiedBy}` : ''}</span>
+                `}
+              </div>
+            </div>
+          ` : ''}
+        ` : `
+          <div style="display:flex; justify-content:center; margin-top:1rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1); color:var(--text-muted); font-size:0.88rem; font-style:italic;">
+            <i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24; margin-right:0.4rem;"></i> สาขานี้ยังไม่ได้ยื่นส่งรายงานผลการนับประจำวัน
+          </div>
+        `}
       </div>
     `;
 
@@ -3693,16 +3731,14 @@ function openImeiInspectionModal(imei) {
     </div>
 
     <div class="grid-3col" style="gap:0.8rem;">
-      <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
-        <i class="fa-solid fa-circle-check"></i> 1. ผ่าน (Pass)
-      </button>
-
-      <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'failed')">
-        <i class="fa-solid fa-circle-xmark"></i> 2. ไม่ผ่าน (Fail)
-      </button>
-
       <button class="btn btn-warning" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700; color:#000;" onclick="setItemDecision('${imei}', 'resubmit')">
-        <i class="fa-solid fa-rotate-left"></i> 3. ส่งตรวจใหม่
+        <i class="fa-solid fa-rotate-left"></i>  ให้ตรวจสอบใหม่
+      </button>
+      <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'failed')">
+        <i class="fa-solid fa-circle-xmark"></i> ข้อมูลไม่ผ่าน
+      </button>
+      <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
+        <i class="fa-solid fa-circle-check"></i> ยืนยันว่าถูกต้อง
       </button>
     </div>
   `;
@@ -8893,6 +8929,14 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
                   <td>
                     <strong>${customer.name || 'ลูกค้าทั่วไป'}</strong>
                     ${customer.phone && customer.phone !== '-' ? `<br><span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone"></i> ${customer.phone}</span>` : ''}
+                    <div style="margin-top:0.4rem; font-size:0.76rem; border-top:1px dashed rgba(255,255,255,0.15); padding-top:0.3rem; line-height:1.4;">
+                      ${(sale.items || []).map(item => `
+                        <div style="margin-bottom:0.25rem;">
+                          <strong style="color:#38bdf8;">• ${item.productName}</strong> <span style="font-family:monospace; color:#fbbf24;">(${item.imei})</span><br>
+                          <span style="color:var(--text-muted);">ราคาแนะนำ: ฿${(item.standardPrice || item.unitPrice).toLocaleString()} | ขายจริง: <strong style="color:#34d399;">฿${item.unitPrice.toLocaleString()}</strong></span>
+                        </div>
+                      `).join('')}
+                    </div>
                   </td>
                   <td><strong style="color:#34d399;">฿${(sale.grandTotal || 0).toLocaleString()}</strong></td>
                   <td><span style="font-size:0.82rem;">${payMethodText}</span></td>

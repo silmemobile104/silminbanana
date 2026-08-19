@@ -26,6 +26,7 @@ const saleSchema = new mongoose.Schema({
     productName: { type: String, required: true },
     imei: { type: String, default: '' },
     costPrice: { type: Number, default: 0 },
+    standardPrice: { type: Number, default: 0 },
     unitPrice: { type: Number, required: true },
     quantity: { type: Number, default: 1 },
     discount: { type: Number, default: 0 },
