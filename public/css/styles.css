@@ -41,7 +41,7 @@
   --text-main: #1e293b;           /* Slate 800 (Dark Slate, soft contrast) */
   --text-muted: #64748b;          /* Slate 500 */
   --text-dim: #94a3b8;            /* Slate 400 */
-  --font-family: 'Prompt', 'Sarabun', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family: 'Sarabun', 'Prompt', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Elevation & Effects */
   --shadow-lg: 0 10px 30px -5px rgba(100, 116, 139, 0.06); /* Very soft slate shadow */
