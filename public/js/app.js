@@ -218,6 +218,7 @@ function hidePageLoading() {
 }
 
 async function navigateTo(viewName) {
+  closeModal();
   const userRole = state.user ? (state.user ? state.user.role : 'admin') : 'branch_staff';
   const allowedViews = getUserAllowedMenus(userRole);
 
@@ -403,7 +404,7 @@ async function renderStaffDashboardView() {
   container.innerHTML = `
     <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
       <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;"></i>
-      <br><span style="font-size:1.1rem; font-weight:600; color:#fff;">กำลังโหลดแดชบอร์ดพนักงาน...</span>
+      <br><span style="font-size:1.1rem; font-weight:600; color:var(--text-main);">กำลังโหลดแดชบอร์ดพนักงาน...</span>
     </div>
   `;
 
@@ -432,7 +433,7 @@ async function renderStaffDashboardView() {
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">ยอดขายวันนี้ (Revenue)</span>
             <i class="fa-solid fa-money-bill-trend-up" style="color: var(--accent-primary); font-size:1.4rem;"></i>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#fff;">฿${(stats.todayRevenue || 0).toLocaleString()}</div>
+          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">฿${(stats.todayRevenue || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
             รวมรายการที่ทำเสร็จสิ้นวันนี้
           </p>
@@ -443,7 +444,7 @@ async function renderStaffDashboardView() {
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">บิลสำเร็จวันนี้ (Bills)</span>
             <i class="fa-solid fa-receipt" style="color: var(--accent-gold); font-size:1.4rem;"></i>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#fff;">${stats.todaySalesCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">บิล</span></div>
+          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.todaySalesCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">บิล</span></div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
             จำนวนรายการ POS สำเร็จ
           </p>
@@ -454,7 +455,7 @@ async function renderStaffDashboardView() {
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">สต็อกสินค้าพร้อมขาย (In Stock)</span>
             <i class="fa-solid fa-boxes-stacked" style="color: #10b981; font-size:1.4rem;"></i>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:#fff;">${stats.inStockCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">เครื่อง</span></div>
+          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.inStockCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">เครื่อง</span></div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
             สินค้าคงเหลือในคลังสาขาปัจจุบัน
           </p>
@@ -463,7 +464,7 @@ async function renderStaffDashboardView() {
         <div class="card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">การนับสต็อกวันนี้ (Audit)</span>
-            <i class="fa-solid fa-clipboard-list" style="color: #f43f5e; font-size:1.4rem;"></i>
+            <i class="fa-solid fa-clipboard-list" style="color: #e11d48; font-size:1.4rem;"></i>
           </div>
           <div style="margin-top:0.3rem;">${auditStatusBadge}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.6rem;">
@@ -473,18 +474,18 @@ async function renderStaffDashboardView() {
       </div>
 
       <!-- Branch Cards Section -->
-      <h3 style="font-size:1.1rem; font-weight:800; color:#fff; margin:1.8rem 0 0.8rem 0; display:flex; align-items:center; gap:0.5rem;">
+      <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin:1.8rem 0 0.8rem 0; display:flex; align-items:center; gap:0.5rem;">
         <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สรุปข้อมูลสินค้าและยอดขายรายสาขา
       </h3>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.2rem; margin-bottom:1.8rem;">
         ${(stats.branchCards || []).map(card => {
           return `
-            <div class="card" style="background: linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.6)); border: 1px solid rgba(255,255,255,0.08); padding: 1.4rem; border-radius:12px; display:flex; flex-direction:column; gap:1rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.6rem;">
-                <h4 style="font-size:1.05rem; font-weight:800; color:#fff; margin:0; display:flex; align-items:center; gap:0.4rem;">
+            <div class="card" style="background: linear-gradient(135deg, #ffffff, #faf8f5); border: 1px solid var(--border-color); padding: 1.4rem; border-radius:12px; display:flex; flex-direction:column; gap:1rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:0.6rem;">
+                <h4 style="font-size:1.05rem; font-weight:800; color:var(--text-main); margin:0; display:flex; align-items:center; gap:0.4rem;">
                   <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ${card.branchName}
                 </h4>
-                <span style="font-size:0.75rem; font-weight:700; background:rgba(255,255,255,0.08); color:var(--text-muted); padding:0.15rem 0.5rem; border-radius:4px;">
+                <span style="font-size:0.75rem; font-weight:700; background:rgba(0,0,0,0.04); color:var(--text-muted); padding:0.15rem 0.5rem; border-radius:4px;">
                   รหัส: ${card.branchCode}
                 </span>
               </div>
@@ -493,9 +494,9 @@ async function renderStaffDashboardView() {
                 <!-- Total Stock Today -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-layer-group" style="width:16px; color:#38bdf8;"></i> สินค้าทั้งหมดของวันนี้:
+                    <i class="fa-solid fa-layer-group" style="width:16px; color:#0891b2;"></i> สินค้าทั้งหมดของวันนี้:
                   </span>
-                  <strong style="color:#fff;">${card.totalStockToday.toLocaleString()} เครื่อง</strong>
+                  <strong style="color:var(--text-main);">${card.totalStockToday.toLocaleString()} เครื่อง</strong>
                 </div>
 
                 <!-- Stock -->
@@ -503,15 +504,15 @@ async function renderStaffDashboardView() {
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
                     <i class="fa-solid fa-boxes-stacked" style="width:16px; color:#10b981;"></i> สินค้าคงเหลือขณะนี้:
                   </span>
-                  <strong style="color:#fff;">${card.totalStockCount.toLocaleString()} เครื่อง</strong>
+                  <strong style="color:var(--text-main);">${card.totalStockCount.toLocaleString()} เครื่อง</strong>
                 </div>
 
                 <!-- Today Sales Qty -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-cart-shopping" style="width:16px; color:#f43f5e;"></i> วันนี้ขายได้แล้ว:
+                    <i class="fa-solid fa-cart-shopping" style="width:16px; color:#e11d48;"></i> วันนี้ขายได้แล้ว:
                   </span>
-                  <strong style="color:#fff;">${card.todaySalesQty.toLocaleString()} เครื่อง</strong>
+                  <strong style="color:var(--text-main);">${card.todaySalesQty.toLocaleString()} เครื่อง</strong>
                 </div>
 
                 <!-- Today Revenue -->
@@ -531,8 +532,8 @@ async function renderStaffDashboardView() {
       <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1.5rem; align-items:start;" class="grid-1_5-1">
         <!-- Recent Sales Section -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.8rem;">
-            <h3 style="font-size:1.1rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem; margin:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
+            <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
               <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);"></i> รายการขายล่าสุดของสาขาวันนี้
             </h3>
             <button class="btn btn-secondary btn-sm" onclick="navigateTo('sales-history')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
@@ -579,9 +580,9 @@ async function renderStaffDashboardView() {
 
         <!-- Top Stock Items Section -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.8rem;">
-            <h3 style="font-size:1.1rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <i class="fa-solid fa-boxes-packing" style="color:var(--accent-gold);"></i> สินค้าคงคลังแยกตามรุ่น (Top 8)
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
+            <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
+              <i class="fa-solid fa-boxes-packing" style="color:var(--accent-gold);"></i> สินค้าคงคลังแยกตามรุ่น
             </h3>
             <button class="btn btn-secondary btn-sm" onclick="navigateTo('branch-inventory')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
               ดูสต็อกทั้งหมด
@@ -591,17 +592,17 @@ async function renderStaffDashboardView() {
           <div style="display:flex; flex-direction:column; gap:0.6rem;">
             ${stockSummary.length === 0 ? `<div style="text-align:center; color:var(--text-muted); padding:2rem; font-size:0.85rem;">ไม่มีสินค้าคงคลังในสาขาขณะนี้</div>` : ''}
             ${stockSummary.map((item, idx) => {
-              const colors = ['rgba(56,189,248,0.15)', 'rgba(251,191,36,0.15)', 'rgba(52,211,153,0.15)', 'rgba(244,63,94,0.15)'];
-              const textColors = ['#38bdf8', '#fbbf24', '#34d399', '#f43f5e'];
+              const colors = ['rgba(8,145,178,0.08)', 'rgba(217,119,6,0.08)', 'rgba(5,150,105,0.08)', 'rgba(225,29,72,0.08)'];
+              const textColors = ['#0891b2', '#d97706', '#059669', '#e11d48'];
               const colIdx = idx % colors.length;
 
               return `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.6rem 0.8rem; border-radius:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.6rem 0.8rem; border-radius:8px;">
                   <div style="display:flex; align-items:center; gap:0.6rem; max-width:80%;">
                     <div style="width:24px; height:24px; border-radius:50%; background:${colors[colIdx]}; color:${textColors[colIdx]}; display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:800; flex-shrink:0;">
                       ${idx + 1}
                     </div>
-                    <span style="font-size:0.83rem; font-weight:700; color:#fff; word-break:break-all;">${item.productName}</span>
+                    <span style="font-size:0.83rem; font-weight:700; color:var(--text-main); word-break:break-all;">${item.productName}</span>
                   </div>
                   <strong style="color:${textColors[colIdx]}; font-size:0.9rem; flex-shrink:0;">${item.count} เครื่อง</strong>
                 </div>
@@ -656,13 +657,13 @@ async function renderDashboardView() {
     container.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem;">
         <div>
-          <h3 style="font-size:1.25rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
+          <h3 style="font-size:1.25rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
             <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);"></i> ภาพรวมแดชบอร์ดผู้บริหาร
           </h3>
         </div>
 
         <div>
-          <button class="btn btn-primary" onclick="openExecutiveReportModal()" style="padding:0.6rem 1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 14px rgba(99,102,241,0.4);">
+          <button class="btn btn-primary" onclick="openExecutiveReportModal()" style="padding:0.6rem 1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 14px rgba(79,70,229,0.25);">
             <i class="fa-solid fa-file-invoice-dollar"></i> ดูรายงานสรุปผู้บริหาร
           </button>
         </div>
@@ -672,48 +673,48 @@ async function renderDashboardView() {
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
         
         <!-- KPI 1: Today Revenue -->
-        <div class="card" style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.04)); border: 1px solid rgba(16,185,129,0.35);">
+        <div class="card" style="background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02)); border: 1px solid rgba(16,185,129,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">ยอดขายรวมวันนี้</span>
-            <i class="fa-solid fa-sack-dollar" style="color:#34d399; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-sack-dollar" style="color:#059669; font-size:1.5rem;"></i>
           </div>
-          <div style="font-size:2.2rem; font-weight:800; color:#34d399;">฿${todayRevenue.toLocaleString()}</div>
+          <div style="font-size:2.2rem; font-weight:800; color:#059669;">฿${todayRevenue.toLocaleString()}</div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            สด/โอน: <strong style="color:#fff;">฿${todayCashRevenue.toLocaleString()}</strong> | ไฟแนนซ์: <strong style="color:#fbbf24;">฿${todayFinanceRevenue.toLocaleString()}</strong>
+            สด/โอน: <strong style="color:var(--text-main);">฿${todayCashRevenue.toLocaleString()}</strong> | ไฟแนนซ์: <strong style="color:#d97706;">฿${todayFinanceRevenue.toLocaleString()}</strong>
           </div>
         </div>
 
         <!-- KPI 2: Today Bills -->
-        <div class="card" style="background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(56,189,248,0.04)); border: 1px solid rgba(56,189,248,0.35);">
+        <div class="card" style="background: linear-gradient(135deg, rgba(8,145,178,0.08), rgba(8,145,178,0.02)); border: 1px solid rgba(8,145,178,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">บิลขายวันนี้</span>
-            <i class="fa-solid fa-receipt" style="color:#38bdf8; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-receipt" style="color:#0891b2; font-size:1.5rem;"></i>
           </div>
-          <div style="font-size:2.2rem; font-weight:800; color:#38bdf8;">${todayBills} <span style="font-size:0.95rem; color:var(--text-muted);">บิล</span></div>
+          <div style="font-size:2.2rem; font-weight:800; color:#0891b2;">${todayBills} <span style="font-size:0.95rem; color:var(--text-muted);">บิล</span></div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            ประมาณการกำไร: <strong style="color:#34d399;">฿${todayProfit.toLocaleString()}</strong>
+            ประมาณการกำไร: <strong style="color:#059669;">฿${todayProfit.toLocaleString()}</strong>
           </div>
         </div>
 
         <!-- KPI 3: Total Stock Value -->
-        <div class="card" style="background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(99,102,241,0.04)); border: 1px solid rgba(99,102,241,0.35);">
+        <div class="card" style="background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02)); border: 1px solid rgba(99,102,241,0.25);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">มูลค่าสต็อกสินค้าคงเหลือ</span>
-            <i class="fa-solid fa-boxes-stacked" style="color:#818cf8; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-boxes-stacked" style="color:var(--accent-primary); font-size:1.5rem;"></i>
           </div>
-          <div style="font-size:2.2rem; font-weight:800; color:#fff;">฿${totalStockValue.toLocaleString()}</div>
+          <div style="font-size:2.2rem; font-weight:800; color:var(--text-main);">฿${totalStockValue.toLocaleString()}</div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            สินค้าคงคลัง: <strong style="color:#38bdf8;">${totalStockItems.toLocaleString()}</strong> เครื่อง (5 สาขา)
+            สินค้าคงคลัง: <strong style="color:var(--accent-primary);">${totalStockItems.toLocaleString()}</strong> เครื่อง (5 สาขา)
           </div>
         </div>
 
         <!-- KPI 4: Daily Audit Status -->
-        <div class="card" style="background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.04)); border: 1px solid rgba(251,191,36,0.35);">
+        <div class="card" style="background: linear-gradient(135deg, rgba(217,119,6,0.08), rgba(217,119,6,0.02)); border: 1px solid rgba(217,119,6,0.25);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">สถานะนับสต็อกประจำวัน</span>
-            <i class="fa-solid fa-clipboard-check" style="color:#fbbf24; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-clipboard-check" style="color:#d97706; font-size:1.5rem;"></i>
           </div>
-          <div style="font-size:2.2rem; font-weight:800; color:${pendingAuditsCount > 0 ? '#fbbf24' : '#34d399'};">
+          <div style="font-size:2.2rem; font-weight:800; color:${pendingAuditsCount > 0 ? '#d97706' : '#059669'};">
             ${submittedCount} / 5 <span style="font-size:0.95rem; color:var(--text-muted);">สาขาส่งแล้ว</span>
           </div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
@@ -731,7 +732,7 @@ async function renderDashboardView() {
             <h3 style="font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
               <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก
             </h3>
-            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#34d399;"></i> ข้อมูลประจำวันวันนี้</span>
+            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#059669;"></i> ข้อมูลประจำวันวันนี้</span>
           </div>
           <div style="position:relative; flex:1; min-height:260px;">
             <canvas id="executive-branch-chart"></canvas>
@@ -743,19 +744,19 @@ async function renderDashboardView() {
           
           <!-- Top Selling Products Widget -->
           <div class="card" style="flex:1;">
-            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-fire" style="color:#f97316;"></i> สินค้าขายดีประจำวัน Top 5
+            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:var(--accent-primary); display:flex; align-items:center; gap:0.4rem;">
+              <i class="fa-solid fa-fire" style="color:#ea580c;"></i> สินค้าขายดีประจำวัน Top 5
             </h4>
             <div style="font-size:0.82rem;">
               ${topSellingProducts.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:1rem 0; text-align:center;">ยังไม่มีรายการขายในวันนี้</div>' : ''}
               ${topSellingProducts.map((p, idx) => `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-bottom:1px solid var(--border-color);">
                   <div>
-                    <strong style="color:#fff;">${idx + 1}. ${p.productName}</strong>
+                    <strong style="color:var(--text-main);">${idx + 1}. ${p.productName}</strong>
                   </div>
                   <div style="text-align:right;">
                     <span class="badge badge-green" style="font-size:0.75rem;">${p.quantity} เครื่อง</span>
-                    <div style="font-weight:700; color:#34d399; font-size:0.8rem; margin-top:0.1rem;">฿${p.revenue.toLocaleString()}</div>
+                    <div style="font-weight:700; color:#059669; font-size:0.8rem; margin-top:0.1rem;">฿${p.revenue.toLocaleString()}</div>
                   </div>
                 </div>
               `).join('')}
@@ -764,15 +765,15 @@ async function renderDashboardView() {
 
           <!-- Low Stock Alerts Widget -->
           <div class="card" style="flex:1;">
-            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#f87171; display:flex; align-items:center; gap:0.4rem;">
+            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#e11d48; display:flex; align-items:center; gap:0.4rem;">
               <i class="fa-solid fa-triangle-exclamation"></i> แจ้งเตือนสินค้าสต็อกต่ำ (เหลือ ≤ 2)
             </h4>
             <div style="font-size:0.8rem; max-height:140px; overflow-y:auto;">
-              ${lowStockAlerts.length === 0 ? '<div style="color:#34d399; font-style:italic; padding:0.5rem 0;">ไม่มีสินค้าสต็อกต่ำในขณะนี้ ทุกสาขามีสต็อกเพียงพอ</div>' : ''}
+              ${lowStockAlerts.length === 0 ? '<div style="color:#059669; font-style:italic; padding:0.5rem 0;">ไม่มีสินค้าสต็อกต่ำในขณะนี้ ทุกสาขามีสต็อกเพียงพอ</div>' : ''}
               ${lowStockAlerts.map(item => `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:rgba(248,113,113,0.08); border-radius:6px; margin-bottom:0.4rem; border:1px solid rgba(248,113,113,0.2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:rgba(225,29,72,0.05); border-radius:6px; margin-bottom:0.4rem; border:1px solid rgba(225,29,72,0.15);">
                   <div>
-                    <strong style="color:#fff;">${item.productName}</strong>
+                    <strong style="color:var(--text-main);">${item.productName}</strong>
                     <div style="font-size:0.73rem; color:var(--text-muted);">${item.branchName}</div>
                   </div>
                   <span class="badge badge-red" style="font-weight:800; font-size:0.82rem;">เหลือ ${item.quantity} เครื่อง</span>
@@ -811,7 +812,7 @@ async function renderDashboardView() {
                   <div class="stat-lbl">นับได้จริง</div>
                 </div>
                 <div class="stat-item">
-                  <div class="stat-val" style="color: ${b.totalVariance === 0 ? '#34d399' : '#f87171'};">${b.totalVariance}</div>
+                  <div class="stat-val" style="color: ${b.totalVariance === 0 ? '#059669' : '#e11d48'};">${b.totalVariance}</div>
                   <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
                 </div>
               </div>
@@ -863,17 +864,17 @@ async function renderDashboardView() {
             animation: false,
             plugins: {
               legend: {
-                labels: { color: '#e2e8f0', font: { family: 'Prompt', size: 12 } }
+                labels: { color: '#475569', font: { family: 'Prompt', size: 12 } }
               }
             },
             scales: {
               x: {
-                ticks: { color: '#94a3b8', font: { family: 'Prompt' } },
-                grid: { color: 'rgba(255,255,255,0.05)' }
+                ticks: { color: '#64748b', font: { family: 'Prompt' } },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' }
               },
               y: {
-                ticks: { color: '#94a3b8', font: { family: 'Prompt' } },
-                grid: { color: 'rgba(255,255,255,0.08)' }
+                ticks: { color: '#64748b', font: { family: 'Prompt' } },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' }
               }
             }
           }
@@ -916,7 +917,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
       <div style="padding:0.2rem;">
         
         <!-- Filter Controls Bar at top of Modal -->
-        <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem;">
+        <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem;">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
             
             <!-- Quick Presets -->
@@ -943,13 +944,13 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
         <div id="executive-printable-report">
           
           <!-- Header Sub-Info -->
-          <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.25); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div style="background:rgba(99,102,241,0.06); border:1px solid var(--border-glow); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
             <div>
-              <h4 style="font-size:1.05rem; font-weight:800; color:#fff; margin-bottom:0.15rem;">
+              <h4 style="font-size:1.05rem; font-weight:800; color:var(--text-main); margin-bottom:0.15rem;">
                 <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร
               </h4>
               <div style="font-size:0.83rem; color:var(--text-muted);">
-                ประจำช่วงวันที่: <strong style="color:#fbbf24;">${startVal}</strong> ถึง <strong style="color:#fbbf24;">${endVal}</strong>
+                ประจำช่วงวันที่: <strong style="color:#d97706;">${startVal}</strong> ถึง <strong style="color:#d97706;">${endVal}</strong>
               </div>
             </div>
             <div style="text-align:right; font-size:0.75rem; color:var(--text-muted);">
@@ -960,27 +961,27 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
           <!-- 4 KPI Cards -->
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:0.8rem; margin-bottom:1.5rem;">
             
-            <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:0.8rem; border-radius:8px;">
+            <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); padding:0.8rem; border-radius:8px;">
               <div style="font-size:0.78rem; color:var(--text-muted);">ยอดขายรวมสุทธิ</div>
-              <div style="font-size:1.55rem; font-weight:800; color:#34d399; margin:0.2rem 0;">฿${totalRev.toLocaleString()}</div>
+              <div style="font-size:1.55rem; font-weight:800; color:#059669; margin:0.2rem 0;">฿${totalRev.toLocaleString()}</div>
               <div style="font-size:0.72rem; color:var(--text-muted);">สด/โอน: ฿${cashRev.toLocaleString()} | ไฟแนนซ์: ฿${finRev.toLocaleString()}</div>
             </div>
 
-            <div style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:0.8rem; border-radius:8px;">
+            <div style="background:rgba(8,145,178,0.08); border:1px solid rgba(8,145,178,0.3); padding:0.8rem; border-radius:8px;">
               <div style="font-size:0.78rem; color:var(--text-muted);">กำไรขั้นต้นรวม</div>
-              <div style="font-size:1.55rem; font-weight:800; color:#38bdf8; margin:0.2rem 0;">฿${totalProf.toLocaleString()}</div>
-              <div style="font-size:0.72rem; color:var(--text-muted);">อัตรากำไร : <strong style="color:#34d399;">${margin.toFixed(1)}%</strong></div>
+              <div style="font-size:1.55rem; font-weight:800; color:#0891b2; margin:0.2rem 0;">฿${totalProf.toLocaleString()}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">อัตรากำไร : <strong style="color:#059669;">${margin.toFixed(1)}%</strong></div>
             </div>
 
-            <div style="background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.3); padding:0.8rem; border-radius:8px;">
+            <div style="background:rgba(217,119,6,0.08); border:1px solid rgba(217,119,6,0.25); padding:0.8rem; border-radius:8px;">
               <div style="font-size:0.78rem; color:var(--text-muted);">จำนวนรายการขาย</div>
-              <div style="font-size:1.55rem; font-weight:800; color:#fbbf24; margin:0.2rem 0;">${totalBills} <span style="font-size:0.8rem;">บิล</span></div>
+              <div style="font-size:1.55rem; font-weight:800; color:#d97706; margin:0.2rem 0;">${totalBills} <span style="font-size:0.8rem;">บิล</span></div>
               <div style="font-size:0.72rem; color:var(--text-muted);">ยอดเฉลี่ยต่อบิล : ฿${Math.round(aov).toLocaleString()}</div>
             </div>
 
-            <div style="background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.3); padding:0.8rem; border-radius:8px;">
+            <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); padding:0.8rem; border-radius:8px;">
               <div style="font-size:0.78rem; color:var(--text-muted);">สัดส่วนช่องทางชำระเงิน</div>
-              <div style="font-size:1.1rem; font-weight:800; color:#fff; margin:0.3rem 0;">
+              <div style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin:0.3rem 0;">
                 สด/โอน: ${totalRev > 0 ? Math.round((cashRev/totalRev)*100) : 0}% | ไฟแนนซ์: ${totalRev > 0 ? Math.round((finRev/totalRev)*100) : 0}%
               </div>
               <div style="font-size:0.72rem; color:var(--text-muted);">ครอบคลุมทั้ง 5 สาขา</div>
@@ -1020,7 +1021,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
                       <td style="text-align:right; font-weight:700; color:#38bdf8;">฿${(b.profit || 0).toLocaleString()}</td>
                       <td style="text-align:center;">
                         <div style="display:flex; align-items:center; gap:0.5rem; justify-content:center;">
-                          <div style="flex-grow:1; background:rgba(255,255,255,0.1); height:6px; border-radius:3px; max-width:80px; text-align:left;">
+                          <div style="flex-grow:1; background:rgba(0,0,0,0.08); height:6px; border-radius:3px; max-width:80px; text-align:left;">
                             <div style="width:${proportion}%; background:var(--accent-primary); height:100%; border-radius:3px;"></div>
                           </div>
                           <span style="font-weight:700; min-width:30px;">${proportion}%</span>
@@ -1245,7 +1246,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                   <td><strong>${prodName}</strong></td>
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
-                  ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
+                  ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
                   <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
                     ${badgeHtml}
@@ -1365,7 +1366,7 @@ async function renderPosView(selectedBranchId = null) {
                         </td>
                         <td>
                           <strong>${productName}</strong>
-                          ${currentBranch._id === 'all' && st.branch ? `<br><span style="font-size:0.72rem; color:#a5b4fc; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:3px;">📍 ${st.branch.name || 'ไม่ระบุสาขา'}</span>` : ''}
+                          ${currentBranch._id === 'all' && st.branch ? `<br><span style="font-size:0.72rem; color:var(--accent-primary); background:rgba(99,102,241,0.08); padding:1px 6px; border-radius:3px;">📍 ${st.branch.name || 'ไม่ระบุสาขา'}</span>` : ''}
                         </td>
                         <td><strong style="color:#fbbf24; font-family:monospace; font-size:0.92rem;">${imei}</strong></td>
                         <td><strong style="color:#34d399;">฿${sellingPrice.toLocaleString()}</strong></td>
@@ -1394,7 +1395,7 @@ async function renderPosView(selectedBranchId = null) {
             </div>
 
             <!-- Customer Info Form -->
-            <div style="background:rgba(0,0,0,0.25); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
+            <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
               <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--accent-secondary);">
                 <i class="fa-solid fa-user-tag"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ)
               </div>
@@ -1405,12 +1406,12 @@ async function renderPosView(selectedBranchId = null) {
             </div>
 
             <!-- Cart Items List -->
-            <div id="pos-cart-items-container" style="max-height:220px; overflow-y:auto; margin-bottom:1rem; border:1px solid rgba(255,255,255,0.1); border-radius:6px; padding:0.5rem;">
+            <div id="pos-cart-items-container" style="max-height:220px; overflow-y:auto; margin-bottom:1rem; border:1px solid var(--border-color); border-radius:6px; padding:0.5rem;">
               <!-- Rendered Cart Items -->
             </div>
 
             <!-- Totals & Payment Calculations -->
-            <div style="background:rgba(0,0,0,0.3); padding:1rem; border-radius:8px; margin-bottom:1rem;">
+            <div style="background:rgba(0,0,0,0.035); border:1px solid var(--border-color); padding:1rem; border-radius:8px; margin-bottom:1rem;">
               <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.9rem;">
                 <span>ยอดรวมสินค้า (Subtotal):</span>
                 <strong id="pos-subtotal-val">฿0</strong>
@@ -1568,14 +1569,14 @@ function renderPosCartUI() {
     container.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:1.5rem; font-size:0.85rem;">ยังไม่มีรายการสินค้าในตะกร้า</div>`;
   } else {
     container.innerHTML = state.posCart.map((item, idx) => `
-      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem; gap:0.5rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem; gap:0.5rem;">
         <div style="flex:1; min-width:0;">
           <strong style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">${item.productName}</strong>
           <span style="font-size:0.75rem; color:var(--text-muted);">IMEI: ${item.imei || '-'}</span>
         </div>
         <div style="text-align:right; display:flex; align-items:center; gap:0.3rem;">
-          <span style="color:#34d399; font-weight:700;">฿</span>
-          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:#34d399; margin:0;" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
+          <span style="color:#059669; font-weight:700;">฿</span>
+          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:#059669; margin:0; background:#ffffff;" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
         </div>
         <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="removeFromPosCart(${idx})">
           <i class="fa-solid fa-xmark"></i>
@@ -1868,18 +1869,18 @@ function openSelectReceiptTypeModal(sale) {
       <div class="form-group">
         <label style="font-weight:700; margin-bottom:0.5rem; display:block;">รูปแบบเอกสาร:</label>
         
-        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.8rem 1rem; border-radius:6px; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-abbreviated').checked = true">
+        <div style="background:#ffffff; border:1px solid var(--border-color); padding:0.8rem 1rem; border-radius:6px; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-abbreviated').checked = true">
           <input type="radio" id="r-type-abbreviated" name="receiptType" value="abbreviated" checked style="transform:scale(1.2);">
           <div>
-            <strong style="color:#fff; font-size:0.9rem;">ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ</strong>
+            <strong style="color:var(--text-main); font-size:0.9rem;">ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ</strong>
             <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์ใบเสร็จย่อหน้ากว้าง 58-80mm สำหรับลูกค้าทั่วไป (ไม่แสดงคำนวณ VAT)</div>
           </div>
         </div>
 
-        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.8rem 1rem; border-radius:6px; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-full').checked = true">
+        <div style="background:#ffffff; border:1px solid var(--border-color); padding:0.8rem 1rem; border-radius:6px; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-full').checked = true">
           <input type="radio" id="r-type-full" name="receiptType" value="full" style="transform:scale(1.2);">
           <div>
-            <strong style="color:#38bdf8; font-size:0.9rem;">ใบกำกับภาษีเต็มรูปแบบ (Full Tax Invoice)</strong>
+            <strong style="color:var(--accent-primary); font-size:0.9rem;">ใบกำกับภาษีเต็มรูปแบบ (Full Tax Invoice)</strong>
             <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์เอกสารขนาด A4 แสดงข้อมูลผู้เสียภาษีของลูกค้าและการแยกภาษีมูลค่าเพิ่ม 7%</div>
           </div>
         </div>
@@ -2168,7 +2169,7 @@ async function renderFinanceView(filterParams = {}) {
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">ยอดขายรวม (Revenue)</span>
             <i class="fa-solid fa-cart-shopping" style="color: var(--accent-primary); font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#fff;">฿${(summary.totalRevenue || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:var(--text-main);">฿${(summary.totalRevenue || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             จำนวนบิลสำเร็จ: ${summary.totalSalesCount || 0} บิล
           </p>
@@ -2179,29 +2180,29 @@ async function renderFinanceView(filterParams = {}) {
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขั้นต้น (Gross Profit)</span>
             <i class="fa-solid fa-coins" style="color: var(--accent-gold); font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#fbbf24;">฿${(summary.totalProfit || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#d97706;">฿${(summary.totalProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             ทุนรวมสินค้า: ฿${(summary.totalCost || 0).toLocaleString()}
           </p>
         </div>
 
-        <div class="card" style="border: 1px solid ${(summary.totalExpenses || 0) > 0 ? '#ef4444' : 'rgba(255,255,255,0.1)'};">
+        <div class="card" style="border: 1px solid ${(summary.totalExpenses || 0) > 0 ? '#e11d48' : 'var(--border-color)'};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">รายจ่ายรวม (Expenses)</span>
-            <i class="fa-solid fa-receipt" style="color: #ef4444; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-receipt" style="color: #e11d48; font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#ef4444;">฿${(summary.totalExpenses || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#e11d48;">฿${(summary.totalExpenses || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             รายจ่ายดำเนินงานทั่วไป
           </p>
         </div>
 
-        <div class="card" style="border: 1px solid #34d399; background: rgba(52, 211, 153, 0.02);">
+        <div class="card" style="border: 1px solid #10b981; background: rgba(16, 185, 129, 0.04);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรสุทธิ (Net Profit)</span>
-            <i class="fa-solid fa-hand-holding-dollar" style="color: #34d399; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-hand-holding-dollar" style="color: #059669; font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#34d399;">฿${(summary.netProfit || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#059669;">฿${(summary.netProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             กำไรหลังหักราคาทุนและรายจ่าย
           </p>
@@ -2210,9 +2211,9 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรที่รอรับจากไฟแนนซ์</span>
-            <i class="fa-solid fa-clock-rotate-left" style="color: #fbbf24; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-clock-rotate-left" style="color: #d97706; font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#fbbf24;">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:#d97706;">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             ${summary.pendingFinanceCount || 0} รายการไฟแนนซ์รอโอนเงิน
           </p>
@@ -2223,7 +2224,7 @@ async function renderFinanceView(filterParams = {}) {
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขายสด / โอน / บัตร</span>
             <i class="fa-solid fa-money-bill-wave" style="color: var(--accent-primary); font-size:1.3rem;"></i>
           </div>
-          <div style="font-size: 1.6rem; font-weight:800; color:#fff;">฿${(summary.cashProfit || 0).toLocaleString()}</div>
+          <div style="font-size: 1.6rem; font-weight:800; color:var(--text-main);">฿${(summary.cashProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
             ยอดขายสดรวม: ฿${(summary.cashRevenue || 0).toLocaleString()}
           </p>
@@ -2426,7 +2427,7 @@ async function renderFinanceView(filterParams = {}) {
       <!-- Expenses Tab Panel -->
       <div id="fin-expenses-panel" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
-          <div style="font-weight:700; font-size:1.05rem; color:#fff;">
+          <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">
             <i class="fa-solid fa-list-check" style="color:var(--accent-primary);"></i> ตารางรายการรายจ่ายระบบ
           </div>
           <button class="btn btn-danger btn-sm" style="font-weight:700;" onclick="openAddExpenseModal()">
@@ -2435,7 +2436,7 @@ async function renderFinanceView(filterParams = {}) {
         </div>
 
         <!-- Dynamic Detailed Expense Filters -->
-        <div style="background:rgba(255,255,255,0.02); padding:1rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05); margin-bottom:1.5rem;">
+        <div style="background:rgba(0,0,0,0.025); padding:1rem; border-radius:6px; border:1px solid var(--border-color); margin-bottom:1.5rem;">
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem; margin-bottom:0.8rem;">
             ${isAdminOrHq ? `
               <div>
@@ -2556,13 +2557,13 @@ async function renderFinanceView(filterParams = {}) {
                 return `
                   <tr class="exp-row" data-search="${searchStr}" data-category="${exp.category}" data-date="${isoDate}" data-recorded-by="${recUserId}" data-amount="${exp.amount || 0}">
                     <td>
-                      <strong style="color:#f87171;">${exp.expenseNumber}</strong><br>
+                      <strong style="color:#e11d48;">${exp.expenseNumber}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
                     </td>
-                    <td><strong style="color:#fff;">${exp.title || '-'}</strong></td>
+                    <td><strong style="color:var(--text-main);">${exp.title || '-'}</strong></td>
                     <td><strong>${exp.branch ? exp.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
                     <td><span class="badge badge-gray">${categoryThai}</span></td>
-                    <td><strong style="color:#ef4444; font-size:0.95rem;">฿${(exp.amount || 0).toLocaleString()}</strong></td>
+                    <td><strong style="color:#e11d48; font-size:0.95rem;">฿${(exp.amount || 0).toLocaleString()}</strong></td>
                     <td><span style="font-size:0.83rem;">${exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน'}</span></td>
                     <td style="font-size:0.83rem; max-width:250px; word-break:break-word;">${exp.note || '-'}</td>
                     <td style="text-align:center; white-space:nowrap;">
@@ -2975,12 +2976,12 @@ function filterExpenseTable() {
 
 function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName) {
   const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
+    <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.88rem;">
         <span>เลขที่ใบเสร็จ: <strong>${receiptNumber}</strong></span>
         <span>บริษัทไฟแนนซ์: <strong style="color:var(--accent-gold);">${companyName || 'จัดไฟแนนซ์'}</strong></span>
       </div>
-      <div style="display:flex; justify-content:space-between; font-size:1.1rem; font-weight:800; color:#34d399;">
+      <div style="display:flex; justify-content:space-between; font-size:1.1rem; font-weight:800; color:#059669;">
         <span>ยอดเงินกำไรที่รอรับจากไฟแนนซ์:</span>
         <span>฿${Number(amount).toLocaleString()}</span>
       </div>
@@ -2988,7 +2989,7 @@ function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName
 
     <form id="record-payout-form" onsubmit="event.preventDefault(); submitFinancePayoutReceived('${saleId}');">
       <div class="form-group">
-        <label for="fp-received-date" style="color:#fbbf24; font-weight:700;">
+        <label for="fp-received-date" style="color:#d97706; font-weight:700;">
           <i class="fa-solid fa-calendar-days"></i> ระบุวันที่ ที่รับเงินจากไฟแนนซ์จริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="fp-received-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700;">
@@ -3104,7 +3105,7 @@ async function renderMasterSettingsView() {
           <div style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto; padding-right:0.2rem;">
             ${brands.length === 0 ? `<div style="color:var(--text-muted); font-size:0.85rem;">ยังไม่มีรายการ</div>` : ''}
             ${brands.map(b => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${b.value}</strong></span>
                 <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${b._id}', '${b.value}')">
                   <i class="fa-solid fa-trash-can"></i>
@@ -3116,8 +3117,8 @@ async function renderMasterSettingsView() {
 
         <!-- 2. MODELS -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:#fbbf24;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
+            <h4 style="font-weight:700; font-size:0.95rem; color:#d97706;">
               <i class="fa-solid fa-mobile-screen-button"></i> ชื่อรุ่น (Model)
             </h4>
             <span class="badge badge-gray">${models.length} รายการ</span>
@@ -3126,7 +3127,7 @@ async function renderMasterSettingsView() {
           <div style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto; padding-right:0.2rem;">
             ${models.length === 0 ? `<div style="color:var(--text-muted); font-size:0.85rem;">ยังไม่มีรายการ</div>` : ''}
             ${models.map(m => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <div>
                   <strong>${m.value}</strong>
                   ${m.parent ? `<br><span style="font-size:0.75rem; color:var(--text-muted);">${m.parent}</span>` : ''}
@@ -3141,8 +3142,8 @@ async function renderMasterSettingsView() {
 
         <!-- 3. CAPACITIES -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:#a7f3d0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
+            <h4 style="font-weight:700; font-size:0.95rem; color:#059669;">
               <i class="fa-solid fa-hard-drive"></i> ความจุ (Capacity)
             </h4>
             <span class="badge badge-gray">${capacities.length} รายการ</span>
@@ -3151,7 +3152,7 @@ async function renderMasterSettingsView() {
           <div style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto; padding-right:0.2rem;">
             ${capacities.length === 0 ? `<div style="color:var(--text-muted); font-size:0.85rem;">ยังไม่มีรายการความจุ</div>` : ''}
             ${capacities.map(cp => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${cp.value}</strong></span>
                 <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cp._id}', '${cp.value}')">
                   <i class="fa-solid fa-trash-can"></i>
@@ -3163,8 +3164,8 @@ async function renderMasterSettingsView() {
 
         <!-- 4. COLORS -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:#c084fc;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
+            <h4 style="font-weight:700; font-size:0.95rem; color:#7c3aed;">
               <i class="fa-solid fa-droplet"></i> สีสินค้า (Color)
             </h4>
             <span class="badge badge-gray">${colors.length} รายการ</span>
@@ -3173,7 +3174,7 @@ async function renderMasterSettingsView() {
           <div style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto; padding-right:0.2rem;">
             ${colors.length === 0 ? `<div style="color:var(--text-muted); font-size:0.85rem;">ยังไม่มีรายการสี</div>` : ''}
             ${colors.map(cl => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${cl.value}</strong></span>
                 <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cl._id}', '${cl.value}')">
                   <i class="fa-solid fa-trash-can"></i>
@@ -3185,8 +3186,8 @@ async function renderMasterSettingsView() {
 
         <!-- 5. CATEGORIES -->
         <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:#f472b6;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
+            <h4 style="font-weight:700; font-size:0.95rem; color:#db2777;">
               <i class="fa-solid fa-tags"></i> หมวดหมู่สินค้า (Category)
             </h4>
             <span class="badge badge-gray">${categories.length} รายการ</span>
@@ -3195,7 +3196,7 @@ async function renderMasterSettingsView() {
           <div style="display:flex; flex-direction:column; gap:0.4rem; max-height:260px; overflow-y:auto; padding-right:0.2rem;">
             ${categories.length === 0 ? `<div style="color:var(--text-muted); font-size:0.85rem;">ยังไม่มีรายการหมวดหมู่</div>` : ''}
             ${categories.map(c => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${c.value}</strong></span>
                 <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${c._id}', '${c.value}')">
                   <i class="fa-solid fa-trash-can"></i>
@@ -3268,26 +3269,70 @@ async function renderHqAuditView() {
     <div class="card" style="margin-bottom: 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
       <div>
         <h3 style="font-size:1.1rem; font-weight:700;">แดชบอร์ดตรวจสอบสต็อก 5 สาขา (ส่วนกลาง)</h3>
-        <p style="font-size:0.85rem; color:var(--text-muted);">ตรวจสอบรายการนับสต็อกประจำวันจากพนักงานหน้าร้าน พร้อมการแจ้งเตือนด้วยแถบสี</p>
+        <p style="font-size:0.85rem; color:var(--text-muted);">ตรวจสอบรายการนับสต็อกประจำวันจากพนักงานหน้าร้าน พร้อมการกรองสาขาและสถานะแบบเรียลไทม์</p>
       </div>
-      <div style="display:flex; align-items:center; gap:0.8rem;">
+      <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
         <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เลือกวันที่:</label>
         <input type="date" id="hq-audit-date-picker" class="form-control" style="width:auto;" value="${todayStr}">
         <button class="btn btn-primary btn-sm" id="load-hq-audit-btn"><i class="fa-solid fa-rotate"></i> รีเฟรช</button>
+        <button class="btn btn-secondary btn-sm" id="toggle-hq-summary-btn" onclick="toggleHqAuditSummaryTable()"><i class="fa-solid fa-eye"></i> แสดงตารางสรุปสาขา</button>
         <button class="btn btn-success btn-sm" onclick="exportBranchAuditToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
       </div>
     </div>
 
-    <div id="hq-audit-grid-container" class="audit-grid" style="margin-bottom: 1.5rem;">
-      <div style="padding: 2rem; text-align: center; color: var(--text-muted); grid-column: 1/-1;"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลสต็อก 5 สาขา...</div>
+    <!-- Filters Toolbar -->
+    <div class="card" style="margin-bottom: 1.5rem; display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap; padding: 0.8rem 1.2rem;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-store"></i> กรองสาขา:</label>
+        <select id="hq-audit-branch-filter" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem; height:auto; min-height:auto;" onchange="filterHqAuditGrid()">
+          <option value="all">-- ทุกสาขา --</option>
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-circle-check"></i> กรองสถานะ:</label>
+        <select id="hq-audit-status-filter" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem; height:auto; min-height:auto;" onchange="filterHqAuditGrid()">
+          <option value="all">-- ทุกสถานะ --</option>
+          <option value="Verified">ตรวจสอบแล้ว (Verified)</option>
+          <option value="Pending Verification">รอการตรวจสอบ (Pending)</option>
+          <option value="Rejected">ข้อมูลไม่ตรง/ปฏิเสธ (Rejected)</option>
+          <option value="Not Submitted">ยังไม่ได้ส่งรายงาน (Not Submitted)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Single card containing all branches summary table -->
+    <div class="card" id="hq-audit-summary-card" style="margin-bottom: 1.5rem; padding: 0; overflow:hidden; display: none;">
+      <div class="table-container" style="border:none; margin:0;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>สาขา</th>
+              <th>สถานะการตรวจ</th>
+              <th style="text-align:center;">จำนวนสินค้า</th>
+              <th style="text-align:center;">จำนวนนับจริง</th>
+              <th style="text-align:center;">ยอดที่ขาด/เกิน</th>
+              <th>ผู้ส่งรายงาน</th>
+              <th>ผู้อนุมัติ (ส่วนกลาง)</th>
+              <th style="text-align:center;">การจัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="hq-audit-grid-container">
+            <tr>
+              <td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; margin-right:0.4rem;"></i> กำลังโหลดข้อมูล...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Inline Detailed Inspection Table Container -->
     <div id="hq-audit-detail-container">
       <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; color: var(--text-muted);">
         <i class="fa-solid fa-hand-pointer" style="font-size: 2.5rem; margin-bottom: 0.8rem; display: block; color: var(--accent-gold);"></i>
-        <h4 style="font-weight:700; color:#fff; margin-bottom:0.4rem;">เลือกสาขาเพื่อดูตารางรายละเอียดสต็อก</h4>
-        <p style="font-size:0.88rem;">กรุณากดปุ่ม <strong>"ตรวจสอบรายละเอียดสต็อก"</strong> ในการ์ดสาขาด้านบน เพื่อแสดงตารางรายละเอียดรายเครื่องที่นี่</p>
+        <h4 style="font-weight:700; color:var(--text-main); margin-bottom:0.4rem;">เลือกสาขาเพื่อดูตารางรายละเอียดสต็อก</h4>
+        <p style="font-size:0.88rem;">กรุณากดปุ่ม <strong>"ตรวจสอบ"</strong> ในตารางด้านบน เพื่อแสดงตารางรายละเอียดรายเครื่องที่นี่</p>
       </div>
     </div>
   `;
@@ -3307,130 +3352,33 @@ async function loadHqAuditGrid(dateStr) {
     if (!res.success) return;
 
     const branches = res.summary.branches;
+    window.latestHqAuditBranches = branches;
 
-    gridContainer.innerHTML = branches.map(b => {
-      const isSelected = window.currentInspectedAuditId && (b.auditId === window.currentInspectedAuditId || b.branch.id === window.currentInspectedAuditId);
-      return `
-        <div class="audit-card status-${b.colorCode}" style="${isSelected ? 'border: 2px solid var(--accent-gold); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transform: translateY(-2px);' : ''}">
-          <div class="audit-header">
-            <div>
-              <div class="branch-name">${b.branch.name}</div>
-            </div>
-            <span class="badge badge-${b.colorCode}">
-              <i class="fa-solid ${b.colorCode === 'green' ? 'fa-circle-check' : b.colorCode === 'red' ? 'fa-circle-exclamation' : b.colorCode === 'yellow' ? 'fa-clock' : 'fa-minus'}"></i>
-              ${b.status}
-            </span>
-          </div>
+    // Build a unified items list for window.hqAuditInspectionState
+    const allItems = [];
+    branches.forEach(b => {
+      const branchItems = (b.items || []).filter(item => (item.expectedCount > 0 || item.actualCount > 0));
+      branchItems.forEach(item => {
+        item.branchId = b.branch.id;
+        item.branchName = b.branch.name;
+        item.auditId = b.auditId;
+        allItems.push(item);
+      });
+    });
 
-          <div class="audit-stats">
-            <div class="stat-item">
-              <div class="stat-val">${b.totalExpected}</div>
-              <div class="stat-lbl">จำนวนสินค้า</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-val">${b.totalActual}</div>
-              <div class="stat-lbl">นับได้จริง</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-val" style="color: ${b.totalVariance === 0 ? '#34d399' : '#f87171'};">${b.totalVariance}</div>
-              <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
-            </div>
-          </div>
+    window.hqAuditInspectionState = {
+      auditId: 'all',
+      branchId: 'all',
+      items: allItems,
+      viewedPhotos: (window.hqAuditInspectionState && window.hqAuditInspectionState.viewedPhotos) || new Set(),
+      verifiedImeis: new Set(),
+      failedImeis: new Set(),
+      resubmitImeis: new Set(),
+      requiredPhotoImeis: new Set(),
+      allScannedImeis: new Set()
+    };
 
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.8rem;">
-            <div>ผู้ส่งรายงาน: <strong>${b.submittedBy || 'ยังไม่ได้ส่งรายงาน'}</strong></div>
-            ${b.hqVerifiedBy ? `<div>ผู้อนุมัติ (ส่วนกลาง): <strong>${b.hqVerifiedBy}</strong></div>` : ''}
-          </div>
-
-          <div style="display:flex; gap:0.5rem;">
-            <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm" style="flex:1;" onclick="inspectBranchAudit('${b.branch.id}')">
-              <i class="fa-solid ${isSelected ? 'fa-eye' : 'fa-magnifying-glass'}"></i> ${isSelected ? 'กำลังแสดงรายละเอียด' : 'ตรวจสอบรายละเอียดสต็อก'}
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    // Re-render detail table if a branch was active
-    if (window.currentInspectedAuditId) {
-      inspectBranchAudit(window.currentInspectedAuditId, false);
-    }
-  } catch (err) {
-    gridContainer.innerHTML = `<div style="color:#ef4444; grid-column: 1/-1;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดส่วนกลาง: ${err.message}</div>`;
-  }
-}
-
-function filterAuditDetailTable(query) {
-  const q = (query || '').toLowerCase().trim();
-  const rows = document.querySelectorAll('#hq-audit-detail-table .audit-row-item');
-  rows.forEach(r => {
-    const text = r.getAttribute('data-search') || '';
-    r.style.display = text.includes(q) ? '' : 'none';
-  });
-}
-
-async function inspectBranchAudit(targetId, shouldScroll = true) {
-  window.currentInspectedAuditId = targetId;
-
-  const detailContainer = document.getElementById('hq-audit-detail-container');
-  if (!detailContainer) {
-    navigateTo('hq-audit');
-    setTimeout(() => {
-      inspectBranchAudit(targetId, shouldScroll);
-    }, 350);
-    return;
-  }
-
-  // Update active card styling on top grid
-  document.querySelectorAll('#hq-audit-grid-container .audit-card').forEach(card => {
-    const btn = card.querySelector('button');
-    if (btn && btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(targetId)) {
-      card.style.border = '2px solid var(--accent-gold)';
-      card.style.boxShadow = '0 0 15px rgba(245, 158, 11, 0.4)';
-      card.style.transform = 'translateY(-2px)';
-      btn.className = 'btn btn-primary btn-sm';
-      btn.innerHTML = '<i class="fa-solid fa-eye"></i> กำลังแสดงรายละเอียด';
-    } else {
-      card.style.border = '';
-      card.style.boxShadow = '';
-      card.style.transform = '';
-      if (btn) {
-        btn.className = 'btn btn-secondary btn-sm';
-        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรายละเอียดสต็อก';
-      }
-    }
-  });
-
-  try {
-    const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
-    const res = await apiRequest(`/audit/dashboard?date=${todayStr}`);
-    const branchItem = res.summary.branches.find(b => b.auditId === targetId || b.branch.id === targetId);
-
-    if (!branchItem) {
-      detailContainer.innerHTML = '<div class="card" style="padding:1.5rem; color:#ef4444;">ไม่พบข้อมูลการนับสต็อกสำหรับสาขานี้</div>';
-      return;
-    }
-
-    const items = (branchItem.items || []).filter(item => (item.expectedCount > 0 || item.actualCount > 0));
-
-    if (!window.hqAuditInspectionState || window.hqAuditInspectionState.auditId !== targetId) {
-      window.hqAuditInspectionState = {
-        auditId: targetId,
-        branchId: branchItem.branch.id,
-        items,
-        viewedPhotos: new Set(),
-        verifiedImeis: new Set(),
-        failedImeis: new Set(),
-        resubmitImeis: new Set(),
-        requiredPhotoImeis: new Set(),
-        allScannedImeis: new Set()
-      };
-    } else {
-      window.hqAuditInspectionState.items = items;
-      window.hqAuditInspectionState.branchId = branchItem.branch.id;
-    }
-
-    items.forEach(item => {
+    allItems.forEach(item => {
       (item.imeiDecisions || []).forEach(d => {
         if (d.decision === 'passed') {
           window.hqAuditInspectionState.verifiedImeis.add(d.imei);
@@ -3450,9 +3398,129 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
       });
     });
 
-    // Unroll audit items into individual physical unit rows (Quantity = 1 per row)
-    const unitRows = [];
+    // Populate branch filter options if not already populated
+    const branchFilter = document.getElementById('hq-audit-branch-filter');
+    if (branchFilter && branchFilter.options.length <= 1) {
+      const branchesList = res.summary.branches.map(b => b.branch);
+      branchFilter.innerHTML = `<option value="all">-- ทุกสาขา --</option>` +
+        branchesList.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    }
 
+    // Now filter and render
+    filterHqAuditGrid();
+  } catch (err) {
+    if (gridContainer) {
+      gridContainer.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดส่วนกลาง: ${err.message}</td></tr>`;
+    }
+  }
+}
+
+function filterHqAuditGrid() {
+  const branchFilter = document.getElementById('hq-audit-branch-filter') ? document.getElementById('hq-audit-branch-filter').value : 'all';
+  const statusFilter = document.getElementById('hq-audit-status-filter') ? document.getElementById('hq-audit-status-filter').value : 'all';
+
+  const gridContainer = document.getElementById('hq-audit-grid-container');
+  if (!gridContainer || !window.latestHqAuditBranches) return;
+
+  const filtered = window.latestHqAuditBranches.filter(b => {
+    const matchBranch = (branchFilter === 'all' || b.branch.id === branchFilter);
+    const matchStatus = (statusFilter === 'all' || b.rawStatus === statusFilter);
+    return matchBranch && matchStatus;
+  });
+
+  if (filtered.length === 0) {
+    gridContainer.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลสาขาที่ตรงกับเงื่อนไขการกรอง</td></tr>`;
+    renderHqAuditDetails();
+    return;
+  }
+
+  gridContainer.innerHTML = filtered.map(b => {
+    const isSelected = (branchFilter !== 'all' && b.branch.id === branchFilter);
+    
+    let badgeClass = 'badge-gray';
+    let iconClass = 'fa-minus';
+    if (b.colorCode === 'green') {
+      badgeClass = 'badge-green';
+      iconClass = 'fa-circle-check';
+    } else if (b.colorCode === 'red') {
+      badgeClass = 'badge-red';
+      iconClass = 'fa-circle-exclamation';
+    } else if (b.colorCode === 'yellow') {
+      badgeClass = 'badge-yellow';
+      iconClass = 'fa-clock';
+    }
+
+    return `
+      <tr class="hq-audit-row" style="${isSelected ? 'background:rgba(99,102,241,0.05); font-weight:700;' : ''}">
+        <td>
+          <strong style="color:var(--text-main);">${b.branch.name}</strong><br>
+          <span style="font-size:0.75rem; color:var(--text-muted);">เบอร์โทร: ${b.branch.phone}</span>
+        </td>
+        <td>
+          <span class="badge ${badgeClass}" style="font-size:0.8rem; font-weight:700;">
+            <i class="fa-solid ${iconClass}"></i> ${b.status}
+          </span>
+        </td>
+        <td style="text-align:center;"><strong>${b.totalExpected}</strong></td>
+        <td style="text-align:center;"><strong>${b.totalActual}</strong></td>
+        <td style="text-align:center; font-weight:800; color:${b.totalVariance === 0 ? '#059669' : '#e11d48'};">
+          ${b.totalVariance}
+        </td>
+        <td><span style="font-size:0.85rem;">${b.submittedBy || '-'}</span></td>
+        <td><span style="font-size:0.85rem;">${b.hqVerifiedBy || '-'}</span></td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm" style="font-weight:700; padding:0.25rem 0.6rem;" onclick="inspectBranchAudit('${b.branch.id}')">
+            <i class="fa-solid ${isSelected ? 'fa-eye' : 'fa-magnifying-glass'}"></i> ${isSelected ? 'แสดงอยู่' : 'ตรวจสอบ'}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  renderHqAuditDetails();
+}
+
+function filterAuditDetailTable(query) {
+  const q = (query || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('#hq-audit-detail-table .audit-row-item');
+  rows.forEach(r => {
+    const text = r.getAttribute('data-search') || '';
+    r.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function inspectBranchAudit(branchId) {
+  const branchFilter = document.getElementById('hq-audit-branch-filter');
+  if (branchFilter) {
+    if (branchFilter.value === branchId) {
+      branchFilter.value = 'all';
+    } else {
+      branchFilter.value = branchId;
+    }
+    filterHqAuditGrid();
+  }
+}
+
+function renderHqAuditDetails() {
+  const detailContainer = document.getElementById('hq-audit-detail-container');
+  if (!detailContainer || !window.latestHqAuditBranches) return;
+
+  const branchFilter = document.getElementById('hq-audit-branch-filter') ? document.getElementById('hq-audit-branch-filter').value : 'all';
+  const statusFilter = document.getElementById('hq-audit-status-filter') ? document.getElementById('hq-audit-status-filter').value : 'all';
+
+  // Filter branches first
+  const activeBranches = window.latestHqAuditBranches.filter(b => {
+    const matchBranch = (branchFilter === 'all' || b.branch.id === branchFilter);
+    const matchStatus = (statusFilter === 'all' || b.rawStatus === statusFilter);
+    return matchBranch && matchStatus;
+  });
+
+  // Extract all unit rows from active branches
+  const unitRows = [];
+
+  activeBranches.forEach(b => {
+    const items = (b.items || []).filter(item => (item.expectedCount > 0 || item.actualCount > 0));
+    
     items.forEach(item => {
       const pName = item.productName || 'สินค้าไม่ระบุชื่อ';
       const expectedImeis = item.expectedImeis || [];
@@ -3467,6 +3535,8 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
           const isScanned = scannedSet.has(imei);
           const imgObj = imeiImages.find(img => img.imei === imei);
           unitRows.push({
+            branchId: b.branch.id,
+            branchName: b.branch.name,
             productName: pName,
             expectedCount: 1,
             actualCount: isScanned ? 1 : 0,
@@ -3486,6 +3556,8 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
           const imei = scannedImeiList[i] || '-';
           const imgObj = imeiImages.find(img => img.imei === imei);
           unitRows.push({
+            branchId: b.branch.id,
+            branchName: b.branch.name,
             productName: pName,
             expectedCount: i < expCount ? 1 : 0,
             actualCount: isScanned ? 1 : 0,
@@ -3501,6 +3573,8 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
         if (expectedImeis.length > 0 && !expectedSet.has(imei)) {
           const imgObj = imeiImages.find(img => img.imei === imei);
           unitRows.push({
+            branchId: b.branch.id,
+            branchName: b.branch.name,
             productName: pName,
             expectedCount: 0,
             actualCount: 1,
@@ -3512,123 +3586,144 @@ async function inspectBranchAudit(targetId, shouldScroll = true) {
         }
       });
     });
+  });
 
-    detailContainer.innerHTML = `
-      <div class="card" style="border: 1px solid rgba(99,102,241,0.3); background: rgba(15, 23, 42, 0.85); scroll-margin-top: 2rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.1);">
-          <div>
-            <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
-              <h3 style="font-size:1.2rem; font-weight:700; color:#fff; margin:0;">
-                <i class="fa-solid fa-store" style="color:var(--accent-gold); margin-right:0.4rem;"></i>
-                รายละเอียดสต็อก: ${branchItem.branch.name} (${branchItem.branch.code})
-              </h3>
-              <span class="badge badge-${branchItem.colorCode}">${branchItem.status}</span>
-            </div>
-            <div style="display:flex; gap:1.5rem; margin-top:0.5rem; font-size:0.88rem; color:#fff; flex-wrap:wrap;">
-              <div>จำนวนสินค้าทั้งหมด: <strong style="color:#38bdf8;">${branchItem.totalExpected}</strong> ชิ้น</div>
-              <div>นับได้จริง: <strong style="color:#34d399;">${branchItem.totalActual}</strong> ชิ้น</div>
-              <div>ยอดขาด/เกิน: <strong style="color:${branchItem.totalVariance === 0 ? '#34d399' : '#f87171'};">${branchItem.totalVariance === 0 ? 'ตรง (0)' : branchItem.totalVariance}</strong></div>
-            </div>
-          </div>
+  // Calculate totals for active branches
+  const totalExpected = activeBranches.reduce((sum, b) => sum + (b.totalExpected || 0), 0);
+  const totalActual = activeBranches.reduce((sum, b) => sum + (b.totalActual || 0), 0);
+  const totalVariance = totalExpected - totalActual;
 
-          <div style="display:flex; align-items:center; gap:0.8rem;">
-            <input type="text" id="audit-table-search-input" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." style="width:240px; font-size:0.82rem;" onkeyup="filterAuditDetailTable(this.value)">
-          </div>
-        </div>
+  // Calculate specific verification stats
+  let totalToVerify = 0;
+  let totalPassed = 0;
+  let totalFailed = 0;
+  let totalResubmit = 0;
+  let totalPendingVerify = 0;
 
-        <div class="table-container" style="margin-bottom:0.5rem; max-height:550px; overflow-y:auto;">
-          <table class="data-table" id="hq-audit-detail-table">
-            <thead>
-              <tr>
-                <th>ชื่อสินค้า</th>
-                <th style="text-align:center;">จำนวนสินค้า</th>
-                <th style="text-align:center;">จำนวนนับจริง</th>
-                <th style="text-align:center;">ยอดที่ขาด/เกิน</th>
-                <th>หมายเลข IMEI</th>
-                <th>ผลการตรวจสอบรูปถ่าย & ลงความเห็น</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${unitRows.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในสาขานี้</td></tr>` : ''}
-              ${unitRows.map(row => {
-                const imei = row.imei;
-                const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
-                const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
-                const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+  unitRows.forEach(row => {
+    if (row.isScanned && row.imei !== '-') {
+      totalToVerify++;
+      const imei = row.imei;
+      const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+      const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+      const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
 
-                return `
-                  <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei).toLowerCase()}">
-                    <td>
-                      <strong style="color:#38bdf8;">${row.productName}</strong>
-                    </td>
-                    <td style="text-align:center;"><strong style="font-size:1.05rem;">${row.expectedCount}</strong></td>
-                    <td style="text-align:center;"><strong style="font-size:1.05rem; color:${row.actualCount > 0 ? '#34d399' : '#f87171'};">${row.actualCount}</strong></td>
-                    <td style="text-align:center; font-weight:700;">
-                      ${row.isUnexpected ?
-                        '<span class="badge badge-yellow">เกิน +1</span>' :
-                        row.actualCount === 1 ?
-                        '<span class="badge badge-green">ขาด 0</span>' :
-                        '<span class="badge badge-red">ขาด 1</span>'
-                      }
-                    </td>
-                    <td style="font-size:0.9rem;">
-                      ${row.isScanned && imei !== '-' ? `
-                        <span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.95rem;">${imei}</span>
-                        ${row.isUnexpected ? '<span style="color:#fbbf24; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
-                      ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
-                        <span style="font-family:monospace; font-weight:700; color:#f87171; font-size:0.92rem;">${imei}</span>
-                        <span style="color:#f87171; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
-                      ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
-                    </td>
-                    <td style="font-size:0.85rem;">
-                      ${row.isScanned && imei !== '-' ? `
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
-                          <div>
-                            ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน (Pass)</span>' :
-                              isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
-                              isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
-                              '<span class="badge badge-gray" style="font-size:0.75rem;">(ยังไม่ได้ตรวจ)</span>'}
-                          </div>
-
-                          <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
-                            <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
-                          </button>
-                        </div>
-                      ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Action Status for HQ Verification -->
-        ${branchItem.auditId ? `
-          ${branchItem.rawStatus === 'Verified' || branchItem.rawStatus === 'Rejected' ? `
-            <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1); align-items:center;">
-              <div style="font-size:0.88rem; color:var(--text-muted); display:flex; align-items:center; margin-right:auto;">
-                ${branchItem.rawStatus === 'Verified' ? `
-                  <span style="color:#34d399; font-weight:700;"><i class="fa-solid fa-circle-check"></i> รายงานสต็อกนี้ได้รับการตรวจสอบและอนุมัติเรียบร้อยแล้ว ${branchItem.hqVerifiedBy ? `โดย: ${branchItem.hqVerifiedBy}` : ''}</span>
-                ` : `
-                  <span style="color:#f87171; font-weight:700;"><i class="fa-solid fa-circle-xmark"></i> รายงานสต็อกนี้ถูกปฏิเสธ ${branchItem.hqVerifiedBy ? `โดย: ${branchItem.hqVerifiedBy}` : ''}</span>
-                `}
-              </div>
-            </div>
-          ` : ''}
-        ` : `
-          <div style="display:flex; justify-content:center; margin-top:1rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.1); color:var(--text-muted); font-size:0.88rem; font-style:italic;">
-            <i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24; margin-right:0.4rem;"></i> สาขานี้ยังไม่ได้ยื่นส่งรายงานผลการนับประจำวัน
-          </div>
-        `}
-      </div>
-    `;
-
-    if (shouldScroll) {
-      detailContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (isPassed) {
+        totalPassed++;
+      } else if (isFailed) {
+        totalFailed++;
+      } else if (isResubmit) {
+        totalResubmit++;
+      } else {
+        totalPendingVerify++;
+      }
     }
-  } catch (err) {
-    detailContainer.innerHTML = `<div class="card" style="padding:1.5rem; color:#ef4444;">เกิดข้อผิดพลาด: ${err.message}</div>`;
+  });
+
+  detailContainer.innerHTML = `
+    <div class="card" style="border: 1px solid var(--border-color); background: var(--bg-card); scroll-margin-top: 2rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid var(--border-color);">
+        <div>
+          <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+            <h3 style="font-size:1.2rem; font-weight:700; color:var(--text-main); margin:0;">
+              <i class="fa-solid fa-clipboard-list" style="color:var(--accent-gold); margin-right:0.4rem;"></i>
+              รายละเอียดสต็อกรายเครื่อง (${branchFilter === 'all' ? 'ทุกสาขา' : activeBranches[0] ? activeBranches[0].branch.name : '-'})
+            </h3>
+          </div>
+          <div style="display:flex; gap:1.5rem; margin-top:0.5rem; font-size:0.88rem; color:var(--text-main); flex-wrap:wrap;">
+            <div>จำนวนสินค้าทั้งหมด: <strong style="color:var(--accent-primary);">${totalExpected}</strong> ชิ้น</div>
+            <div>นับได้จริง: <strong style="color:#059669;">${totalActual}</strong> ชิ้น</div>
+            <div>ยอดขาด/เกิน: <strong style="color:${totalVariance === 0 ? '#059669' : '#e11d48'};">${totalVariance === 0 ? 'ตรง (0)' : totalVariance}</strong></div>
+          </div>
+          <div style="display:flex; gap:1.2rem; margin-top:0.6rem; font-size:0.82rem; color:var(--text-muted); flex-wrap:wrap; padding-top:0.4rem; border-top:1px dashed var(--border-color);">
+            <div>สแกนส่งตรวจทั้งหมด: <strong style="color:var(--text-main);">${totalToVerify}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-circle-check" style="color:#059669;"></i> ผ่าน: <strong style="color:#059669;">${totalPassed}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-circle-xmark" style="color:#e11d48;"></i> ไม่ผ่าน: <strong style="color:#e11d48;">${totalFailed}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-rotate-left" style="color:#d97706;"></i> ให้ส่งตรวจใหม่: <strong style="color:#d97706;">${totalResubmit}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-clock" style="color:#64748b;"></i> ยังไม่ได้ตรวจ: <strong style="color:var(--text-main);">${totalPendingVerify}</strong> เครื่อง</div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.8rem;">
+          <input type="text" id="audit-table-search-input" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." style="width:240px; font-size:0.82rem; background:#ffffff;" onkeyup="filterAuditDetailTable(this.value)">
+        </div>
+      </div>
+
+      <div class="table-container" style="margin-bottom:0.5rem; max-height:550px; overflow-y:auto; border:1px solid var(--border-color); background:#ffffff;">
+        <table class="data-table" id="hq-audit-detail-table">
+          <thead>
+            <tr>
+              <th>สาขา</th>
+              <th>ชื่อสินค้า</th>
+              <th>หมายเลข IMEI</th>
+              <th>ผลการตรวจสอบรูปถ่าย & ลงความเห็น</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${unitRows.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้า</td></tr>` : ''}
+            ${unitRows.map(row => {
+              const imei = row.imei;
+              const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+              const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+              const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+
+              return `
+                <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei + ' ' + row.branchName).toLowerCase()}">
+                  <td>
+                    <span class="badge badge-gray" style="font-weight:700;">${row.branchName}</span>
+                  </td>
+                  <td>
+                    <strong style="color:var(--accent-primary);">${row.productName}</strong>
+                  </td>
+                  <td style="font-size:0.9rem;">
+                    ${row.isScanned && imei !== '-' ? `
+                      <span style="font-family:monospace; font-weight:700; color:#d97706; font-size:0.95rem;">${imei}</span>
+                      ${row.isUnexpected ? '<span style="color:#d97706; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
+                    ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
+                      <span style="font-family:monospace; font-weight:700; color:#e11d48; font-size:0.92rem;">${imei}</span>
+                      <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
+                    ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
+                  </td>
+                  <td style="font-size:0.85rem;">
+                    ${row.isScanned && imei !== '-' ? `
+                      <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                        <div>
+                          ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน</span>' :
+                            isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
+                            isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
+                            '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
+                        </div>
+
+                        <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
+                          <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
+                        </button>
+                      </div>
+                    ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function toggleHqAuditSummaryTable() {
+  const card = document.getElementById('hq-audit-summary-card');
+  const btn = document.getElementById('toggle-hq-summary-btn');
+  if (card && btn) {
+    const isHidden = card.style.display === 'none';
+    if (isHidden) {
+      card.style.display = 'block';
+      btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> ซ่อนตารางสรุปสาขา';
+      btn.className = 'btn btn-secondary btn-sm';
+    } else {
+      card.style.display = 'none';
+      btn.innerHTML = '<i class="fa-solid fa-eye"></i> แสดงตารางสรุปสาขา';
+      btn.className = 'btn btn-primary btn-sm';
+    }
   }
 }
 
@@ -3706,21 +3801,21 @@ function openImeiInspectionModal(imei) {
   const targetDriveUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view` : (imgObj ? imgObj.webViewLink || imgUrl : imgUrl);
 
   const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:center;">
-      <div style="font-weight:800; font-size:1.15rem; color:#38bdf8; margin-bottom:0.2rem;">
-        <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#fbbf24; font-family:monospace;">${imei}</span>
+    <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:center;">
+      <div style="font-weight:800; font-size:1.15rem; color:var(--accent-primary); margin-bottom:0.2rem;">
+        <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#d97706; font-family:monospace;">${imei}</span>
       </div>
-      <div style="font-size:0.88rem; color:#fff;">
+      <div style="font-size:0.88rem; color:var(--text-main);">
         สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (IMEI: ${imei})
       </div>
     </div>
 
     <!-- Center Photo Display -->
-    <div style="text-align:center; background:rgba(0,0,0,0.4); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid rgba(255,255,255,0.1); display:flex; justify-content:center; align-items:center; min-height:240px;">
+    <div style="text-align:center; background:rgba(0,0,0,0.015); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid var(--border-color); display:flex; justify-content:center; align-items:center; min-height:240px;">
       ${imgUrl ? `
         <div style="width:100%; text-align:center;">
           <div style="position:relative; display:inline-block; cursor:pointer;" onclick="window.open('${targetDriveUrl.replace(/'/g, "\\'")}', '_blank')" title="แตะเพื่อเปิดดูลิงก์รูปภาพเต็มใน Google Drive (แท็บใหม่)">
-            <img src="${imgUrl}" style="max-height:360px; max-width:100%; border-radius:8px; border:2px solid var(--accent-gold); box-shadow:0 6px 20px rgba(0,0,0,0.6); transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onerror="this.onerror=null; ${fileId ? `this.src='https://drive.google.com/thumbnail?id=${fileId}&sz=w1000';` : `document.getElementById('no-img-text-${imei}').style.display='block';`}">
+            <img src="${imgUrl}" style="max-height:360px; max-width:100%; border-radius:8px; border:2px solid var(--accent-gold); box-shadow:0 6px 20px rgba(0,0,0,0.15); transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onerror="this.onerror=null; ${fileId ? `this.src='https://drive.google.com/thumbnail?id=${fileId}&sz=w1000';` : `document.getElementById('no-img-text-${imei}').style.display='block';`}">
             <div style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.85); color:#fbbf24; padding:0.3rem 0.7rem; border-radius:6px; font-size:0.78rem; border:1px solid rgba(251,191,36,0.6); pointer-events:none; font-weight:700;">
               <i class="fa-solid fa-up-right-from-square"></i> แตะเพื่อเปิดลิงก์รูปภาพ
             </div>
@@ -3737,7 +3832,7 @@ function openImeiInspectionModal(imei) {
     </div>
 
     <!-- 3 Choice Buttons -->
-    <div style="font-weight:800; font-size:0.95rem; color:#fff; margin-bottom:0.8rem; text-align:center;">
+    <div style="font-weight:800; font-size:0.95rem; color:var(--text-main); margin-bottom:0.8rem; text-align:center;">
       เลือกลงความเห็นผลการตรวจสอบสำหรับเครื่องนี้:
     </div>
 
@@ -3828,7 +3923,7 @@ async function renderBranchAuditView() {
       branchSelectorHtml = `
         <div style="display:flex; align-items:center; gap:0.5rem;">
           <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted); white-space:nowrap;"><i class="fa-solid fa-store"></i> สาขา:</label>
-          <select id="branch-audit-selector" class="form-select" style="width:auto; font-weight:700; color:#38bdf8; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15);" onchange="changeBranchAuditSelector()">
+          <select id="branch-audit-selector" class="form-select" style="width:auto; font-weight:700; color:var(--accent-primary); background:#ffffff; border:1.5px solid var(--border-color);" onchange="changeBranchAuditSelector()">
             <option value="all" ${selectedBranchId === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
             ${branches.map(b => `<option value="${b._id}" ${selectedBranchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
           </select>
@@ -3848,9 +3943,9 @@ async function renderBranchAuditView() {
           </div>
         </div>
 
-        <div style="margin-top: 1.2rem; background: rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.2); padding:1rem; border-radius:var(--radius-md); display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+        <div style="margin-top: 1.2rem; background: rgba(99,102,241,0.06); border:1px solid var(--border-glow); padding:1rem; border-radius:var(--radius-md); display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
           ${selectedBranchId === 'all' ? `
-            <div style="font-size:0.9rem; font-weight:700; color:#fbbf24; display:flex; align-items:center; gap:0.5rem; width:100%;">
+            <div style="font-size:0.9rem; font-weight:700; color:#d97706; display:flex; align-items:center; gap:0.5rem; width:100%;">
               <i class="fa-solid fa-circle-info" style="font-size:1.1rem;"></i> 
               <span>กำลังเปิดดูสต็อกทุกสาขารวมกัน (โหมดอ่านอย่างเดียว) หากต้องการตรวจนับ/สแกนสินค้า กรุณาเลือกสาขาที่เจาะจงด้านบน</span>
             </div>
@@ -3896,15 +3991,15 @@ async function renderBranchAuditView() {
               return `
                 <tr id="audit-row-${idx}">
                   <td>
-                    <strong style="color:#38bdf8;">${item.productName}</strong>
+                    <strong style="color:var(--accent-primary);">${item.productName}</strong>
                   </td>
-                  ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${item.branchName || '-'}</span></td>` : ''}
+                  ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${item.branchName || '-'}</span></td>` : ''}
                   <td>
-                    <strong style="color:#fbbf24; font-family:monospace; font-size:0.95rem;">${item.imei}</strong>
+                    <strong style="color:#d97706; font-family:monospace; font-size:0.95rem;">${item.imei}</strong>
                   </td>
                   <td><strong class="expected-val" id="expected-${idx}">${item.expectedCount}</strong></td>
                   <td style="text-align:center; vertical-align:middle;">
-                    <span id="actual-val-${idx}" style="font-size:1.25rem; font-weight:800; color:#38bdf8;">${actual}</span>
+                    <span id="actual-val-${idx}" style="font-size:1.25rem; font-weight:800; color:var(--text-main);">${actual}</span>
                   </td>
                   <td id="variance-status-${idx}">
                     ${diff === 0 ? `<span class="badge badge-green">สำเร็จ</span>` :
@@ -4029,15 +4124,15 @@ function openUploadImeiImageModal(serial, matchedIdx) {
   const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
 
   const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
-      <div style="font-weight:800; font-size:1.1rem; color:#38bdf8; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-barcode"></i> IMEI : <span style="color:#fbbf24;">${serial}</span>
+    <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
+      <div style="font-weight:800; font-size:1.1rem; color:var(--accent-primary); margin-bottom:0.3rem;">
+        <i class="fa-solid fa-barcode"></i> IMEI : <span style="color:#d97706;">${serial}</span>
       </div>
-      <div style="font-size:0.9rem; font-weight:700; color:#fff;">
+      <div style="font-size:0.9rem; font-weight:700; color:var(--text-main);">
         สินค้า: ${item ? item.productName : 'สินค้าในสต็อก'} (IMEI: ${serial})
       </div>
       <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.4rem; line-height:1.4;">
-        <strong style="color:#38bdf8;">เช็คสต็อกประจำวันที่ ${auditDate}</strong>
+        <strong style="color:var(--accent-primary);">เช็คสต็อกประจำวันที่ ${auditDate}</strong>
       </div>
     </div>
 
@@ -4053,14 +4148,14 @@ function openUploadImeiImageModal(serial, matchedIdx) {
           <div style="width:54px; height:54px; border-radius:50%; background:linear-gradient(135deg, #6366f1, #06b6d4); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 4px 15px rgba(99,102,241,0.4);">
             <i class="fa-solid fa-camera" style="font-size:1.5rem;"></i>
           </div>
-          <div style="font-size:1rem; font-weight:800; color:#fff; margin-top:0.2rem;">เปิดกล้องถ่ายภาพ / เลือกรูปภาพ</div>
+          <div style="font-size:1rem; font-weight:800; color:var(--text-main); margin-top:0.2rem;">เปิดกล้องถ่ายภาพ / เลือกรูปภาพ</div>
           <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">แตะเพื่อแนบรูปถ่ายตัวเครื่องหรือป้าย IMEI</div>
         </label>
       </div>
 
-      <div id="imei-photo-preview-container" style="display:none; text-align:center; margin-top:1.5rem; background:rgba(0,0,0,0.35); padding:0.8rem; border-radius:8px; border:1px dashed rgba(255,255,255,0.15);">
+      <div id="imei-photo-preview-container" style="display:none; text-align:center; margin-top:1.5rem; background:rgba(0,0,0,0.025); padding:0.8rem; border-radius:8px; border:1px dashed var(--border-color);">
         <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem; font-weight:600;">— ตัวอย่างรูปถ่ายที่เลือก —</div>
-        <img id="imei-photo-preview" src="" style="max-height:240px; max-width:100%; border-radius:6px; border:2px solid #34d399; box-shadow:0 4px 15px rgba(0,0,0,0.5);">
+        <img id="imei-photo-preview" src="" style="max-height:240px; max-width:100%; border-radius:6px; border:2px solid #059669; box-shadow:0 4px 15px rgba(0,0,0,0.15);">
       </div>
     </form>
   `;
@@ -4327,7 +4422,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
         <div style="margin-bottom:2rem;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
             <div>
-              <h3 style="font-size:1.15rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.5rem;">
+              <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
                 <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ
               </h3>
               <p style="font-size:0.8rem; color:var(--text-muted);">วงเงินคงเหลือ, สต็อกพร้อมขายในสาขา, รายการสั่งซื้อค้างส่ง และปุ่มทางด่วนสั่งซื้อ</p>
@@ -4355,11 +4450,11 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
               const isSelected = selectedBranchId && String(selectedBranchId) === String(b._id);
 
               return `
-                <div class="card" style="background:rgba(255,255,255,0.03); border:${isSelected ? '2px solid var(--accent-gold)' : '1px solid rgba(255,255,255,0.12)'}; border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between; box-shadow:${isSelected ? '0 0 15px rgba(251,191,36,0.2)' : 'none'};">
+                <div class="card" style="background:#ffffff; border:${isSelected ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)'}; border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between; box-shadow:${isSelected ? '0 0 15px rgba(251,191,36,0.1)' : 'none'};">
                   <div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
                       <div>
-                        <strong style="font-size:1.1rem; color:#fff; font-weight:800; display:block;">${b.name}</strong>
+                        <strong style="font-size:1.1rem; color:var(--text-main); font-weight:800; display:block;">${b.name}</strong>
                         <span style="font-size:0.78rem; color:var(--text-muted); font-family:monospace;">รหัสสาขา: ${b.code || '-'}</span>
                       </div>
                       <span class="badge badge-${bRem > 0 ? 'green' : 'red'}" style="font-size:0.75rem;">
@@ -4368,58 +4463,57 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                     </div>
 
                     <!-- Credit Limit Bar -->
-                    <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:0.8rem; margin-bottom:1rem; border:1px solid rgba(255,255,255,0.06);">
+                    <div style="background:rgba(0,0,0,0.035); border-radius:8px; padding:0.8rem; margin-bottom:1rem; border:1px solid var(--border-color);">
                       <div style="display:flex; justify-content:space-between; font-size:0.78rem; margin-bottom:0.3rem;">
                         <span style="color:var(--text-muted);">ใช้วงเงินไปแล้ว:</span>
-                        <strong style="color:${bPct >= 90 ? '#f87171' : '#34d399'};">${bPct}%</strong>
+                        <strong style="color:${bPct >= 90 ? '#e11d48' : '#059669'};">${bPct}%</strong>
                       </div>
-                      <div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden; margin-bottom:0.6rem;">
-                        <div style="width:${bPct}%; background:${bPct >= 90 ? '#ef4444' : bPct >= 70 ? '#fbbf24' : '#34d399'}; height:100%; border-radius:4px;"></div>
+                      <div style="width:100%; background:rgba(0,0,0,0.08); height:8px; border-radius:4px; overflow:hidden; margin-bottom:0.6rem;">
+                        <div style="width:${bPct}%; background:${bPct >= 90 ? '#e11d48' : bPct >= 70 ? '#d97706' : '#10b981'}; height:100%; border-radius:4px;"></div>
                       </div>
                       <div class="grid-3col" style="gap:0.4rem; font-size:0.75rem; text-align:center;">
                         <div>
                           <div style="color:var(--text-muted); font-size:0.7rem;">วงเงินอนุมัติ</div>
-                          <div style="font-weight:700; color:#818cf8;">฿${bLimit.toLocaleString()}</div>
+                          <div style="font-weight:700; color:var(--accent-primary);">฿${bLimit.toLocaleString()}</div>
                         </div>
                         <div>
                           <div style="color:var(--text-muted); font-size:0.7rem;">ใช้ไปแล้ว</div>
-                          <div style="font-weight:700; color:#fbbf24;">฿${bUsed.toLocaleString()}</div>
+                          <div style="font-weight:700; color:#d97706;">฿${bUsed.toLocaleString()}</div>
                         </div>
                         <div>
                           <div style="color:var(--text-muted); font-size:0.7rem;">สั่งซื้อได้อีก</div>
-                          <div style="font-weight:700; color:#34d399;">฿${bRem.toLocaleString()}</div>
+                          <div style="font-weight:700; color:#059669;">฿${bRem.toLocaleString()}</div>
                         </div>
                       </div>
                     </div>
 
                     <!-- Key Purchasing & Inventory Metrics -->
                     <div class="grid-2col" style="gap:0.6rem; margin-bottom:1rem; font-size:0.8rem;">
-                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                      <div style="background:rgba(0,0,0,0.02); padding:0.6rem; border-radius:6px; border:1px solid var(--border-color);">
                         <div style="color:var(--text-muted); font-size:0.73rem;">📦 สต็อกพร้อมขายในสาขา</div>
                         <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.2rem;">
-                          <strong style="font-size:1.15rem; color:${inStockCount < 5 ? '#f87171' : '#38bdf8'};">${inStockCount} เครื่อง</strong>
-                          ${inStockCount < 5 ? '<span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.35rem;">⚠️ สต็อกต่ำ</span>' : ''}
+                          <strong style="font-size:1.15rem; color:${inStockCount < 5 ? '#e11d48' : 'var(--accent-secondary)'};">${inStockCount} เครื่อง</strong>
                         </div>
                       </div>
 
-                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                      <div style="background:rgba(0,0,0,0.02); padding:0.6rem; border-radius:6px; border:1px solid var(--border-color);">
                         <div style="color:var(--text-muted); font-size:0.73rem;">🟡 รอสาขาเติม IMEI</div>
                         <div style="margin-top:0.2rem;">
-                          <strong style="font-size:1.15rem; color:${pendingCount > 0 ? '#fbbf24' : '#a1a1aa'};">${pendingCount} ใบ</strong>
+                          <strong style="font-size:1.15rem; color:${pendingCount > 0 ? '#d97706' : 'var(--text-dim)'};">${pendingCount} ใบ</strong>
                         </div>
                       </div>
 
-                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                      <div style="background:rgba(0,0,0,0.02); padding:0.6rem; border-radius:6px; border:1px solid var(--border-color);">
                         <div style="color:var(--text-muted); font-size:0.73rem;">🟢 รับเข้าสต็อกแล้ว</div>
                         <div style="margin-top:0.2rem;">
-                          <strong style="font-size:1.1rem; color:#34d399;">${receivedCount} ใบ</strong>
+                          <strong style="font-size:1.1rem; color:#059669;">${receivedCount} ใบ</strong>
                         </div>
                       </div>
 
-                      <div style="background:rgba(0,0,0,0.2); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                      <div style="background:rgba(0,0,0,0.02); padding:0.6rem; border-radius:6px; border:1px solid var(--border-color);">
                         <div style="color:var(--text-muted); font-size:0.73rem;">💰 ยอดสั่งซื้อสะสม</div>
                         <div style="margin-top:0.2rem;">
-                          <strong style="font-size:0.92rem; color:#34d399;">฿${totalOrderVal.toLocaleString()}</strong>
+                          <strong style="font-size:0.92rem; color:#059669;">฿${totalOrderVal.toLocaleString()}</strong>
                         </div>
                       </div>
                     </div>
@@ -4516,8 +4610,8 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                   <td>
                     ${itemsList.map(it => `<div style="font-size:0.83rem;">• <strong>${it.productName}</strong> x${it.quantity} (฿${(it.unitPrice || 0).toLocaleString()}/ชิ้น)</div>`).join('')}
                   </td>
-                  <td><strong style="color:#38bdf8;">${totalQty} เครื่อง</strong></td>
-                  <td><strong style="color:#34d399; font-size:0.95rem;">฿${(order.totalAmount || 0).toLocaleString()}</strong></td>
+                  <td><strong style="color:var(--accent-primary);">${totalQty} เครื่อง</strong></td>
+                  <td><strong style="color:#059669; font-size:0.95rem;">฿${(order.totalAmount || 0).toLocaleString()}</strong></td>
                   <td><span style="font-size:0.83rem;">${order.orderedByName || 'พนักงาน'}</span></td>
                   <td style="text-align:center;">
                     ${statusBadge}<br>
@@ -4588,17 +4682,17 @@ function openCreatePurchaseOrderModal(preselectedBranchId = null) {
   const branches = state.masterOptions.branches || [];
   const bodyHtml = `
     <form id="create-po-form" onsubmit="event.preventDefault(); submitCreatePurchaseOrder();">
-      <div class="form-group" style="margin-bottom:1.2rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); padding:1rem; border-radius:8px;">
-        <label for="po-branch" style="font-weight:700; color:#fff; font-size:0.95rem;">
+      <div class="form-group" style="margin-bottom:1.2rem; background:rgba(0,0,0,0.025); border:1px solid var(--border-color); padding:1rem; border-radius:8px;">
+        <label for="po-branch" style="font-weight:700; color:var(--text-main); font-size:0.95rem;">
           <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> เลือกสาขาที่สั่งซื้อสินค้าลง <span style="color:#ef4444;">*</span>
         </label>
-        <select id="po-branch" class="form-select" style="margin-top:0.4rem; font-weight:700;" onchange="updatePoBranchCreditPreview(this.value)" required>
+        <select id="po-branch" class="form-select" style="margin-top:0.4rem; font-weight:700; background:#ffffff;" onchange="updatePoBranchCreditPreview(this.value)" required>
           ${branches.map(b => `<option value="${b._id}" ${preselectedBranchId && String(b._id) === String(preselectedBranchId) ? 'selected' : ''}>${b.name} (วงเงินคงเหลือ: ฿${Math.max(0, (b.creditLimit || 0) - (b.usedCredit || 0)).toLocaleString()})</option>`).join('')}
         </select>
         <div id="po-credit-preview" style="font-size:0.83rem; margin-top:0.5rem;"></div>
       </div>
 
-      <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:#38bdf8; display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:var(--accent-primary); display:flex; justify-content:space-between; align-items:center;">
         <span><i class="fa-solid fa-boxes-packing"></i> ระบุรายการสินค้าที่สั่งซื้อลงสาขา</span>
         <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
           <i class="fa-solid fa-plus"></i> + เพิ่มรายการสินค้า
@@ -4609,13 +4703,13 @@ function openCreatePurchaseOrderModal(preselectedBranchId = null) {
         <!-- Dynamic PO Item Rows -->
       </div>
 
-      <div id="po-total-card" style="background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); padding:1rem 1.2rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+      <div id="po-total-card" style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem 1.2rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
         <div>
           <div style="font-size:0.82rem; color:var(--text-muted);">ราคารวมทั้งใบสั่งซื้อ</div>
-          <div style="font-size:0.78rem; color:#a1a1aa;">(จะถูกหักจากวงเงินคงเหลือของสาขา)</div>
+          <div style="font-size:0.78rem; color:var(--text-dim);">(จะถูกหักจากวงเงินคงเหลือของสาขา)</div>
         </div>
         <div style="text-align:right;">
-          <strong id="po-total-amount" style="font-size:1.4rem; color:#34d399;">฿0</strong>
+          <strong id="po-total-amount" style="font-size:1.4rem; color:#059669;">฿0</strong>
         </div>
       </div>
     </form>
@@ -4644,10 +4738,10 @@ function updatePoBranchCreditPreview(branchId) {
   if (el && b) {
     const rem = Math.max(0, (b.creditLimit || 0) - (b.usedCredit || 0));
     el.innerHTML = `
-      <div style="background:rgba(0,0,0,0.25); padding:0.6rem 0.8rem; border-radius:6px; display:flex; gap:1.2rem; align-items:center; border:1px solid rgba(255,255,255,0.08);">
+      <div style="background:rgba(0,0,0,0.025); padding:0.6rem 0.8rem; border-radius:6px; display:flex; gap:1.2rem; align-items:center; border:1px solid var(--border-color);">
         <div><span style="color:var(--text-muted);">วงเงินอนุมัติ:</span> <strong>฿${(b.creditLimit || 0).toLocaleString()}</strong></div>
-        <div><span style="color:var(--text-muted);">ใช้ไปแล้ว:</span> <span style="color:#fbbf24; font-weight:700;">฿${(b.usedCredit || 0).toLocaleString()}</span></div>
-        <div><span style="color:var(--text-muted);">วงเงินคงเหลือสั่งซื้อได้:</span> <strong style="color:#34d399; font-size:0.95rem;">฿${rem.toLocaleString()}</strong></div>
+        <div><span style="color:var(--text-muted);">ใช้ไปแล้ว:</span> <span style="color:#d97706; font-weight:700;">฿${(b.usedCredit || 0).toLocaleString()}</span></div>
+        <div><span style="color:var(--text-muted);">วงเงินคงเหลือสั่งซื้อได้:</span> <strong style="color:#059669; font-size:0.95rem;">฿${rem.toLocaleString()}</strong></div>
       </div>
     `;
   }
@@ -4689,11 +4783,11 @@ function renderPoItemRowsUI() {
     const rowSubtotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
 
     return `
-      <div class="po-item-card" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.12); padding:1rem; border-radius:8px; position:relative;">
+      <div class="po-item-card" style="background:rgba(0,0,0,0.015); border:1px solid var(--border-color); padding:1rem; border-radius:8px; position:relative;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; gap:0.5rem; flex-wrap:wrap;">
-          <div style="font-weight:700; color:#38bdf8; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
+          <div style="font-weight:700; color:var(--accent-primary); font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
             <span class="badge badge-gold" style="font-size:0.75rem;">รายการที่ ${idx + 1}</span>
-            <span style="color:${fullName ? '#34d399' : '#f87171'}; font-size:0.95rem; font-weight:800;">${fullName || '⚠️ ยังไม่ได้เลือกข้อมูลสินค้า'}</span>
+            <span style="color:${fullName ? '#059669' : '#e11d48'}; font-size:0.95rem; font-weight:800;">${fullName || '⚠️ ยังไม่ได้เลือกข้อมูลสินค้า'}</span>
           </div>
           ${(window.poItemsState || []).length > 1 ? `
             <button type="button" class="btn btn-danger btn-sm" onclick="removePoItemRow(${idx})" style="padding:0.2rem 0.6rem; font-size:0.75rem;">
@@ -4735,18 +4829,18 @@ function renderPoItemRowsUI() {
         </div>
 
         <!-- Quantity & Price Inputs -->
-        <div class="grid-3col" style="gap:0.6rem; background:rgba(0,0,0,0.15); padding:0.65rem; border-radius:6px; align-items:center;">
+        <div class="grid-3col" style="gap:0.6rem; background:rgba(0,0,0,0.025); padding:0.65rem; border-radius:6px; align-items:center; border:1px solid var(--border-color);">
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">จำนวน (เครื่อง) <span style="color:#ef4444;">*</span></label>
-            <input type="number" class="form-control po-qty-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#38bdf8;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
+            <input type="number" class="form-control po-qty-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:var(--accent-primary); background:#ffffff;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
           </div>
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ราคาสั่งซื้อ/ชิ้น (บาท) <span style="color:#ef4444;">*</span></label>
-            <input type="number" class="form-control po-price-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#34d399;" min="0" placeholder="ระบุราคาสั่งซื้อ" value="${item.unitPrice || ''}" oninput="onPoNumericInput(${idx})">
+            <input type="number" class="form-control po-price-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#059669; background:#ffffff;" min="0" placeholder="ระบุราคาสั่งซื้อ" value="${item.unitPrice || ''}" oninput="onPoNumericInput(${idx})">
           </div>
           <div style="text-align:right;">
             <div style="font-size:0.72rem; color:var(--text-muted);">รวมรายการนี้</div>
-            <strong id="po-row-subtotal-${idx}" style="font-size:1.05rem; color:#fbbf24;">฿${rowSubtotal.toLocaleString()}</strong>
+            <strong id="po-row-subtotal-${idx}" style="font-size:1.05rem; color:#d97706;">฿${rowSubtotal.toLocaleString()}</strong>
           </div>
         </div>
       </div>
@@ -5542,7 +5636,7 @@ async function renderGoodsReceiptView() {
                 return `
                   <tr class="receipt-history-row gr-table-row" data-search="${(r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + (p.brand || '') + ' ' + (p.model || '') + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase()}" data-date="${isoDate}" data-branch-id="${branchId}">
                     <td>
-                      <strong style="color:#38bdf8;">${r.receiptNumber}</strong><br>
+                      <strong style="color:var(--accent-primary);">${r.receiptNumber}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${dateStr}</span>
                     </td>
                     <td>
@@ -5550,11 +5644,11 @@ async function renderGoodsReceiptView() {
                       <span style="font-size:0.78rem; color:var(--text-muted);">ผู้บันทึก: ${r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '-'}</span>
                     </td>
                     <td>
-                      <strong style="color:#fff;">${p.name || '-'}</strong><br>
+                      <strong style="color:var(--text-main);">${p.name || '-'}</strong><br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${p.brand || ''} | ${p.model || ''} (${p.category || ''})</span>
                     </td>
                     <td>
-                      <span style="font-family:monospace; font-weight:700; color:#fbbf24;">${(r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
+                      <span style="font-family:monospace; font-weight:700; color:#d97706;">${(r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
                     </td>
                     <td>
                       ${isPending ? '<span class="badge badge-gr-pending"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
@@ -5668,7 +5762,7 @@ async function renderGoodsReceiptView() {
           <!-- Staged Items Table -->
           <div style="margin-bottom:1.5rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-              <div style="font-weight:700; color:#fff; font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
+              <div style="font-weight:700; color:var(--text-main); font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
                 <i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
                 <span id="staged-count-badge" class="badge badge-gold" style="font-size:0.8rem;">${(window.stagedGoodsReceiptItems || []).length} เครื่อง</span>
               </div>
@@ -5679,7 +5773,7 @@ async function renderGoodsReceiptView() {
               ` : ''}
             </div>
 
-            <div class="table-container" style="background:rgba(0,0,0,0.2); border-radius:6px;">
+            <div class="table-container" style="background:rgba(0,0,0,0.025); border-radius:6px;">
               <table class="data-table">
                 <thead>
                   <tr>
@@ -6175,18 +6269,18 @@ function submitBatchGoodsReceipt() {
   }
 
   const bodyHtml = `
-    <div style="margin-bottom:1rem; background:rgba(255,193,7,0.1); border:1px solid rgba(255,193,7,0.3); padding:0.8rem 1rem; border-radius:6px;">
-      <div style="font-weight:700; color:#fbbf24; font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+    <div style="margin-bottom:1rem; background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.25); padding:0.8rem 1rem; border-radius:6px;">
+      <div style="font-weight:700; color:#d97706; font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
         <i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)
       </div>
       <div style="font-size:0.85rem; color:var(--text-muted);">
-        สาขาที่รับเข้า: <strong style="color:#fff;">${branchName}</strong> | จำนวนสินค้ารวม: <strong style="color:#38bdf8;">${items.length} เครื่อง</strong>
+        สาขาที่รับเข้า: <strong style="color:var(--text-main);">${branchName}</strong> | จำนวนสินค้ารวม: <strong style="color:var(--accent-primary);">${items.length} เครื่อง</strong>
       </div>
     </div>
 
     <p style="font-size:0.85rem; margin-bottom:0.8rem;">กรุณาตรวจสอบรายชื่อและหมายเลข IMEI สินค้าทั้งหมดที่จะรับเข้าสต็อกก่อนยืนยัน:</p>
 
-    <div class="table-container" style="max-height: 320px; overflow-y: auto; background:rgba(0,0,0,0.25); border-radius:6px; margin-bottom:1rem;">
+    <div class="table-container" style="max-height: 320px; overflow-y: auto; background:rgba(0,0,0,0.025); border-radius:6px; margin-bottom:1rem;">
       <table class="data-table">
         <thead>
           <tr>
@@ -6592,11 +6686,11 @@ function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchase
   const sPriceVal = (sellingPrice && sellingPrice > 0) ? sellingPrice : '';
 
   const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
+    <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="font-weight:700; font-size:0.9rem; color:var(--accent-primary); margin-bottom:0.3rem;">
         เลขที่ใบรับสินค้า: ${receiptNumber}
       </div>
-      <div style="font-size:1rem; font-weight:800; color:#fff;">
+      <div style="font-size:1rem; font-weight:800; color:var(--text-main);">
         ${productName}
       </div>
     </div>
@@ -7530,7 +7624,7 @@ async function renderEmployeeManagementView() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:#fff;">
+          <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:var(--text-main);">
             <i class="fa-solid fa-users-gear" style="color:var(--accent-primary);"></i> จัดการพนักงาน (${users.length} คน)
           </h3>
           <p style="font-size:0.82rem; color:var(--text-muted);">รายชื่อพนักงาน กำหนดตำแหน่งสิทธิ์การมองเห็นเมนู และเลือกสาขาประจำ</p>
@@ -7541,7 +7635,7 @@ async function renderEmployeeManagementView() {
       </div>
 
       <!-- Employee Filters Toolbar -->
-      <div style="display:flex; justify-content:flex-end; align-items:center; gap:0.8rem; flex-wrap:wrap; margin-bottom:1rem; background:rgba(255,255,255,0.02); padding:0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:0.8rem; flex-wrap:wrap; margin-bottom:1rem; background:rgba(0,0,0,0.025); padding:0.6rem; border-radius:6px; border:1px solid var(--border-color);">
         <div style="display:flex; align-items:center; gap:0.3rem;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขาประจำ:</label>
           <select id="emp-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterEmployeeTable()">
@@ -7581,7 +7675,7 @@ async function renderEmployeeManagementView() {
                 <tr class="emp-row" data-search="${searchStr}" data-branch-id="${userBranchId}" data-role="${u.role}">
                   <td><strong style="color:var(--accent-secondary); font-family:monospace;">${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
                   <td>
-                    <strong style="color:#fff;">${u.fullName || u.username}</strong><br>
+                    <strong style="color:var(--text-main);">${u.fullName || u.username}</strong><br>
                     <span style="font-size:0.78rem; color:var(--text-muted);">${u.email}</span>
                   </td>
                   <td>
@@ -7968,16 +8062,19 @@ function exportGoodsReceiptHistoryToExcel() {
 
 // 4. Export Branch Audit Inspection
 function exportBranchAuditToExcel() {
-  const rows = Array.from(document.querySelectorAll('.audit-grid .audit-card')).map(card => {
-    const branchName = card.querySelector('.branch-name') ? card.querySelector('.branch-name').innerText : '';
-    const status = card.querySelector('.badge') ? card.querySelector('.badge').innerText : '';
-    const stats = card.querySelectorAll('.stat-val');
+  if (!window.latestHqAuditBranches || window.latestHqAuditBranches.length === 0) {
+    showToast('ไม่มีข้อมูลสาขาสำหรับส่งออก', 'warning');
+    return;
+  }
+  const rows = window.latestHqAuditBranches.map(b => {
     return {
-      'ชื่อสาขา': branchName,
-      'สถานะการตรวจ': status,
-      'จำนวนสินค้าในคลัง': stats[0] ? stats[0].innerText : '0',
-      'จำนวนนับได้จริง': stats[1] ? stats[1].innerText : '0',
-      'ยอดที่ขาด/เกิน': stats[2] ? stats[2].innerText : '0'
+      'ชื่อสาขา': b.branch.name,
+      'สถานะการตรวจ': b.status,
+      'จำนวนสินค้าในคลัง': b.totalExpected,
+      'จำนวนนับได้จริง': b.totalActual,
+      'ยอดที่ขาด/เกิน': b.totalVariance,
+      'ผู้ส่งรายงาน': b.submittedBy || '-',
+      'ผู้อนุมัติ (ส่วนกลาง)': b.hqVerifiedBy || '-'
     };
   });
   exportToExcel(rows, 'Daily_Stock_Audit_Summary', 'รายงานนับสต็อกประจำวัน');
@@ -8082,7 +8179,7 @@ async function renderRolesPermissionsView() {
   container.innerHTML = `
     <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
       <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;"></i>
-      <br><span style="font-size:1.05rem; font-weight:600; color:#fff;">กำลังโหลดข้อมูลตำแหน่งและสิทธิ์การใช้งาน...</span>
+      <br><span style="font-size:1.05rem; font-weight:600; color:var(--text-main);">กำลังโหลดข้อมูลตำแหน่งและสิทธิ์การใช้งาน...</span>
     </div>
   `;
 
@@ -8098,41 +8195,41 @@ async function renderRolesPermissionsView() {
     container.innerHTML = `
       <!-- Top Overview Stat Cards -->
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
-        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
-          <div style="width:48px; height:48px; border-radius:10px; background:rgba(56,189,248,0.15); color:#38bdf8; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+        <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(8,145,178,0.1); color:#0891b2; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
             <i class="fa-solid fa-user-shield"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งทั้งหมด</span>
-            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${totalRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+            <strong style="font-size:1.6rem; color:var(--text-main); font-weight:800;">${totalRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
           </div>
         </div>
 
-        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
-          <div style="width:48px; height:48px; border-radius:10px; background:rgba(168,85,247,0.15); color:#c084fc; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+        <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(124,58,237,0.1); color:#7c3aed; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
             <i class="fa-solid fa-lock"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งหลักของระบบ</span>
-            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${systemRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+            <strong style="font-size:1.6rem; color:var(--text-main); font-weight:800;">${systemRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
           </div>
         </div>
 
-        <div class="card" style="background:linear-gradient(135deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8)); border:1px solid rgba(255,255,255,0.08); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
-          <div style="width:48px; height:48px; border-radius:10px; background:rgba(52,211,153,0.15); color:#34d399; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+        <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:rgba(16,185,129,0.1); color:#059669; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
             <i class="fa-solid fa-user-gear"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งกำหนดขึ้นเอง</span>
-            <strong style="font-size:1.6rem; color:#fff; font-weight:800;">${customRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
+            <strong style="font-size:1.6rem; color:var(--text-main); font-weight:800;">${customRoles} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">ตำแหน่ง</span></strong>
           </div>
         </div>
       </div>
 
       <!-- Action Bar Header -->
-      <div class="card" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1.2rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <div class="card" style="margin-bottom:1.5rem; background:#ffffff; border:1px solid var(--border-color); border-radius:12px; padding:1.2rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.2rem; font-weight:800; color:#fff; display:flex; align-items:center; gap:0.6rem; margin:0 0 0.2rem 0;">
+          <h3 style="font-size:1.2rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.6rem; margin:0 0 0.2rem 0;">
             <i class="fa-solid fa-sliders" style="color:var(--accent-gold);"></i> จัดการสิทธิ์การมองเห็นเมนู
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
@@ -8141,7 +8238,7 @@ async function renderRolesPermissionsView() {
         </div>
 
         <div>
-          <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700; padding:0.6rem 1.2rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.5rem; box-shadow:0 4px 12px rgba(56,189,248,0.25);">
+          <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700; padding:0.6rem 1.2rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.5rem; box-shadow:0 4px 12px rgba(79,70,229,0.25);">
             <i class="fa-solid fa-plus-circle" style="font-size:1rem;"></i> + สร้างตำแหน่งใหม่
           </button>
         </div>
@@ -8155,25 +8252,25 @@ async function renderRolesPermissionsView() {
           const pct = Math.round((allowedCount / totalMenus) * 100);
 
           return `
-            <div class="card" style="background:rgba(30,41,59,0.4); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:1.4rem; display:flex; flex-direction:column; justify-content:space-between; transition:all 0.25s ease;">
+            <div class="card" style="background:#ffffff; border:1px solid var(--border-color); border-radius:14px; padding:1.4rem; display:flex; flex-direction:column; justify-content:space-between; transition:all 0.25s ease;">
               <div>
                 <!-- Role Header -->
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
                   <div>
-                    <h4 style="font-size:1.15rem; color:#fff; font-weight:800; margin:0 0 0.2rem 0; display:flex; align-items:center; gap:0.5rem;">
+                    <h4 style="font-size:1.15rem; color:var(--text-main); font-weight:800; margin:0 0 0.2rem 0; display:flex; align-items:center; gap:0.5rem;">
                       ${r.name}
                     </h4>
-                    <span style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; background:rgba(0,0,0,0.3); padding:0.15rem 0.5rem; border-radius:4px; border:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-size:0.75rem; color:var(--text-muted); font-family:monospace; background:rgba(0,0,0,0.03); padding:0.15rem 0.5rem; border-radius:4px; border:1px solid var(--border-color);">
                       รหัส: ${r.code}
                     </span>
                   </div>
 
                   ${r.isSystemDefault ? `
-                    <span style="font-size:0.75rem; font-weight:700; background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
+                    <span style="font-size:0.75rem; font-weight:700; background:rgba(124,58,237,0.08); color:#7c3aed; border:1px solid rgba(124,58,237,0.25); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
                       <i class="fa-solid fa-lock" style="font-size:0.7rem;"></i> หลักของระบบ
                     </span>
                   ` : `
-                    <span style="font-size:0.75rem; font-weight:700; background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
+                    <span style="font-size:0.75rem; font-weight:700; background:rgba(16,185,129,0.08); color:#059669; border:1px solid rgba(16,185,129,0.25); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
                       <i class="fa-solid fa-user-gear" style="font-size:0.7rem;"></i> กำหนดขึ้นเอง
                     </span>
                   `}
@@ -8184,19 +8281,19 @@ async function renderRolesPermissionsView() {
                 </p>
 
                 <!-- Permission Progress & Summary Box -->
-                <div style="background:rgba(15,23,42,0.7); border:1px solid rgba(255,255,255,0.07); padding:1rem; border-radius:10px; margin-bottom:1.2rem;">
+                <div style="background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:1rem; border-radius:10px; margin-bottom:1.2rem;">
                   <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; margin-bottom:0.6rem; font-weight:700;">
                     <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
                       <i class="fa-solid fa-eye" style="color:var(--accent-primary);"></i> สิทธิ์การเห็นเมนู:
                     </span>
-                    <span style="color:${pct === 100 ? '#34d399' : (pct > 0 ? '#38bdf8' : '#ef4444')};">
+                    <span style="color:${pct === 100 ? '#059669' : (pct > 0 ? 'var(--accent-primary)' : '#e11d48')};">
                       ${allowedCount} จาก ${totalMenus} เมนู (${pct}%)
                     </span>
                   </div>
 
                   <!-- Progress Bar -->
-                  <div style="height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden; margin-bottom:0.8rem;">
-                    <div style="height:100%; width:${pct}%; background:linear-gradient(90deg, #38bdf8, #34d399); border-radius:3px; transition:width 0.3s ease;"></div>
+                  <div style="height:6px; background:rgba(0,0,0,0.08); border-radius:3px; overflow:hidden; margin-bottom:0.8rem;">
+                    <div style="height:100%; width:${pct}%; background:linear-gradient(90deg, var(--accent-primary), #10b981); border-radius:3px; transition:width 0.3s ease;"></div>
                   </div>
 
                   <!-- Menu Pill List -->
@@ -8204,8 +8301,8 @@ async function renderRolesPermissionsView() {
                     ${systemMenus.map(m => {
                       const isPermitted = (r.allowedMenus || []).includes(m.key);
                       return `
-                        <span style="font-size:0.74rem; font-weight:600; padding:0.22rem 0.55rem; border-radius:6px; display:inline-flex; align-items:center; gap:0.35rem; ${isPermitted ? 'background:rgba(52,211,153,0.12); color:#34d399; border:1px solid rgba(52,211,153,0.25);' : 'background:rgba(255,255,255,0.02); color:rgba(255,255,255,0.25); border:1px solid rgba(255,255,255,0.04); text-decoration:line-through;'}">
-                          <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:#34d399;' : 'color:rgba(255,255,255,0.2);'}"></i> ${m.name}
+                        <span style="font-size:0.74rem; font-weight:600; padding:0.22rem 0.55rem; border-radius:6px; display:inline-flex; align-items:center; gap:0.35rem; ${isPermitted ? 'background:rgba(16,185,129,0.08); color:#059669; border:1px solid rgba(16,185,129,0.25);' : 'background:rgba(0,0,0,0.02); color:var(--text-dim); border:1px solid var(--border-color); text-decoration:line-through;'}">
+                          <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:#059669;' : 'color:var(--text-dim);'}"></i> ${m.name}
                         </span>
                       `;
                     }).join('')}
@@ -8244,17 +8341,17 @@ async function openCreateRoleModal() {
     const bodyHtml = `
       <form id="create-role-form" onsubmit="event.preventDefault(); submitCreateRole();">
         <div class="form-group" style="margin-bottom:1.1rem;">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div class="form-group" style="margin-bottom:1.2rem;">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" style="padding:0.65rem 0.9rem; border-radius:8px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
-        <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1rem; margin-bottom:1rem;">
-          <div style="font-weight:800; color:#38bdf8; font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); border-radius:10px; padding:1rem; margin-bottom:1rem;">
+          <div style="font-weight:800; color:var(--accent-primary); font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
             <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
             <div style="display:flex; gap:0.4rem;">
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
@@ -8268,7 +8365,7 @@ async function openCreateRoleModal() {
 
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.6rem; max-height:300px; overflow-y:auto; padding-right:0.3rem;">
             ${systemMenus.map(m => `
-              <label style="display:flex; align-items:center; gap:0.6rem; background:rgba(30,41,59,0.5); padding:0.6rem 0.8rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.84rem; font-weight:600; color:#fff; transition:all 0.15s ease;">
+              <label style="display:flex; align-items:center; gap:0.6rem; background:#ffffff; padding:0.6rem 0.8rem; border-radius:8px; border:1px solid var(--border-color); cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--text-main); transition:all 0.15s ease;">
                 <input type="checkbox" class="role-menu-checkbox" value="${m.key}" checked style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
                 <span style="display:flex; align-items:center; gap:0.4rem;">
                   <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
@@ -8337,17 +8434,17 @@ async function openEditRoleModal(roleId) {
     const bodyHtml = `
       <form id="edit-role-form" onsubmit="event.preventDefault(); submitEditRole('${role._id}');">
         <div class="form-group" style="margin-bottom:1.1rem;">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div class="form-group" style="margin-bottom:1.2rem;">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}" style="padding:0.65rem 0.9rem; border-radius:8px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
+          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
-        <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1rem; margin-bottom:1rem;">
-          <div style="font-weight:800; color:#38bdf8; font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); border-radius:10px; padding:1rem; margin-bottom:1rem;">
+          <div style="font-weight:800; color:var(--accent-primary); font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
             <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
             <div style="display:flex; gap:0.4rem;">
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
@@ -8363,7 +8460,7 @@ async function openEditRoleModal(roleId) {
             ${systemMenus.map(m => {
               const isChecked = currentMenus.includes(m.key);
               return `
-                <label style="display:flex; align-items:center; gap:0.6rem; background:rgba(30,41,59,0.5); padding:0.6rem 0.8rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.84rem; font-weight:600; color:#fff; transition:all 0.15s ease;">
+                <label style="display:flex; align-items:center; gap:0.6rem; background:#ffffff; padding:0.6rem 0.8rem; border-radius:8px; border:1px solid var(--border-color); cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--text-main); transition:all 0.15s ease;">
                   <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
                   <span style="display:flex; align-items:center; gap:0.4rem;">
                     <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
@@ -8465,36 +8562,36 @@ async function openEditStockModal(stockId) {
     <form id="edit-stock-form" onsubmit="event.preventDefault(); submitEditStock('${stock._id}');">
       <div class="grid-2col" style="gap:1rem; text-align:left;">
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">หมายเลข IMEI</label>
-          <input type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมายเลข IMEI</label>
+          <input type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ชื่อสินค้า</label>
-          <input type="text" id="es-name" class="form-control" value="${productName}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อสินค้า</label>
+          <input type="text" id="es-name" class="form-control" value="${productName}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ยี่ห้อ (Brand)</label>
-          <input type="text" id="es-brand" class="form-control" value="${brand}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ยี่ห้อ (Brand)</label>
+          <input type="text" id="es-brand" class="form-control" value="${brand}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">รุ่น (Model)</label>
-          <input type="text" id="es-model" class="form-control" value="${model}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">รุ่น (Model)</label>
+          <input type="text" id="es-model" class="form-control" value="${model}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ความจุ (Capacity)</label>
-          <input type="text" id="es-capacity" class="form-control" value="${capacity}" style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ความจุ (Capacity)</label>
+          <input type="text" id="es-capacity" class="form-control" value="${capacity}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">สี (Color)</label>
-          <input type="text" id="es-color" class="form-control" value="${color}" style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">สี (Color)</label>
+          <input type="text" id="es-color" class="form-control" value="${color}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">หมวดหมู่</label>
-          <input type="text" id="es-category" class="form-control" value="${category}" style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมวดหมู่</label>
+          <input type="text" id="es-category" class="form-control" value="${category}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">สถานะสต็อก</label>
-          <select id="es-status" class="form-select" style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">สถานะสต็อก</label>
+          <select id="es-status" class="form-select" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
             <option value="in_stock" ${status === 'in_stock' ? 'selected' : ''}>พร้อมขาย (in_stock)</option>
             <option value="transferred" ${status === 'transferred' ? 'selected' : ''}>โอนย้ายแล้ว (transferred)</option>
             <option value="sold" ${status === 'sold' ? 'selected' : ''}>ขายแล้ว (sold)</option>
@@ -8503,12 +8600,12 @@ async function openEditStockModal(stockId) {
           </select>
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ราคาทุน</label>
-          <input type="number" id="es-purchase-price" class="form-control" min="0" value="${purchasePrice}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ราคาทุน</label>
+          <input type="number" id="es-purchase-price" class="form-control" min="0" value="${purchasePrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
-          <label style="font-weight:700; color:#fff; display:block; margin-bottom:0.4rem;">ราคาขาย</label>
-          <input type="number" id="es-selling-price" class="form-control" min="0" value="${sellingPrice}" required style="padding:0.5rem; border-radius:6px;">
+          <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ราคาขาย</label>
+          <input type="number" id="es-selling-price" class="form-control" min="0" value="${sellingPrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
       </div>
     </form>
@@ -8755,25 +8852,25 @@ function viewAuditPhoto(url) {
 
 function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
   const bodyHtml = `
-    <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:left;">
+    <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:left;">
       <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:0.88rem;">
         <span>เลขที่ใบเสร็จ: <strong>${receiptNumber}</strong></span>
         <span>ต้นทุนเดิมระบบ: ฿${Number(costAmount).toLocaleString()}</span>
       </div>
       <div style="display:flex; flex-direction:column; gap:0.4rem;">
-        <label for="cr-actual-cost" style="font-weight:700; color:#fbbf24; font-size:0.92rem;">
+        <label for="cr-actual-cost" style="font-weight:700; color:#d97706; font-size:0.92rem;">
           ยอดเงินต้นทุนที่โอนคืนจริง (Actual Cost Returned):
         </label>
         <div style="position:relative; display:flex; align-items:center;">
-          <span style="position:absolute; left:10px; font-weight:800; color:#fbbf24;">฿</span>
-          <input type="number" id="cr-actual-cost" class="form-control" value="${costAmount}" style="padding-left:1.8rem; font-weight:800; font-size:1.15rem; color:#fbbf24; background:rgba(0,0,0,0.3); border:1px solid rgba(251,191,36,0.35);" required min="0" step="0.01">
+          <span style="position:absolute; left:10px; font-weight:800; color:#d97706;">฿</span>
+          <input type="number" id="cr-actual-cost" class="form-control" value="${costAmount}" style="padding-left:1.8rem; font-weight:800; font-size:1.15rem; color:#d97706; background:#ffffff; border:1.5px solid var(--border-color);" required min="0" step="0.01">
         </div>
       </div>
     </div>
 
     <form id="record-cost-return-form" onsubmit="event.preventDefault(); submitCostReturn('${saleId}');">
       <div class="form-group" style="text-align:left;">
-        <label for="cr-date" style="color:#34d399; font-weight:700;">
+        <label for="cr-date" style="color:#059669; font-weight:700;">
           <i class="fa-solid fa-calendar-days"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="cr-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700; padding:0.5rem; border-radius:6px;">
@@ -8949,22 +9046,22 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
               return `
                 <tr class="sh-row" data-search="${(sale.receiptNumber + ' ' + (customer.name || '') + ' ' + (customer.phone || '') + ' ' + (sale.items ? sale.items.map(item => item.imei).join(' ') : '')).toLowerCase()}">
                   <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
-                  <td><strong style="color:#38bdf8; font-family:monospace;">${sale.receiptNumber}</strong></td>
+                  <td><strong style="color:var(--accent-primary); font-family:monospace;">${sale.receiptNumber}</strong></td>
                   <td><span style="font-size:0.82rem;">${formattedDate}</span></td>
-                  ${branchIdParam === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700; color:#a5b4fc; background:rgba(255,255,255,0.06);">${branch.name || '-'}</span></td>` : ''}
+                  ${branchIdParam === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${branch.name || '-'}</span></td>` : ''}
                   <td>
                     <strong>${customer.name || 'ลูกค้าทั่วไป'}</strong>
                     ${customer.phone && customer.phone !== '-' ? `<br><span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone"></i> ${customer.phone}</span>` : ''}
-                    <div style="margin-top:0.4rem; font-size:0.76rem; border-top:1px dashed rgba(255,255,255,0.15); padding-top:0.3rem; line-height:1.4;">
+                    <div style="margin-top:0.4rem; font-size:0.76rem; border-top:1px dashed var(--border-color); padding-top:0.3rem; line-height:1.4;">
                       ${(sale.items || []).map(item => `
                         <div style="margin-bottom:0.25rem;">
-                          <strong style="color:#38bdf8;">• ${item.productName}</strong> <span style="font-family:monospace; color:#fbbf24;">(${item.imei})</span><br>
-                          <span style="color:var(--text-muted);">ราคาแนะนำ: ฿${(item.standardPrice || item.unitPrice).toLocaleString()} | ขายจริง: <strong style="color:#34d399;">฿${item.unitPrice.toLocaleString()}</strong></span>
+                          <strong style="color:var(--text-main);">• ${item.productName}</strong> <span style="font-family:monospace; color:var(--accent-gold); font-weight:700;">(${item.imei})</span><br>
+                          <span style="color:var(--text-muted);">ราคาแนะนำ: ฿${(item.standardPrice || item.unitPrice).toLocaleString()} | ขายจริง: <strong style="color:#059669;">฿${item.unitPrice.toLocaleString()}</strong></span>
                         </div>
                       `).join('')}
                     </div>
                   </td>
-                  <td><strong style="color:#34d399;">฿${(sale.grandTotal || 0).toLocaleString()}</strong></td>
+                  <td><strong style="color:#059669;">฿${(sale.grandTotal || 0).toLocaleString()}</strong></td>
                   <td><span style="font-size:0.82rem;">${payMethodText}</span></td>
                   <td><span style="font-size:0.82rem;">${seller.fullName || seller.username || 'Staff'}</span></td>
                   <td style="text-align:center;">
@@ -9002,16 +9099,16 @@ function voidSaleAction(saleId, receiptNumber) {
 
   const bodyHtml = `
     <div style="text-align:center; padding:0.5rem 0;">
-      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:#eab308; margin-bottom:0.8rem; display:block;"></i>
-      <h4 style="font-size:1.1rem; font-weight:800; color:#fff; margin-bottom:0.6rem;">คุณแน่ใจหรือไม่ที่จะยกเลิกบิลขายนี้?</h4>
-      <div style="font-size:1.15rem; font-weight:800; color:#38bdf8; font-family:monospace; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.08); padding:0.5rem; border-radius:6px; margin:0.8rem auto; max-width:320px; letter-spacing:0.5px;">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:#d97706; margin-bottom:0.8rem; display:block;"></i>
+      <h4 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin-bottom:0.6rem;">คุณแน่ใจหรือไม่ที่จะยกเลิกบิลขายนี้?</h4>
+      <div style="font-size:1.15rem; font-weight:800; color:var(--accent-primary); font-family:monospace; background:rgba(0,0,0,0.025); border:1px solid var(--border-color); padding:0.5rem; border-radius:6px; margin:0.8rem auto; max-width:320px; letter-spacing:0.5px;">
         ${receiptNumber}
       </div>
       <p style="font-size:0.82rem; color:var(--text-muted); line-height:1.5; margin:0;">
         เมื่อทำรายการสำเร็จ สถานะบิลจะถูกเปลี่ยนเป็น "ยกเลิกบิล"<br>
-        และระบบจะทำการ<strong style="color:#ef4444;">คืนสินค้าทั้งหมดในบิลเข้าคลังสต็อกของแต่ละสาขา</strong>ให้โดยอัตโนมัติ
+        และระบบจะทำการ<strong style="color:#e11d48;">คืนสินค้าทั้งหมดในบิลเข้าคลังสต็อกของแต่ละสาขา</strong>ให้โดยอัตโนมัติ
       </p>
-      <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); color:#fca5a5; padding:0.6rem 0.8rem; border-radius:6px; font-size:0.78rem; font-weight:600; margin-top:1rem; line-height:1.4;">
+      <div style="background:rgba(225,29,72,0.05); border:1px solid rgba(225,29,72,0.2); color:#e11d48; padding:0.6rem 0.8rem; border-radius:6px; font-size:0.78rem; font-weight:600; margin-top:1rem; line-height:1.4;">
         ⚠️ คำเตือน: รายการที่ยกเลิกแล้วจะไม่สามารถกู้คืนหรือแก้ไขสถานะได้อีก!
       </div>
     </div>

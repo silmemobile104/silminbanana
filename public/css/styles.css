@@ -5,47 +5,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap');
 
 :root {
-  /* Color Palette - Vibrant Dark Mode */
-  --bg-primary: #0a0d14;
-  --bg-secondary: #121824;
-  --bg-card: rgba(22, 30, 46, 0.75);
-  --bg-card-hover: rgba(30, 42, 64, 0.85);
-  --bg-glass: rgba(18, 24, 36, 0.65);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(99, 102, 241, 0.3);
+  /* Color Palette - Soft Warm White Theme */
+  --bg-primary: #faf9f6;          /* Soft warm alabaster off-white */
+  --bg-secondary: #f4f1ea;        /* Soft warm gray-beige for sidebar/menus */
+  --bg-card: #ffffff;             /* Pure white for cards */
+  --bg-card-hover: #faf8f5;       /* Warm-white tint for hover */
+  --bg-glass: rgba(244, 241, 234, 0.85); /* Warm-white glass */
+  --border-color: rgba(0, 0, 0, 0.08); /* Soft dark border */
+  --border-glow: rgba(99, 102, 241, 0.15);
 
   /* Brand Accent Colors */
-  --accent-primary: #6366f1; /* Indigo */
-  --accent-primary-hover: #4f46e5;
-  --accent-secondary: #06b6d4; /* Cyan */
-  --accent-gold: #f59e0b; /* Amber */
+  --accent-primary: #4f46e5;      /* Rich indigo for high contrast readability */
+  --accent-primary-hover: #3730a3;
+  --accent-secondary: #0891b2;    /* Darker cyan for text contrast */
+  --accent-gold: #d97706;         /* Darker amber for readability */
 
-  /* Audit Status Colors */
-  --status-match-bg: rgba(16, 185, 129, 0.15);
+  /* Audit Status Colors (Readable on White Backgrounds) */
+  --status-match-bg: rgba(16, 185, 129, 0.08);
   --status-match-border: #10b981;
-  --status-match-text: #34d399;
+  --status-match-text: #065f46;   /* Dark green for readability */
 
-  --status-variance-bg: rgba(239, 68, 68, 0.15);
+  --status-variance-bg: rgba(239, 68, 68, 0.06);
   --status-variance-border: #ef4444;
-  --status-variance-text: #f87171;
+  --status-variance-text: #991b1b; /* Dark red for readability */
 
-  --status-pending-bg: rgba(245, 158, 11, 0.15);
+  --status-pending-bg: rgba(245, 158, 11, 0.08);
   --status-pending-border: #f59e0b;
-  --status-pending-text: #fbbf24;
+  --status-pending-text: #92400e; /* Dark brown-amber for readability */
 
-  --status-gray-bg: rgba(156, 163, 175, 0.1);
-  --status-gray-border: #6b7280;
-  --status-gray-text: #9ca3af;
+  --status-gray-bg: rgba(107, 114, 128, 0.06);
+  --status-gray-border: #9ca3af;
+  --status-gray-text: #374151;
 
   /* Typography Supporting Thai Fonts */
-  --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
-  --text-dim: #6b7280;
+  --text-main: #1e293b;           /* Slate 800 (Dark Slate, soft contrast) */
+  --text-muted: #64748b;          /* Slate 500 */
+  --text-dim: #94a3b8;            /* Slate 400 */
   --font-family: 'Prompt', 'Sarabun', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Elevation & Effects */
-  --shadow-lg: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.2);
+  --shadow-lg: 0 10px 30px -5px rgba(100, 116, 139, 0.06); /* Very soft slate shadow */
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.08);
   --backdrop-blur: blur(16px);
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -76,7 +76,7 @@ body {
   right: -5%;
   width: 500px;
   height: 500px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -87,7 +87,7 @@ body {
   left: -5%;
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, rgba(0,0,0,0) 70%);
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.04) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -164,8 +164,13 @@ body {
   left: 0;
   z-index: 100;
   overflow-y: auto;
+  scrollbar-width: none;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.sidebar:hover {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.25) rgba(0, 0, 0, 0.15);
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
 .sidebar-header {
@@ -184,28 +189,47 @@ body {
   flex: 1;
   padding-right: 4px;
   min-height: 0;
+  scrollbar-width: none;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.sidebar-menu:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
 /* Custom Scrollbar for Sidebar & Menu */
 .sidebar::-webkit-scrollbar,
 .sidebar-menu::-webkit-scrollbar {
-  width: 6px;
+  width: 5px; /* Thinner and elegant scrollbar width */
 }
 
 .sidebar::-webkit-scrollbar-track,
 .sidebar-menu::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: transparent;
   border-radius: 10px;
+  transition: background 0.3s ease;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .sidebar-menu::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+  background: transparent;
   border-radius: 10px;
+  transition: background 0.3s ease;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover,
-.sidebar-menu::-webkit-scrollbar-thumb:hover {
+.sidebar:hover::-webkit-scrollbar-track,
+.sidebar-menu:hover::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb,
+.sidebar-menu:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb:hover,
+.sidebar-menu:hover::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
 
@@ -330,8 +354,8 @@ body {
 .form-control, .form-select {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: rgba(10, 13, 20, 0.7);
-  border: 1px solid var(--border-color);
+  background: #ffffff;
+  border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-main);
   font-family: var(--font-family);
@@ -345,11 +369,11 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-/* Custom Calendar Picker Icon for Dark Mode */
+/* Custom Calendar Picker Icon for Light Mode */
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+  filter: invert(0.2);
   cursor: pointer;
-  opacity: 0.8;
+  opacity: 0.75;
   transition: opacity 0.15s ease;
 }
 
@@ -358,7 +382,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 .form-select option {
-  background-color: var(--bg-secondary);
+  background-color: #ffffff;
   color: var(--text-main);
 }
 
@@ -533,7 +557,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.8rem;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.035);
   padding: 1rem;
   border-radius: var(--radius-md);
   margin: 1rem 0;
@@ -566,7 +590,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 .data-table th {
-  background: rgba(10, 13, 20, 0.8);
+  background: rgba(0, 0, 0, 0.035);
   padding: 1rem;
   color: var(--text-muted);
   font-weight: 600;
@@ -584,7 +608,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 .data-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* Modal Windows */
@@ -594,7 +618,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -935,51 +959,51 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
    GOODS RECEIPT PREMIUM STYLING
    ========================================================================== */
 .gr-history-card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85)) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: linear-gradient(145deg, #ffffff, #faf8f5) !important;
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+  box-shadow: 0 8px 32px rgba(100, 116, 139, 0.06);
   border-radius: 12px;
   padding: 1.5rem;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .gr-pending-po-card {
-  border: 1px solid rgba(251, 191, 36, 0.35) !important;
-  background: linear-gradient(145deg, rgba(251, 191, 36, 0.03), rgba(251, 191, 36, 0.08)) !important;
+  border: 1px solid rgba(217, 119, 6, 0.3) !important;
+  background: linear-gradient(145deg, rgba(217, 119, 6, 0.02), rgba(217, 119, 6, 0.05)) !important;
   backdrop-filter: blur(8px);
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.08);
+  box-shadow: 0 4px 20px rgba(217, 119, 6, 0.04);
   animation: grPulse 2s infinite alternate;
 }
 
 .gr-manual-form-card {
-  border: 1px solid rgba(56, 189, 248, 0.25) !important;
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8)) !important;
+  border: 1px solid rgba(8, 145, 178, 0.25) !important;
+  background: linear-gradient(145deg, #ffffff, #fcfbf9) !important;
   backdrop-filter: blur(16px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px rgba(100, 116, 139, 0.08);
   border-radius: 12px;
   padding: 1.8rem;
   animation: slideDownFade 0.4s ease-out;
 }
 
 .gr-imei-input-box {
-  background: rgba(15, 23, 42, 0.6) !important;
-  border: 1.5px solid rgba(251, 191, 36, 0.4) !important;
-  color: #fbbf24 !important;
+  background: #fefaf0 !important;
+  border: 1.5px solid #d97706 !important;
+  color: #92400e !important;
   font-family: 'Courier New', Courier, monospace;
   font-weight: 700;
   font-size: 1.1rem !important;
   letter-spacing: 0.05em;
   padding: 0.75rem 1rem !important;
   border-radius: 8px !important;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
   transition: all 0.25s ease;
 }
 .gr-imei-input-box:focus {
-  border-color: #fbbf24 !important;
-  box-shadow: 0 0 12px rgba(251, 191, 36, 0.45), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  border-color: #d97706 !important;
+  box-shadow: 0 0 12px rgba(217, 119, 6, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.02) !important;
   outline: none;
 }
 
@@ -1034,7 +1058,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(10, 15, 30, 0.7);
+  background: rgba(250, 249, 246, 0.75);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
