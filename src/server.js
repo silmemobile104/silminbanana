@@ -42,8 +42,17 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files for frontend UI
-app.use(express.static(path.join(__dirname, '../public')));
+// Static files for frontend UI (no cache for development)
+app.use(express.static(path.join(__dirname, '../public'), {
+  etag: false,
+  lastModified: false,
+  maxAge: 0,
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
 
 // API Routes
 app.use('/api/auth', authRoutes);

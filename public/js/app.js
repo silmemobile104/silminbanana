@@ -2294,9 +2294,7 @@ async function renderFinanceView(filterParams = {}) {
             <button class="btn btn-secondary btn-sm" onclick="openPrintFinanceReportModal()" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
               <i class="fa-solid fa-print"></i> พิมพ์รายงาน
             </button>
-            <button class="btn btn-success btn-sm" onclick="exportFinanceReportToExcel()" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
-              <i class="fa-solid fa-file-excel"></i> Export Excel
-            </button>
+            
             ${(filterParams.branchId || filterParams.paymentMethod || filterParams.payoutStatus || filterParams.startDate || filterParams.endDate) ? `
               <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
                 <i class="fa-solid fa-rotate-left"></i> ล้างตัวกรอง
@@ -8151,21 +8149,72 @@ function exportSalesHistoryToExcel() {
 
 // 6. Export Financial Profit Report
 function exportFinanceReportToExcel() {
-  const rows = Array.from(document.querySelectorAll('.finance-report-row')).map(tr => {
-    const tds = tr.querySelectorAll('td');
-    return {
-      'วันที่ขาย': tds[0] ? tds[0].innerText.trim() : '',
-      'เลขที่ใบเสร็จ': tds[1] ? tds[1].innerText.trim() : '',
-      'สาขา': tds[2] ? tds[2].innerText.trim() : '',
-      'ชื่อลูกค้า': tds[3] ? tds[3].innerText.trim() : '',
-      'ช่องทางชำระเงิน': tds[4] ? tds[4].innerText.trim() : '',
-      'ยอดขายรวม (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
-      'ต้นทุนรวม (บาท)': tds[6] ? tds[6].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
-      'กำไรสุทธิ (บาท)': tds[7] ? tds[7].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
-      'สถานะการรับเงินไฟแนนซ์': tds[8] ? tds[8].innerText.trim() : ''
-    };
-  });
-  exportToExcel(rows, 'Financial_Profit_Report', 'รายงานการเงินและกำไร');
+  const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
+  const reportContainer = document.getElementById('printable-finance-report');
+  
+  if (!reportContainer) {
+    showToast('กรุณารอโหลดตารางตัวอย่างรายงานในหน้าต่าง POP-UP ก่อนกดส่งออก', 'warning');
+    return;
+  }
+
+  if (isSalesActive) {
+    const rows = Array.from(reportContainer.querySelectorAll('table tbody tr')).filter(tr => {
+      const tds = tr.querySelectorAll('td');
+      // Must be detailed sales rows (excluding items counter row or summary row)
+      return tds.length === 15 && !tr.innerText.includes('items');
+    }).map(tr => {
+      const tds = tr.querySelectorAll('td');
+      return {
+        'เลขที่': tds[0] ? tds[0].innerText.trim() : '',
+        'วันที่': tds[1] ? tds[1].innerText.trim() : '',
+        'เอกสาร': tds[2] ? tds[2].innerText.trim() : '',
+        'ลูกค้า': tds[3] ? tds[3].innerText.trim() : '',
+        'โทร': tds[4] ? tds[4].innerText.trim() : '',
+        'วิธีการชำระ': tds[5] ? tds[5].innerText.trim() : '',
+        'รหัสสินค้า/บริการ': tds[6] ? tds[6].innerText.trim() : '',
+        'ชื่อสินค้า/บริการ': tds[7] ? tds[7].innerText.trim() : '',
+        'จำนวน': tds[8] ? tds[8].innerText.trim() : '',
+        'ราคา': tds[9] ? tds[9].innerText.trim() : '',
+        'ส่วนลด': tds[10] ? tds[10].innerText.trim() : '',
+        'รวมเงิน': tds[11] ? tds[11].innerText.trim() : '',
+        'ต้นทุน': tds[12] ? tds[12].innerText.trim() : '',
+        'กำไร/ขาดทุน': tds[13] ? tds[13].innerText.trim() : '',
+        'สุทธิ': tds[14] ? tds[14].innerText.trim() : ''
+      };
+    });
+
+    if (rows.length === 0) {
+      showToast('ไม่พบข้อมูลรายการขายในตารางสำหรับส่งออก Excel', 'warning');
+      return;
+    }
+
+    exportToExcel(rows, 'Financial_Sales_Report', 'รายงานสรุปการขายและกำไร');
+  } else {
+    // Expenses
+    const rows = Array.from(reportContainer.querySelectorAll('table tbody tr')).filter(tr => {
+      const tds = tr.querySelectorAll('td');
+      // Must be detailed expenses rows (excluding the grand total row)
+      return tds.length === 7 && !tr.innerText.includes('รวมยอดจ่ายทั้งสิ้น');
+    }).map(tr => {
+      const tds = tr.querySelectorAll('td');
+      return {
+        'เลขที่รายจ่าย / วันที่': tds[0] ? tds[0].innerText.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() : '',
+        'ชื่อรายการ': tds[1] ? tds[1].innerText.trim() : '',
+        'สาขา': tds[2] ? tds[2].innerText.trim() : '',
+        'หมวดหมู่': tds[3] ? tds[3].innerText.trim() : '',
+        'จำนวนเงิน': tds[4] ? tds[4].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
+        'ผู้บันทึก': tds[5] ? tds[5].innerText.trim() : '',
+        'หมายเหตุ': tds[6] ? tds[6].innerText.trim() : ''
+      };
+    });
+
+    if (rows.length === 0) {
+      showToast('ไม่พบข้อมูลบันทึกรายจ่ายในตารางสำหรับส่งออก Excel', 'warning');
+      return;
+    }
+
+    exportToExcel(rows, 'Financial_Expenses_Report', 'รายงานบันทึกรายจ่ายดำเนินงาน');
+  }
 }
 
 // 7. Export Product Master Catalog
@@ -8221,6 +8270,12 @@ function openPrintFinanceReportModal() {
         <label style="font-size:0.8rem; font-weight:600; color:#000;">ถึงวันที่:</label>
         <input type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
       </div>
+      
+      <div style="margin-left:auto; display:flex; gap:0.5rem;">
+        <button class="btn btn-success btn-sm" onclick="exportFinanceReportToExcel()" style="font-size:0.8rem; font-weight:700; height:auto; padding:0.35rem 0.8rem; border:none; display:flex; align-items:center; gap:0.3rem;">
+          <i class="fa-solid fa-file-excel"></i> Export Excel
+        </button>
+      </div>
     </div>
 
     <!-- Print Stylesheet -->
@@ -8253,6 +8308,7 @@ function openPrintFinanceReportModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+    <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
     <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
   `;
 
@@ -8650,7 +8706,8 @@ function openPrintFinanceReportModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
+        <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+<button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
   `;
 
   openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
