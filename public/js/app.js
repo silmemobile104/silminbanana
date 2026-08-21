@@ -3705,7 +3705,7 @@ function renderHqAuditDetails() {
                             '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
                         </div>
 
-                        <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
+                        <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
                           <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
                         </button>
                       </div>
@@ -3783,10 +3783,14 @@ function resolveDriveImageUrl(imgObj) {
   return String(imgObj || '');
 }
 
-function openImeiInspectionModal(imei) {
+function openImeiInspectionModal(imei, branchId) {
   if (window.hqAuditInspectionState) {
     window.hqAuditInspectionState.viewedPhotos.add(imei);
   }
+
+  // Storing specific branchId for decisions to prevent "all" casting error
+  window.currentInspectedBranchId = branchId;
+  window.currentInspectedAuditId = branchId;
 
   let productName = 'สินค้าในสต็อก';
   let imgObj = null;
@@ -3805,8 +3809,26 @@ function openImeiInspectionModal(imei) {
   if (imgObj && imgObj.fileId) {
     fileId = imgObj.fileId;
   } else if (imgUrl) {
-    const match = String(imgUrl).match(/\/drive-image\/([a-zA-Z0-9_-]+)/) || String(imgUrl).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(imgUrl).match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) fileId = match[1];
+    // Parse Google Drive ID using robust split parsing (prevents slash escaping syntax errors)
+    const urlStr = String(imgUrl);
+    const parts = urlStr.split('/');
+    const diIndex = parts.indexOf('drive-image');
+    if (diIndex !== -1 && parts[diIndex + 1]) {
+      fileId = parts[diIndex + 1].split('?')[0];
+    } else {
+      const dIndex = parts.indexOf('d');
+      if (dIndex !== -1 && parts[dIndex + 1]) {
+        fileId = parts[dIndex + 1].split('?')[0];
+      } else {
+        const queryParams = urlStr.split('?')[1];
+        if (queryParams) {
+          const idParam = queryParams.split('&').find(p => p.startsWith('id='));
+          if (idParam) {
+            fileId = idParam.split('=')[1];
+          }
+        }
+      }
+    }
   }
 
   const targetDriveUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view` : (imgObj ? imgObj.webViewLink || imgUrl : imgUrl);
@@ -3860,14 +3882,36 @@ function openImeiInspectionModal(imei) {
     </div>
   `;
 
-  openModal(`ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}`, bodyHtml, `<button class="btn btn-secondary" onclick="inspectBranchAudit('${window.currentInspectedAuditId}')">ย้อนกลับ</button>`);
+  openModal(`ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>`);
 }
 
 async function setItemDecision(imei, decision) {
   if (!window.hqAuditInspectionState) return;
 
   const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
-  const branchId = window.hqAuditInspectionState.branchId || window.currentInspectedAuditId;
+  
+  let branchId = window.currentInspectedBranchId;
+  if (!branchId || branchId === 'all') {
+    branchId = window.hqAuditInspectionState.branchId;
+  }
+  
+  // Fallback to match item in collection
+  if (!branchId || branchId === 'all') {
+    if (window.hqAuditInspectionState.items) {
+      const matched = window.hqAuditInspectionState.items.find(i => 
+        (i.scannedImeis && i.scannedImeis.includes(imei)) || 
+        (i.expectedImeis && i.expectedImeis.includes(imei))
+      );
+      if (matched && matched.branchId) {
+        branchId = matched.branchId;
+      }
+    }
+  }
+
+  if (!branchId || branchId === 'all') {
+    showToast('ไม่สามารถระบุสาขาสำหรับสินค้าชิ้นนี้ได้', 'error');
+    return;
+  }
 
   if (decision === 'passed') {
     window.hqAuditInspectionState.verifiedImeis.add(imei);
@@ -3886,7 +3930,6 @@ async function setItemDecision(imei, decision) {
     showToast(`ลงความเห็น IMEI ${imei}: ให้ส่งตรวจใหม่`, 'warning');
   }
 
-  // Save decision into MongoDB Database
   try {
     await apiRequest('/audit/decision', 'POST', {
       auditDate: todayStr,
@@ -3899,10 +3942,7 @@ async function setItemDecision(imei, decision) {
   }
 
   closeModal();
-
-  if (window.currentInspectedAuditId) {
-    inspectBranchAudit(window.currentInspectedAuditId, false);
-  }
+  filterHqAuditGrid();
 }
 
 /* ==========================================================================
