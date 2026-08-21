@@ -160,6 +160,11 @@ function openModal(title, bodyHtml, footerHtml = '') {
 
 function closeModal() {
   document.getElementById('app-modal').classList.remove('active');
+  const modalCard = document.querySelector('#app-modal .modal-card');
+  if (modalCard) {
+    modalCard.style.maxWidth = '';
+    modalCard.style.width = '';
+  }
 }
 
 document.getElementById('modal-close').addEventListener('click', closeModal);
@@ -2285,6 +2290,12 @@ async function renderFinanceView(filterParams = {}) {
 
             <button class="btn btn-primary btn-sm" onclick="applyFinanceFilters()">
               <i class="fa-solid fa-magnifying-glass"></i> ค้นหา
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="openPrintFinanceReportModal()" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
+              <i class="fa-solid fa-print"></i> พิมพ์รายงาน
+            </button>
+            <button class="btn btn-success btn-sm" onclick="exportFinanceReportToExcel()" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
+              <i class="fa-solid fa-file-excel"></i> Export Excel
             </button>
             ${(filterParams.branchId || filterParams.paymentMethod || filterParams.payoutStatus || filterParams.startDate || filterParams.endDate) ? `
               <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
@@ -8118,6 +8129,800 @@ function exportFinanceReportToExcel() {
 }
 
 // 7. Export Product Master Catalog
+function openPrintFinanceReportModal() {
+  const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
+  const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
+  
+  // Set modal card width to large for printing preview screen
+  const modalCard = document.querySelector('#app-modal .modal-card');
+  if (modalCard) {
+    modalCard.style.maxWidth = '95vw';
+    modalCard.style.width = '1450px';
+  }
+
+  // Get active values from main screen to initialize selectors
+  const branchSelect = document.getElementById('fin-branch-filter');
+  const startDateInput = document.getElementById('fin-start-date');
+  const endDateInput = document.getElementById('fin-end-date');
+  
+  const selectedBranchId = branchSelect ? branchSelect.value : '';
+  const selectedStartDate = startDateInput ? startDateInput.value : '';
+  const selectedEndDate = endDateInput ? endDateInput.value : '';
+
+  let branchOptionsHtml = '<option value="">-- ทุกสาขา --</option>';
+  if (state.masterOptions.branches) {
+    branchOptionsHtml += state.masterOptions.branches.map(b => {
+      return `<option value="${b._id}" ${selectedBranchId === b._id ? 'selected' : ''}>${b.name}</option>`;
+    }).join('');
+  }
+
+  const bodyHtml = `
+    <!-- Print Settings Bar (Hidden in Print) -->
+    <div class="no-print" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; background:#f8f9fa; border:1px solid #ddd; padding:12px; border-radius:6px; margin-bottom:1.5rem; color:#000; font-family:'Sarabun';">
+      <div style="font-weight:700; font-size:0.9rem; color:#000;">
+        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
+      </div>
+      
+      ${isAdminOrHq ? `
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
+          <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
+            ${branchOptionsHtml}
+          </select>
+        </div>
+      ` : ''}
+
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
+        <input type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">ถึงวันที่:</label>
+        <input type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
+      </div>
+    </div>
+
+    <!-- Print Stylesheet -->
+    <style>
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        @page {
+          size: landscape;
+          margin: 0.4cm;
+        }
+        #printable-finance-report {
+          width: 100% !important;
+        }
+        .table-responsive-print {
+          overflow: visible !important;
+        }
+      }
+    </style>
+
+    <!-- Preview Container (Target for updatePrintFinanceReportPreview) -->
+    <div id="printable-finance-report-container">
+      <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <div>กำลังเตรียมข้อมูลรายงาน...</div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
+  `;
+
+  openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
+  
+  // Call preview function right after opening modal to draw the initial table!
+  setTimeout(() => {
+    updatePrintFinanceReportPreview();
+  }, 100);
+}
+
+async function updatePrintFinanceReportPreview() {
+  const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
+  
+  // Show loading indicator inside the print preview area
+  const previewArea = document.getElementById('printable-finance-report-container');
+  if (previewArea) {
+    previewArea.innerHTML = `
+      <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <div>กำลังดึงข้อมูลรายงานใหม่ตามเงื่อนไขที่เลือก...</div>
+      </div>
+    `;
+  }
+
+  // Get active print values
+  const branchSelect = document.getElementById('print-branch-filter');
+  const startDateInput = document.getElementById('print-start-date');
+  const endDateInput = document.getElementById('print-end-date');
+  const searchInput = document.getElementById('fin-search-input'); // main keyword filter
+  
+  const branchId = branchSelect ? branchSelect.value : '';
+  const startDate = startDateInput ? startDateInput.value : '';
+  const endDate = endDateInput ? endDateInput.value : '';
+  const keyword = searchInput && searchInput.value ? searchInput.value : '';
+
+  const branchName = branchSelect && branchSelect.selectedIndex >= 0 ? branchSelect.options[branchSelect.selectedIndex].text : 'ทุกสาขา';
+  const paymentSelect = document.getElementById('fin-payment-filter');
+  const paymentMethod = paymentSelect && paymentSelect.value ? paymentSelect.options[paymentSelect.selectedIndex].text : 'ทุกช่องทาง';
+
+  const filterParams = {};
+  if (branchId) filterParams.branchId = branchId;
+  if (startDate) filterParams.startDate = startDate;
+  if (endDate) filterParams.endDate = endDate;
+  
+  // Keep paymentMethod and payoutStatus from main page filters for query completeness
+  const paymentSelectVal = paymentSelect ? paymentSelect.value : '';
+  if (paymentSelectVal) filterParams.paymentMethod = paymentSelectVal;
+  const payoutSelect = document.getElementById('fin-payout-filter');
+  const payoutSelectVal = payoutSelect ? payoutSelect.value : '';
+  if (payoutSelectVal) filterParams.payoutStatus = payoutSelectVal;
+
+  try {
+    const queryParams = new URLSearchParams(filterParams).toString();
+    const res = await apiRequest(`/pos/finance-report?${queryParams}`);
+    const sales = res.sales || [];
+    const expenses = res.expenses || [];
+    
+    // Cache the new data back to state caches to keep things in sync
+    state.salesCache = sales;
+    state.expensesCache = expenses;
+
+    // Filter by keyword client-side if needed
+    const query = keyword.toLowerCase().trim();
+    
+    let filteredSales = sales;
+    if (query) {
+      filteredSales = sales.filter(s => {
+        const searchStr = (
+          s.receiptNumber + ' ' + 
+          (s.branch ? s.branch.name : '') + ' ' + 
+          (s.customer ? s.customer.name : '') + ' ' + 
+          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + 
+          (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')
+        ).toLowerCase();
+        return searchStr.includes(query);
+      });
+    }
+
+    const dateRangeStr = (startDate ? `วันที่เริ่ม: ${startDate}` : '') + (endDate ? ` ถึงวันที่: ${endDate}` : '');
+
+    let printRowsHtml = '';
+    let headerHtml = '';
+
+    if (isSalesActive) {
+      headerHtml = `
+        <div style="font-family:'Sarabun'; margin-bottom:0.8rem; color:#000;">
+          <h1 style="font-size:1.25rem; font-weight:700; margin:0; font-family:'Sarabun'; text-align:left;">รายงานรายละเอียดการขาย</h1>
+          <div style="font-size:0.75rem; margin-top:0.2rem; color:#333;">
+            สาขา: ${branchName} | ช่องทางชำระเงิน: ${paymentMethod} | ${dateRangeStr ? dateRangeStr : 'ข้อมูลทั้งหมด'} ${query ? ` | คัดกรอง: "${query}"` : ''}
+          </div>
+        </div>
+      `;
+
+      let grandTotalQty = 0;
+      let grandTotalDiscount = 0;
+      let grandTotalAmount = 0;
+      let grandTotalCost = 0;
+      let grandTotalProfit = 0;
+      let grandTotalNet = 0;
+
+      let tableRows = [];
+      let itemsCount = 0;
+
+      filteredSales.forEach(s => {
+        const isVoided = s.status === 'voided';
+        const receiptNumber = s.receiptNumber || '';
+        const docNumber = receiptNumber.replace('SC-', 'RC-');
+        
+        const dateObj = new Date(s.createdAt);
+        const dateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
+        
+        const customerName = s.customer ? s.customer.name : 'ทั่วไป';
+        const customerPhone = s.customer ? s.customer.phone || '-' : '-';
+        
+        let paymentStr = '-';
+        if (s.paymentMethod === 'cash') {
+          paymentStr = 'เงินสด';
+        } else if (s.paymentMethod === 'transfer') {
+          paymentStr = 'โอนเงิน';
+        } else if (s.paymentMethod === 'credit_card') {
+          paymentStr = 'บัตรเครดิต';
+        } else if (s.paymentMethod === 'finance') {
+          const finCompany = (s.financeDetails && s.financeDetails.companyName) ? ` (${s.financeDetails.companyName})` : '';
+          paymentStr = `ซื้อสดไฟแนนซ์${finCompany}`;
+        }
+
+        (s.items || []).forEach((i, itemIdx) => {
+          itemsCount++;
+          const qty = i.quantity || 1;
+          const price = i.unitPrice || 0;
+          const discount = (itemIdx === 0 && s.discountTotal) ? s.discountTotal : 0;
+          const subtotal = (qty * price) - discount;
+          const cost = (i.costPrice || 0) * qty;
+          const profit = subtotal - cost;
+          const net = subtotal;
+
+          grandTotalQty += qty;
+          grandTotalDiscount += discount;
+          grandTotalAmount += subtotal;
+          grandTotalCost += cost;
+          grandTotalProfit += profit;
+          grandTotalNet += net;
+
+          tableRows.push(`
+            <tr style="color:#000; ${isVoided ? 'text-decoration:line-through; opacity:0.5;' : ''}">
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${receiptNumber}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${dateStr}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${docNumber}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${customerName}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${customerPhone}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${paymentStr}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${i.imei || '-'}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${i.productName || '-'}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${qty.toFixed(2)}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          `);
+        });
+      });
+
+      printRowsHtml = `
+        <tr style="color:#000; font-weight:700;">
+          <td colspan="15" style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; background:#fff;">(${itemsCount} items)</td>
+        </tr>
+        ${tableRows.length === 0 ? `<tr><td colspan="15" style="text-align:center; padding:2rem; border:1px solid #111; font-size:0.75rem; color:#000;">ไม่พบข้อมูลรายการขาย</td></tr>` : tableRows.join('')}
+        <tr style="color:#000; font-weight:700; background:#fff; border-top:1.5px solid #111; border-bottom:2px double #111;">
+          <td colspan="8" style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left;"></td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center;">${grandTotalQty.toFixed(2)}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;"></td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>
+      `;
+
+      previewArea.innerHTML = `
+        <div id="printable-finance-report" style="background:#fff; color:#000; padding:0.5rem; font-family:'Sarabun',sans-serif; line-height:1.2; box-sizing:border-box; width:100%;">
+          ${headerHtml}
+          
+          <div class="table-responsive-print" style="width:100%; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; border:1px solid #111; font-family:'Sarabun';">
+              <thead>
+                <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1px solid #111;">
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${printRowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } else {
+      // Expenses
+      headerHtml = `
+        <div style="font-family:'Sarabun'; margin-bottom:0.8rem; color:#000;">
+          <h1 style="font-size:1.25rem; font-weight:700; margin:0; font-family:'Sarabun'; text-align:left;">รายงานสรุปรายการบันทึกรายจ่ายดำเนินงาน</h1>
+          <div style="font-size:0.75rem; margin-top:0.2rem; color:#333;">
+            สาขา: ${branchName} | ${dateRangeStr ? dateRangeStr : 'ข้อมูลทั้งหมด'} ${query ? ` | คัดกรอง: "${query}"` : ''}
+          </div>
+        </div>
+      `;
+
+      let grandTotalExpenses = 0;
+      
+      const categoryFilter = document.getElementById('exp-category-filter') ? document.getElementById('exp-category-filter').value : '';
+      const recordedByFilter = document.getElementById('exp-recorded-by-filter') ? document.getElementById('exp-recorded-by-filter').value : '';
+      const minAmount = document.getElementById('exp-min-amount') && document.getElementById('exp-min-amount').value ? Number(document.getElementById('exp-min-amount').value) : null;
+      const maxAmount = document.getElementById('exp-max-amount') && document.getElementById('exp-max-amount').value ? Number(document.getElementById('exp-max-amount').value) : null;
+
+      let filteredExpenses = expenses;
+      filteredExpenses = expenses.filter(exp => {
+        const searchStr = (exp.expenseNumber + ' ' + (exp.title || '') + ' ' + (exp.branch ? exp.branch.name : 'ส่วนกลาง') + ' ' + exp.category + ' ' + (exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : '') + ' ' + (exp.note || '')).toLowerCase();
+        const rowCategory = exp.category || '';
+        const rowRecordedBy = exp.recordedBy ? (exp.recordedBy._id || exp.recordedBy) : '';
+        const rowAmount = exp.amount || 0;
+        
+        let matchSearch = !query || searchStr.includes(query);
+        let matchCategory = !categoryFilter || rowCategory === categoryFilter;
+        let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
+        let matchMinAmount = minAmount === null || rowAmount >= minAmount;
+        let matchMaxAmount = maxAmount === null || rowAmount <= maxAmount;
+
+        return matchSearch && matchCategory && matchRecordedBy && matchMinAmount && matchMaxAmount;
+      });
+
+      if (filteredExpenses.length === 0) {
+        printRowsHtml = `<tr><td colspan="7" style="text-align:center; padding:2rem; border:1px solid #000; font-size:0.75rem; color:#000;">ไม่พบข้อมูลบันทึกรายจ่าย</td></tr>`;
+      } else {
+        printRowsHtml = filteredExpenses.map(exp => {
+          const dateValStr = new Date(exp.expenseDate).toLocaleDateString('th-TH');
+          const categoryThai = exp.category || 'อื่นๆ';
+          const recName = exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน';
+          grandTotalExpenses += exp.amount || 0;
+          
+          return `
+            <tr style="color:#000; border-bottom:1px solid #000;">
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;"><strong>${exp.expenseNumber}</strong><br>${dateValStr}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.title || '-'}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.branch ? exp.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:center; vertical-align:top;">${categoryThai}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:right; font-weight:700; vertical-align:top;">${(exp.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${recName}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.note || '-'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        printRowsHtml += `
+          <tr style="color:#000; font-weight:700; background:#fff; border-top:1.5px solid #000; border-bottom:2px double #000;">
+            <td colspan="4" style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:left;">รวมยอดจ่ายทั้งสิ้น</td>
+            <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:right;">${grandTotalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td colspan="2" style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:left;"></td>
+          </tr>
+        `;
+      }
+
+      previewArea.innerHTML = `
+        <div id="printable-finance-report" style="background:#fff; color:#000; padding:1.5rem; font-family:'Sarabun',sans-serif; line-height:1.4; box-sizing:border-box; width:100%;">
+          ${headerHtml}
+          
+          <div class="table-responsive-print" style="width:100%; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-family:'Sarabun';">
+              <thead>
+                <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1.5px solid #000;">
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${printRowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    if (previewArea) {
+      previewArea.innerHTML = `<div style="color:#ef4444; padding:2rem; font-family:'Sarabun';">เกิดข้อผิดพลาดในการโหลดรายงานการเงิน: ${err.message}</div>`;
+    }
+  }
+}
+
+
+function openPrintFinanceReportModal() {
+  const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
+  const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
+  
+  // Set modal card width to large for printing preview screen
+  const modalCard = document.querySelector('#app-modal .modal-card');
+  if (modalCard) {
+    modalCard.style.maxWidth = '95vw';
+    modalCard.style.width = '1450px';
+  }
+
+  // Get active values from main screen to initialize selectors
+  const branchSelect = document.getElementById('fin-branch-filter');
+  const startDateInput = document.getElementById('fin-start-date');
+  const endDateInput = document.getElementById('fin-end-date');
+  
+  const selectedBranchId = branchSelect ? branchSelect.value : '';
+  const selectedStartDate = startDateInput ? startDateInput.value : '';
+  const selectedEndDate = endDateInput ? endDateInput.value : '';
+
+  let branchOptionsHtml = '<option value="">-- ทุกสาขา --</option>';
+  if (state.masterOptions.branches) {
+    branchOptionsHtml += state.masterOptions.branches.map(b => {
+      return `<option value="${b._id}" ${selectedBranchId === b._id ? 'selected' : ''}>${b.name}</option>`;
+    }).join('');
+  }
+
+  const bodyHtml = `
+    <!-- Print Settings Bar (Hidden in Print) -->
+    <div class="no-print" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; background:#f8f9fa; border:1px solid #ddd; padding:12px; border-radius:6px; margin-bottom:1.5rem; color:#000; font-family:'Sarabun';">
+      <div style="font-weight:700; font-size:0.9rem; color:#000;">
+        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
+      </div>
+      
+      ${isAdminOrHq ? `
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
+          <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
+            ${branchOptionsHtml}
+          </select>
+        </div>
+      ` : ''}
+
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
+        <input type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">ถึงวันที่:</label>
+        <input type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
+      </div>
+    </div>
+
+    <!-- Print Stylesheet -->
+    <style>
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        @page {
+          size: landscape;
+          margin: 0.4cm;
+        }
+        #printable-finance-report {
+          width: 100% !important;
+        }
+        .table-responsive-print {
+          overflow: visible !important;
+        }
+      }
+    </style>
+
+    <!-- Preview Container (Target for updatePrintFinanceReportPreview) -->
+    <div id="printable-finance-report-container">
+      <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <div>กำลังเตรียมข้อมูลรายงาน...</div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
+  `;
+
+  openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
+  
+  // Call preview function right after opening modal to draw the initial table!
+  setTimeout(() => {
+    updatePrintFinanceReportPreview();
+  }, 100);
+}
+
+async function updatePrintFinanceReportPreview() {
+  const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
+  
+  // Show loading indicator inside the print preview area
+  const previewArea = document.getElementById('printable-finance-report-container');
+  if (previewArea) {
+    previewArea.innerHTML = `
+      <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <div>กำลังดึงข้อมูลรายงานใหม่ตามเงื่อนไขที่เลือก...</div>
+      </div>
+    `;
+  }
+
+  // Get active print values
+  const branchSelect = document.getElementById('print-branch-filter');
+  const startDateInput = document.getElementById('print-start-date');
+  const endDateInput = document.getElementById('print-end-date');
+  const searchInput = document.getElementById('fin-search-input'); // main keyword filter
+  
+  const branchId = branchSelect ? branchSelect.value : '';
+  const startDate = startDateInput ? startDateInput.value : '';
+  const endDate = endDateInput ? endDateInput.value : '';
+  const keyword = searchInput && searchInput.value ? searchInput.value : '';
+
+  const branchName = branchSelect && branchSelect.selectedIndex >= 0 ? branchSelect.options[branchSelect.selectedIndex].text : 'ทุกสาขา';
+  const paymentSelect = document.getElementById('fin-payment-filter');
+  const paymentMethod = paymentSelect && paymentSelect.value ? paymentSelect.options[paymentSelect.selectedIndex].text : 'ทุกช่องทาง';
+
+  const filterParams = {};
+  if (branchId) filterParams.branchId = branchId;
+  if (startDate) filterParams.startDate = startDate;
+  if (endDate) filterParams.endDate = endDate;
+  
+  // Keep paymentMethod and payoutStatus from main page filters for query completeness
+  const paymentSelectVal = paymentSelect ? paymentSelect.value : '';
+  if (paymentSelectVal) filterParams.paymentMethod = paymentSelectVal;
+  const payoutSelect = document.getElementById('fin-payout-filter');
+  const payoutSelectVal = payoutSelect ? payoutSelect.value : '';
+  if (payoutSelectVal) filterParams.payoutStatus = payoutSelectVal;
+
+  try {
+    const queryParams = new URLSearchParams(filterParams).toString();
+    const res = await apiRequest(`/pos/finance-report?${queryParams}`);
+    const sales = res.sales || [];
+    const expenses = res.expenses || [];
+    
+    // Cache the new data back to state caches to keep things in sync
+    state.salesCache = sales;
+    state.expensesCache = expenses;
+
+    // Filter by keyword client-side if needed
+    const query = keyword.toLowerCase().trim();
+    
+    let filteredSales = sales;
+    if (query) {
+      filteredSales = sales.filter(s => {
+        const searchStr = (
+          s.receiptNumber + ' ' + 
+          (s.branch ? s.branch.name : '') + ' ' + 
+          (s.customer ? s.customer.name : '') + ' ' + 
+          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + 
+          (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')
+        ).toLowerCase();
+        return searchStr.includes(query);
+      });
+    }
+
+    const dateRangeStr = (startDate ? `วันที่เริ่ม: ${startDate}` : '') + (endDate ? ` ถึงวันที่: ${endDate}` : '');
+
+    let printRowsHtml = '';
+    let headerHtml = '';
+
+    if (isSalesActive) {
+      headerHtml = `
+        <div style="font-family:'Sarabun'; margin-bottom:0.8rem; color:#000;">
+          <h1 style="font-size:1.25rem; font-weight:700; margin:0; font-family:'Sarabun'; text-align:left;">รายงานรายละเอียดการขาย</h1>
+          <div style="font-size:0.75rem; margin-top:0.2rem; color:#333;">
+            สาขา: ${branchName} | ช่องทางชำระเงิน: ${paymentMethod} | ${dateRangeStr ? dateRangeStr : 'ข้อมูลทั้งหมด'} ${query ? ` | คัดกรอง: "${query}"` : ''}
+          </div>
+        </div>
+      `;
+
+      let grandTotalQty = 0;
+      let grandTotalDiscount = 0;
+      let grandTotalAmount = 0;
+      let grandTotalCost = 0;
+      let grandTotalProfit = 0;
+      let grandTotalNet = 0;
+
+      let tableRows = [];
+      let itemsCount = 0;
+
+      filteredSales.forEach(s => {
+        const isVoided = s.status === 'voided';
+        const receiptNumber = s.receiptNumber || '';
+        const docNumber = receiptNumber.replace('SC-', 'RC-');
+        
+        const dateObj = new Date(s.createdAt);
+        const dateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
+        
+        const customerName = s.customer ? s.customer.name : 'ทั่วไป';
+        const customerPhone = s.customer ? s.customer.phone || '-' : '-';
+        
+        let paymentStr = '-';
+        if (s.paymentMethod === 'cash') {
+          paymentStr = 'เงินสด';
+        } else if (s.paymentMethod === 'transfer') {
+          paymentStr = 'โอนเงิน';
+        } else if (s.paymentMethod === 'credit_card') {
+          paymentStr = 'บัตรเครดิต';
+        } else if (s.paymentMethod === 'finance') {
+          const finCompany = (s.financeDetails && s.financeDetails.companyName) ? ` (${s.financeDetails.companyName})` : '';
+          paymentStr = `ซื้อสดไฟแนนซ์${finCompany}`;
+        }
+
+        (s.items || []).forEach((i, itemIdx) => {
+          itemsCount++;
+          const qty = i.quantity || 1;
+          const price = i.unitPrice || 0;
+          const discount = (itemIdx === 0 && s.discountTotal) ? s.discountTotal : 0;
+          const subtotal = (qty * price) - discount;
+          const cost = (i.costPrice || 0) * qty;
+          const profit = subtotal - cost;
+          const net = subtotal;
+
+          grandTotalQty += qty;
+          grandTotalDiscount += discount;
+          grandTotalAmount += subtotal;
+          grandTotalCost += cost;
+          grandTotalProfit += profit;
+          grandTotalNet += net;
+
+          tableRows.push(`
+            <tr style="color:#000; ${isVoided ? 'text-decoration:line-through; opacity:0.5;' : ''}">
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${receiptNumber}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${dateStr}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${docNumber}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${customerName}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${customerPhone}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${paymentStr}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${i.imei || '-'}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; font-family:'Sarabun';">${i.productName || '-'}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center; font-family:'Sarabun';">${qty.toFixed(2)}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          `);
+        });
+      });
+
+      printRowsHtml = `
+        <tr style="color:#000; font-weight:700;">
+          <td colspan="15" style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left; background:#fff;">(${itemsCount} items)</td>
+        </tr>
+        ${tableRows.length === 0 ? `<tr><td colspan="15" style="text-align:center; padding:2rem; border:1px solid #111; font-size:0.75rem; color:#000;">ไม่พบข้อมูลรายการขาย</td></tr>` : tableRows.join('')}
+        <tr style="color:#000; font-weight:700; background:#fff; border-top:1.5px solid #111; border-bottom:2px double #111;">
+          <td colspan="8" style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:left;"></td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:center;">${grandTotalQty.toFixed(2)}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;"></td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right;">${grandTotalNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>
+      `;
+
+      previewArea.innerHTML = `
+        <div id="printable-finance-report" style="background:#fff; color:#000; padding:0.5rem; font-family:'Sarabun',sans-serif; line-height:1.2; box-sizing:border-box; width:100%;">
+          ${headerHtml}
+          
+          <div class="table-responsive-print" style="width:100%; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; border:1px solid #111; font-family:'Sarabun';">
+              <thead>
+                <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1px solid #111;">
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
+                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${printRowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } else {
+      // Expenses
+      headerHtml = `
+        <div style="font-family:'Sarabun'; margin-bottom:0.8rem; color:#000;">
+          <h1 style="font-size:1.25rem; font-weight:700; margin:0; font-family:'Sarabun'; text-align:left;">รายงานสรุปรายการบันทึกรายจ่ายดำเนินงาน</h1>
+          <div style="font-size:0.75rem; margin-top:0.2rem; color:#333;">
+            สาขา: ${branchName} | ${dateRangeStr ? dateRangeStr : 'ข้อมูลทั้งหมด'} ${query ? ` | คัดกรอง: "${query}"` : ''}
+          </div>
+        </div>
+      `;
+
+      let grandTotalExpenses = 0;
+      
+      const categoryFilter = document.getElementById('exp-category-filter') ? document.getElementById('exp-category-filter').value : '';
+      const recordedByFilter = document.getElementById('exp-recorded-by-filter') ? document.getElementById('exp-recorded-by-filter').value : '';
+      const minAmount = document.getElementById('exp-min-amount') && document.getElementById('exp-min-amount').value ? Number(document.getElementById('exp-min-amount').value) : null;
+      const maxAmount = document.getElementById('exp-max-amount') && document.getElementById('exp-max-amount').value ? Number(document.getElementById('exp-max-amount').value) : null;
+
+      let filteredExpenses = expenses;
+      filteredExpenses = expenses.filter(exp => {
+        const searchStr = (exp.expenseNumber + ' ' + (exp.title || '') + ' ' + (exp.branch ? exp.branch.name : 'ส่วนกลาง') + ' ' + exp.category + ' ' + (exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : '') + ' ' + (exp.note || '')).toLowerCase();
+        const rowCategory = exp.category || '';
+        const rowRecordedBy = exp.recordedBy ? (exp.recordedBy._id || exp.recordedBy) : '';
+        const rowAmount = exp.amount || 0;
+        
+        let matchSearch = !query || searchStr.includes(query);
+        let matchCategory = !categoryFilter || rowCategory === categoryFilter;
+        let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
+        let matchMinAmount = minAmount === null || rowAmount >= minAmount;
+        let matchMaxAmount = maxAmount === null || rowAmount <= maxAmount;
+
+        return matchSearch && matchCategory && matchRecordedBy && matchMinAmount && matchMaxAmount;
+      });
+
+      if (filteredExpenses.length === 0) {
+        printRowsHtml = `<tr><td colspan="7" style="text-align:center; padding:2rem; border:1px solid #000; font-size:0.75rem; color:#000;">ไม่พบข้อมูลบันทึกรายจ่าย</td></tr>`;
+      } else {
+        printRowsHtml = filteredExpenses.map(exp => {
+          const dateValStr = new Date(exp.expenseDate).toLocaleDateString('th-TH');
+          const categoryThai = exp.category || 'อื่นๆ';
+          const recName = exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน';
+          grandTotalExpenses += exp.amount || 0;
+          
+          return `
+            <tr style="color:#000; border-bottom:1px solid #000;">
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;"><strong>${exp.expenseNumber}</strong><br>${dateValStr}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.title || '-'}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.branch ? exp.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:center; vertical-align:top;">${categoryThai}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:right; font-weight:700; vertical-align:top;">${(exp.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${recName}</td>
+              <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;">${exp.note || '-'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        printRowsHtml += `
+          <tr style="color:#000; font-weight:700; background:#fff; border-top:1.5px solid #000; border-bottom:2px double #000;">
+            <td colspan="4" style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:left;">รวมยอดจ่ายทั้งสิ้น</td>
+            <td style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:right;">${grandTotalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td colspan="2" style="padding:6px; border:1px solid #000; font-size:0.75rem; text-align:left;"></td>
+          </tr>
+        `;
+      }
+
+      previewArea.innerHTML = `
+        <div id="printable-finance-report" style="background:#fff; color:#000; padding:1.5rem; font-family:'Sarabun',sans-serif; line-height:1.4; box-sizing:border-box; width:100%;">
+          ${headerHtml}
+          
+          <div class="table-responsive-print" style="width:100%; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-family:'Sarabun';">
+              <thead>
+                <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1.5px solid #000;">
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
+                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${printRowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    if (previewArea) {
+      previewArea.innerHTML = `<div style="color:#ef4444; padding:2rem; font-family:'Sarabun';">เกิดข้อผิดพลาดในการโหลดรายงานการเงิน: ${err.message}</div>`;
+    }
+  }
+}
+
+
 function exportProductsMasterToExcel() {
   const rows = Array.from(document.querySelectorAll('.product-master-row')).map(tr => {
     const tds = tr.querySelectorAll('td');

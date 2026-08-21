@@ -164,13 +164,11 @@ body {
   left: 0;
   z-index: 100;
   overflow-y: auto;
-  scrollbar-width: none;
-  transition: scrollbar-color 0.3s ease;
+  scrollbar-width: none; /* Hide for Firefox */
 }
 
-.sidebar:hover {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+.sidebar::-webkit-scrollbar {
+  display: none; /* Hide for Chrome, Safari and Opera */
 }
 
 .sidebar-header {
@@ -189,48 +187,11 @@ body {
   flex: 1;
   padding-right: 4px;
   min-height: 0;
-  scrollbar-width: none;
-  transition: scrollbar-color 0.3s ease;
+  scrollbar-width: none; /* Hide for Firefox */
 }
 
-.sidebar-menu:hover {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
-}
-
-/* Custom Scrollbar for Sidebar & Menu */
-.sidebar::-webkit-scrollbar,
 .sidebar-menu::-webkit-scrollbar {
-  width: 5px; /* Thinner and elegant scrollbar width */
-}
-
-.sidebar::-webkit-scrollbar-track,
-.sidebar-menu::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-  transition: background 0.3s ease;
-}
-
-.sidebar::-webkit-scrollbar-thumb,
-.sidebar-menu::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 10px;
-  transition: background 0.3s ease;
-}
-
-.sidebar:hover::-webkit-scrollbar-track,
-.sidebar-menu:hover::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.sidebar:hover::-webkit-scrollbar-thumb,
-.sidebar-menu:hover::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.sidebar:hover::-webkit-scrollbar-thumb:hover,
-.sidebar-menu:hover::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary);
+  display: none; /* Hide for Chrome, Safari and Opera */
 }
 
 .nav-link {
