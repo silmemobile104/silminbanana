@@ -327,14 +327,29 @@ const getHqDashboard = async (req, res, next) => {
           colorCode = 'yellow';
         }
       } else {
-        const fallbackImeis = branchStocksMap.get(bIdStr) || [];
-        totalExpected = fallbackImeis.length;
+        const branchStocks = allStocks.filter(st => st.branch && st.branch.toString() === bIdStr);
+        totalExpected = branchStocks.length;
         totalActual = 0;
         totalVariance = totalExpected;
         hasVariance = totalExpected > 0;
         status = 'ยังไม่ได้ส่งรายงาน';
         colorCode = 'red';
-        items = [];
+        items = branchStocks.map(st => {
+          const pName = st.product ? st.product.name : (st.productName || 'สินค้าไม่ระบุชื่อ');
+          const imei = st.imei || '';
+          return {
+            product: st.product ? st.product._id : null,
+            productName: pName,
+            expectedCount: 1,
+            actualCount: 0,
+            variance: -1,
+            expectedImeis: imei ? [imei] : [],
+            scannedImeis: [],
+            missingImeis: imei ? [imei] : [],
+            unexpectedImeis: [],
+            imeiImages: []
+          };
+        });
       }
 
       return {

@@ -3692,8 +3692,8 @@ function renderHqAuditDetails() {
                       ${row.isUnexpected ? '<span style="color:#d97706; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
                     ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
                       <span style="font-family:monospace; font-weight:700; color:#e11d48; font-size:0.92rem;">${imei}</span>
-                      <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(ยังไม่ได้สแกน)</span>
-                    ` : '<span style="color:var(--text-muted); font-style:italic;">ยังไม่ได้สแกน</span>'}
+                      <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
+                    ` : '<span style="color:var(--text-muted); font-style:italic;">รอฝ่ายขายตรวจ</span>'}
                   </td>
                   <td style="font-size:0.85rem;">
                     ${row.isScanned && imei !== '-' ? `
