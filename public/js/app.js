@@ -167,6 +167,40 @@ function closeModal() {
   }
 }
 
+function showCustomConfirm(title, message, onConfirm, onCancel = null, type = 'confirm') {
+  let iconHtml = '<i class="fa-solid fa-circle-question" style="color:#0284c7;"></i>';
+  let confirmBtnStyle = 'background:#0284c7; border:none;';
+  
+  if (type === 'warning' || type === 'danger') {
+    iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="color:#e11d48;"></i>';
+    confirmBtnStyle = 'background:#e11d48; border:none;';
+  }
+  
+  const bodyHtml = `
+    <div style="padding:1.5rem 1rem; color:var(--text-main); font-family:'Sarabun'; text-align:center;">
+      <div style="font-size:3.5rem; margin-bottom:1.2rem;">
+        ${iconHtml}
+      </div>
+      <p style="font-size:0.95rem; line-height:1.6; white-space:pre-line; color:var(--text-main); font-weight:500; margin:0 auto; max-width:400px;">${message}</p>
+    </div>
+  `;
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal(); if(window.onCustomConfirmCancel) window.onCustomConfirmCancel();" style="font-weight:700; padding:0.55rem 1.4rem; font-size:0.85rem;">ยกเลิก</button>
+    <button class="btn btn-primary" id="custom-confirm-btn" onclick="closeModal(); if(window.onCustomConfirmApprove) window.onCustomConfirmApprove();" style="padding:0.55rem 1.6rem; font-weight:700; font-size:0.85rem; ${confirmBtnStyle}">ตกลง</button>
+  `;
+  
+  window.onCustomConfirmApprove = onConfirm;
+  window.onCustomConfirmCancel = onCancel;
+  
+  openModal(title, bodyHtml, footerHtml);
+  
+  const modalCard = document.querySelector('#app-modal .modal-card');
+  if (modalCard) {
+    modalCard.style.maxWidth = '480px';
+    modalCard.style.width = '90%';
+  }
+}
+
 document.getElementById('modal-close').addEventListener('click', closeModal);
 
 async function loadMasterOptions() {
@@ -4677,6 +4711,11 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                             <i class="fa-solid fa-ban"></i> ยกเลิก
                           </button>
                         </div>
+                        ${isHqOrAdmin ? `
+                          <button class="btn btn-sm" style="padding:0.25rem 0.4rem; font-size:0.73rem; width:100%; font-weight:700; background:#0891b2; color:#fff; border:none; margin-top:0.2rem;" onclick="markPurchaseOrderAsReceived('${order._id}', '${order.orderNumber}')">
+                            <i class="fa-solid fa-circle-check"></i> ปิดใบสั่งซื้อ (รับเข้าสต็อกแล้ว)
+                          </button>
+                        ` : ''}
                       </div>
                     ` : ''}
                     <button class="btn btn-secondary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-top:0.3rem; font-weight:700; width:100%;" onclick="printPurchaseOrderDoc('${order._id}')">
@@ -5138,19 +5177,23 @@ async function submitEditPurchaseOrder(orderId) {
 }
 
 async function cancelPurchaseOrderAction(orderId) {
-  if (!confirm('คุณยืนยันที่จะ "ยกเลิก" ใบสั่งซื้อนี้ใช่หรือไม่?\n\n* ระบบจะทำการ คืนวงเงินสั่งซื้อ ให้กับสาขาโดยอัตโนมัติ *')) {
-    return;
-  }
-
-  try {
-    const res = await apiRequest(`/purchase-orders/${orderId}/cancel`, 'POST');
-    if (res.success) {
-      showToast(res.message);
-      renderBranchPurchaseOrdersView();
-    }
-  } catch (err) {
-    // Handled
-  }
+  showCustomConfirm(
+    'ยืนยันยกเลิกใบสั่งซื้อ',
+    'คุณยืนยันที่จะ "ยกเลิก" ใบสั่งซื้อนี้ใช่หรือไม่?\n\n* ระบบจะทำการ คืนวงเงินสั่งซื้อ ให้กับสาขาโดยอัตโนมัติ *',
+    async () => {
+      try {
+        const res = await apiRequest(`/purchase-orders/${orderId}/cancel`, 'POST');
+        if (res.success) {
+          showToast(res.message);
+          renderBranchPurchaseOrdersView();
+        }
+      } catch (err) {
+        // Handled
+      }
+    },
+    null,
+    'warning'
+  );
 }
 
 async function openFillImeiAndReceiveModal(orderId) {
@@ -5314,6 +5357,26 @@ async function submitFillImeiAndReceive(orderId) {
   } catch (err) {
     // Handled
   }
+}
+
+async function markPurchaseOrderAsReceived(orderId, orderNumber) {
+  showCustomConfirm(
+    'ยืนยันปิดใบสั่งซื้อ',
+    `ยืนยันปิดใบสั่งซื้อ ${orderNumber}?\n\nการดำเนินการนี้จะเปลี่ยนสถานะเป็น "รับเข้าสต็อกแล้ว"\nใช้สำหรับกรณีที่สาขาได้รับสินค้าเข้าสต็อกผ่านช่องทางอื่นแล้ว`,
+    async () => {
+      try {
+        const res = await apiRequest(`/purchase-orders/${orderId}/mark-received`, 'POST');
+        if (res.success) {
+          showToast(res.message || 'ปิดใบสั่งซื้อเรียบร้อยแล้ว');
+          renderBranchPurchaseOrdersView();
+        }
+      } catch (err) {
+        // Handled by apiRequest
+      }
+    },
+    null,
+    'confirm'
+  );
 }
 
 async function printPurchaseOrderDoc(orderId) {

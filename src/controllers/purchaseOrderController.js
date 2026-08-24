@@ -521,11 +521,56 @@ const cancelPurchaseOrder = async (req, res, next) => {
   }
 };
 
+const markAsReceived = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const order = await BranchPurchaseOrder.findById(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'ไม่พบใบสั่งซื้อสินค้าที่ระบุ' });
+    }
+
+    if (order.status === 'received') {
+      return res.status(400).json({ success: false, message: 'ใบสั่งซื้อนี้มีสถานะ "รับเข้าสต็อกแล้ว" อยู่แล้ว' });
+    }
+
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'ไม่สามารถเปลี่ยนสถานะใบสั่งซื้อที่ยกเลิกแล้วได้' });
+    }
+
+    order.status = 'received';
+    order.receivedBy = req.user ? req.user._id : null;
+    order.receivedByName = req.user ? (req.user.fullName || req.user.username) : 'ผู้ดูแลระบบ';
+    order.receivedAt = new Date();
+    await order.save();
+
+    if (req.user) {
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'MARK_PO_AS_RECEIVED',
+        entity: 'BranchPurchaseOrder',
+        entityId: order._id.toString(),
+        details: { orderNumber: order.orderNumber, branchName: order.branchName, note: 'ปิดใบสั่งซื้อด้วยตนเอง (สินค้ารับเข้าสต็อกผ่านช่องทางอื่นแล้ว)' }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `ปิดใบสั่งซื้อ ${order.orderNumber} เรียบร้อย — สถานะเปลี่ยนเป็น "รับเข้าสต็อกแล้ว"`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getPurchaseOrders,
   getPurchaseOrderById,
   createPurchaseOrder,
   receivePurchaseOrder,
   updatePurchaseOrder,
-  cancelPurchaseOrder
+  cancelPurchaseOrder,
+  markAsReceived
 };
