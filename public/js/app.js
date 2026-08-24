@@ -2046,7 +2046,7 @@ function openFullTaxInvoiceModal(sale, tax) {
             </div>
           </div>
           <div style="font-size:0.8rem; color:#333;">
-            ที่อยู่: ${branch.address || ''}<br>
+            ที่อยู่: ${branch.address || '883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000'}<br>
             โทรศัพท์: ${branch.phone || ''} | เลขประจำตัวผู้เสียภาษีอากร: <strong>1930400058472</strong>
           </div>
         </div>
