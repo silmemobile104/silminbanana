@@ -2046,8 +2046,8 @@ function openFullTaxInvoiceModal(sale, tax) {
             </div>
           </div>
           <div style="font-size:0.8rem; color:#333;">
-            ที่อยู่: ${branch.address || '101 อาคารสีลมทาวเวอร์ ถนนสีลม แขวงสีลม เขตบางรัก กรุงเทพฯ 10500'}<br>
-            โทรศัพท์: ${branch.phone || '02-111-2222'} | เลขประจำตัวผู้เสียภาษีอากร: <strong>0105560000000</strong>
+            ที่อยู่: ${branch.address || ''}<br>
+            โทรศัพท์: ${branch.phone || ''} | เลขประจำตัวผู้เสียภาษีอากร: <strong>1930400058472</strong>
           </div>
         </div>
         <div style="text-align:right;">
@@ -5565,7 +5565,7 @@ async function printPurchaseOrderDoc(orderId) {
                 <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมิน บานาน่า</h2>
                 <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
                   สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000<br>
-                  เลขประจำตัวผู้เสียภาษี: 0000000000000
+                  เลขประจำตัวผู้เสียภาษี: 1930400058472
                 </p>
               </div>
             </div>
