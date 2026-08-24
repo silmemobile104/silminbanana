@@ -855,11 +855,6 @@ async function renderDashboardView() {
                   <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
                 </div>
               </div>
-
-              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:var(--text-muted);">
-                <span>ผู้ส่งรายงาน: <strong>${b.submittedBy || 'ยังไม่มีข้อมูล'}</strong></span>
-                ${b.auditId ? `<button class="btn btn-secondary btn-sm" onclick="inspectBranchAudit('${b.auditId}')"><i class="fa-solid fa-eye"></i> ตรวจสอบ</button>` : ''}
-              </div>
             </div>
           `).join('')}
         </div>
@@ -3577,6 +3572,12 @@ function renderHqAuditDetails() {
         expectedImeis.forEach(imei => {
           const isScanned = scannedSet.has(imei);
           const imgObj = imeiImages.find(img => img.imei === imei);
+          
+          const issueObj = (item.imeiIssues || []).find(iss => iss.imei === imei && iss.hasIssue);
+          const hasIssue = !!issueObj;
+          const issueRemark = issueObj ? issueObj.remark : '';
+          const reportedByName = issueObj ? (issueObj.reportedByName || '') : '';
+
           unitRows.push({
             branchId: b.branch.id,
             branchName: b.branch.name,
@@ -3586,7 +3587,10 @@ function renderHqAuditDetails() {
             isScanned,
             isUnexpected: false,
             imei,
-            imgObj
+            imgObj,
+            hasIssue,
+            issueRemark,
+            reportedByName
           });
         });
       } else {
@@ -3717,6 +3721,7 @@ function renderHqAuditDetails() {
                   </td>
                   <td>
                     <strong style="color:var(--accent-primary);">${row.productName}</strong>
+                    ${row.hasIssue ? `<div style="font-size:0.75rem; color:#d97706; font-weight:700; margin-top:0.2rem;"><i class="fa-solid fa-comment-dots"></i> หมายเหตุ: ${row.issueRemark} <span style="color:var(--text-muted); font-weight:normal; margin-left:0.3rem;">(แจ้งโดย: ${row.reportedByName || 'พนักงานสาขา'})</span></div>` : ''}
                   </td>
                   <td style="font-size:0.9rem;">
                     ${row.isScanned && imei !== '-' ? `
@@ -3724,11 +3729,15 @@ function renderHqAuditDetails() {
                       ${row.isUnexpected ? '<span style="color:#d97706; font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
                     ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
                       <span style="font-family:monospace; font-weight:700; color:#e11d48; font-size:0.92rem;">${imei}</span>
-                      <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
+                      ${row.hasIssue ? `
+                        <span class="badge badge-yellow" style="background:#f59e0b; color:#fff; font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา</span>
+                      ` : `
+                        <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
+                      `}
                     ` : '<span style="color:var(--text-muted); font-style:italic;">รอฝ่ายขายตรวจ</span>'}
                   </td>
                   <td style="font-size:0.85rem;">
-                    ${row.isScanned && imei !== '-' ? `
+                    ${(row.isScanned || row.hasIssue) && imei !== '-' ? `
                       <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
                         <div>
                           ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน</span>' :
@@ -3826,12 +3835,22 @@ function openImeiInspectionModal(imei, branchId) {
 
   let productName = 'สินค้าในสต็อก';
   let imgObj = null;
+  let hasIssue = false;
+  let issueRemark = '';
+  let reportedByName = '';
 
   if (window.hqAuditInspectionState && window.hqAuditInspectionState.items) {
-    const matchedItem = window.hqAuditInspectionState.items.find(i => i.scannedImeis.includes(imei));
+    const matchedItem = window.hqAuditInspectionState.items.find(i => (i.scannedImeis && i.scannedImeis.includes(imei)) || (i.expectedImeis && i.expectedImeis.includes(imei)));
     if (matchedItem) {
       productName = matchedItem.productName;
       imgObj = (matchedItem.imeiImages || []).find(img => img.imei === imei);
+      
+      const issueObj = (matchedItem.imeiIssues || []).find(iss => iss.imei === imei && iss.hasIssue);
+      if (issueObj) {
+        hasIssue = true;
+        issueRemark = issueObj.remark || '';
+        reportedByName = issueObj.reportedByName || '';
+      }
     }
   }
 
@@ -3874,6 +3893,17 @@ function openImeiInspectionModal(imei, branchId) {
         สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (IMEI: ${imei})
       </div>
     </div>
+
+    ${hasIssue ? `
+      <div style="background:rgba(217,119,6,0.08); border:1.5px solid #d97706; padding:0.9rem; border-radius:8px; margin-bottom:1.2rem; display:flex; gap:0.6rem; align-items:flex-start; text-align:left; font-family:'Sarabun';">
+        <div style="font-size:1.4rem; color:#d97706; margin-top:0.15rem;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div>
+          <strong style="color:#d97706; font-size:0.92rem; display:block;">แจ้งปัญหาจากพนักงานหน้าร้าน:</strong>
+          <span style="font-size:0.88rem; color:var(--text-main); line-height:1.5; margin-top:0.2rem; display:block;">${issueRemark || 'ไม่ได้ระบุหมายเหตุ'}</span>
+          <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:0.4rem; font-weight:700;"><i class="fa-solid fa-user"></i> ผู้แจ้ง: ${reportedByName || 'พนักงานสาขา'}</span>
+        </div>
+      </div>
+    ` : ''}
 
     <!-- Center Photo Display -->
     <div style="text-align:center; background:rgba(0,0,0,0.015); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid var(--border-color); display:flex; justify-content:center; align-items:center; min-height:240px;">
@@ -4065,6 +4095,7 @@ async function renderBranchAuditView() {
               const scannedImeis = item.scannedImeis || [];
               const actual = scannedImeis.length;
               const diff = actual - item.expectedCount;
+              const isScanned = item.isScanned || actual > 0;
               const photoBtn = item.photoUrl ? `
                 <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
                   <i class="fa-solid fa-image"></i>
@@ -4075,17 +4106,29 @@ async function renderBranchAuditView() {
                 <tr id="audit-row-${idx}">
                   <td>
                     <strong style="color:var(--accent-primary);">${item.productName}</strong>
+                    ${item.hasIssue ? `<div style="font-size:0.75rem; color:#ef4444; font-weight:700; margin-top:0.25rem;"><i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา: ${item.issueRemark}</div>` : ''}
                   </td>
                   ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${item.branchName || '-'}</span></td>` : ''}
                   <td>
-                    <strong style="color:#d97706; font-family:monospace; font-size:0.95rem;">${item.imei}</strong>
+                    <strong style="color:#d97706; font-family:monospace; font-size:0.95rem; display:block; margin-bottom:0.2rem;">${item.imei}</strong>
+                    ${(!isScanned && selectedBranchId !== 'all') ? `
+                      ${item.hasIssue ? `
+                        <button class="btn btn-secondary btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700;" onclick="openReportIssueModal('${item.imei}', ${idx})">
+                          <i class="fa-solid fa-pen"></i> แก้ไขหมายเหตุ
+                        </button>
+                      ` : `
+                        <button class="btn btn-warning btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700; background:#d97706; border:none; color:#fff;" onclick="openReportIssueModal('${item.imei}', ${idx})">
+                          <i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา
+                        </button>
+                      `}
+                    ` : ''}
                   </td>
                   <td><strong class="expected-val" id="expected-${idx}">${item.expectedCount}</strong></td>
                   <td style="text-align:center; vertical-align:middle;">
                     <span id="actual-val-${idx}" style="font-size:1.25rem; font-weight:800; color:var(--text-main);">${actual}</span>
                   </td>
                   <td id="variance-status-${idx}">
-                    ${diff === 0 ? `<span class="badge badge-green">สำเร็จ</span>` :
+                    ${(diff === 0 || item.hasIssue) ? `<span class="badge badge-green">สำเร็จ</span>` :
                       diff < 0 ? `<span class="badge badge-yellow">รอดำเนินการ</span>` :
                       `<span class="badge badge-red">ยอดเกิน</span>`}
                   </td>
@@ -4159,7 +4202,7 @@ function updateRowVariance(idx) {
 
   const diff = actual - expected;
 
-  if (diff === 0) {
+  if (diff === 0 || item.hasIssue) {
     statusTd.innerHTML = `<span class="badge badge-green">สำเร็จ</span>`;
   } else if (diff < 0) {
     statusTd.innerHTML = `<span class="badge badge-yellow">รอดำเนินการ</span>`;
@@ -4175,6 +4218,114 @@ function updateRowVariance(idx) {
         <i class="fa-solid fa-image"></i> ดูรูปภาพ
       </button>
     ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
+  }
+}
+
+function openReportIssueModal(imei, idx) {
+  const item = state.expectedStockCache[idx];
+  const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
+  const currentRemark = item.issueRemark || '';
+
+  const bodyHtml = `
+    <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem;">
+      <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหาไม่สามารถตรวจนับเครื่องได้
+      </div>
+      <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
+        สินค้า: ${item ? item.productName : 'สินค้าคงคลัง'}
+      </div>
+      <div style="font-size:0.83rem; font-family:monospace; color:var(--text-muted); margin-top:0.2rem;">
+        IMEI: ${imei}
+      </div>
+    </div>
+
+    <form id="report-issue-form" onsubmit="event.preventDefault(); submitReportIssue('${imei}', ${idx});">
+      <div class="form-group">
+        <label for="issue-remark-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
+          กรุณากรอกหมายเหตุ / รายละเอียดของปัญหา <span style="color:#ef4444;">*</span>
+        </label>
+        <textarea id="issue-remark-input" class="form-control" rows="4" placeholder="ระบุเหตุผล เช่น เครื่องเปิดไม่ติด, ส่งซ่อมบอร์ด, ลูกค้ายืมเครื่องทดสอบ, ป้ายบาร์โค้ดขาด ฯลฯ" required style="font-size:0.88rem; margin-top:0.4rem; font-family:'Sarabun'; color:var(--text-main); background:#fff;">${currentRemark}</textarea>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-warning" onclick="submitReportIssue('${imei}', ${idx})" style="background:#d97706; border:none; color:#fff; font-weight:700;">
+      <i class="fa-solid fa-paper-plane"></i> ยืนยันแจ้งปัญหา
+    </button>
+  `;
+
+  openModal(`แจ้งปัญหาสินค้า IMEI: ${imei}`, bodyHtml, footerHtml);
+  
+  setTimeout(() => {
+    const txtArea = document.getElementById('issue-remark-input');
+    if (txtArea) {
+      txtArea.focus();
+      txtArea.select();
+    }
+  }, 150);
+}
+
+async function submitReportIssue(imei, idx) {
+  const remarkInput = document.getElementById('issue-remark-input');
+  if (!remarkInput || !remarkInput.value.trim()) {
+    showToast('กรุณากรอกหมายเหตุ/รายละเอียดของปัญหาก่อนกดยืนยัน', 'error');
+    return;
+  }
+
+  const remark = remarkInput.value.trim();
+  const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
+  
+  const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+  const branchId = isHqUser ? state.selectedBranchAuditId : (state.user.branch ? state.user.branch._id : null);
+
+  if (!branchId || branchId === 'all') {
+    showToast('กรุณาเลือกสาขาที่ต้องการดำเนินการ', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/audit/report-issue', 'POST', {
+      auditDate,
+      branchId,
+      imei,
+      remark
+    });
+
+    if (res.success) {
+      showToast(res.message || 'บันทึกรายงานแจ้งปัญหาเรียบร้อยแล้ว');
+      
+      // Update local state cache
+      const item = state.expectedStockCache[idx];
+      if (item) {
+        item.hasIssue = true;
+        item.issueRemark = remark;
+        
+        // Add to imeiIssues inside expectedStockCache
+        item.imeiIssues = item.imeiIssues || [];
+        const existingIdx = item.imeiIssues.findIndex(i => i.imei === imei);
+        if (existingIdx >= 0) {
+          item.imeiIssues[existingIdx].hasIssue = true;
+          item.imeiIssues[existingIdx].remark = remark;
+        } else {
+          item.imeiIssues.push({ imei, hasIssue: true, remark });
+        }
+      }
+
+      closeModal();
+      
+      // Update UI row dynamically
+      updateRowVariance(idx);
+      
+      // Submit form silently to sync all audit items with backend
+      await submitBranchAuditFormSilent();
+      
+      // Re-fetch or refresh current view to guarantee sync
+      renderBranchAuditView();
+    }
+  } catch (err) {
+    // Handled
   }
 }
 
@@ -4440,13 +4591,15 @@ async function submitBranchAuditFormSilent() {
     const scannedImeis = item.scannedImeis || [];
     const actualCount = scannedImeis.length;
     const imeiImages = item.imeiImages || [];
+    const imeiIssues = item.imeiIssues || [];
 
     return {
       product: item.product,
       productName: item.productName,
       actualCount,
       scannedImeis,
-      imeiImages
+      imeiImages,
+      imeiIssues
     };
   });
 

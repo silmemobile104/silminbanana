@@ -17,5 +17,6 @@ router.get('/drive-image/:fileId', auditController.proxyDriveImage);
 router.get('/dashboard', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.getHqDashboard);
 router.post('/verify/:id', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.verifyOrRejectAudit);
 router.post('/decision', authenticateToken, authorize('admin', 'hq_stock_staff'), auditController.saveImeiDecision);
+router.post('/report-issue', authenticateToken, auditController.reportImeiIssue);
 
 module.exports = router;

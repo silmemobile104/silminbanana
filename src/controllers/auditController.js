@@ -15,6 +15,7 @@ const getBranchExpectedStock = async (req, res, next) => {
     // Collect all scanned IMEIs and uploaded photo URLs from existing daily audit for today
     const scannedImeiSet = new Set();
     const imeiImageMap = new Map();
+    const imeiIssueMap = new Map();
 
     let existingAudits = [];
     if (branchId === 'all') {
@@ -42,6 +43,17 @@ const getBranchExpectedStock = async (req, res, next) => {
               });
             }
           });
+          // Retrieve issues
+          (item.imeiIssues || []).forEach(issue => {
+            if (issue.imei && issue.hasIssue) {
+              imeiIssueMap.set(issue.imei, {
+                imei: issue.imei,
+                hasIssue: issue.hasIssue,
+                remark: issue.remark || '',
+                reportedByName: issue.reportedByName || ''
+              });
+            }
+          });
         });
       }
     });
@@ -60,6 +72,11 @@ const getBranchExpectedStock = async (req, res, next) => {
       const imgObj = imei ? imeiImageMap.get(imei) || null : null;
       const photoUrl = imgObj ? imgObj.url : null;
 
+      const issueObj = imei ? imeiIssueMap.get(imei) || null : null;
+      const hasIssue = issueObj ? issueObj.hasIssue : false;
+      const issueRemark = issueObj ? issueObj.remark : '';
+      const reportedByName = issueObj ? issueObj.reportedByName : '';
+
       return {
         stockId: st._id,
         product: st.product ? st.product._id : null,
@@ -72,7 +89,10 @@ const getBranchExpectedStock = async (req, res, next) => {
         scannedImeis: isScanned ? [imei] : [],
         isScanned,
         photoUrl,
-        imeiImages: imgObj ? [imgObj] : []
+        imeiImages: imgObj ? [imgObj] : [],
+        hasIssue,
+        issueRemark,
+        reportedByName
       };
     });
 
@@ -133,7 +153,8 @@ const submitBranchAudit = async (req, res, next) => {
           product: scanned.product,
           productName: scanned.productName,
           scannedImeis: [],
-          imeiImages: []
+          imeiImages: [],
+          imeiIssues: []
         });
       }
       const grp = aggregatedScannedMap.get(pIdStr);
@@ -145,6 +166,11 @@ const submitBranchAudit = async (req, res, next) => {
       (scanned.imeiImages || []).forEach(img => {
         if (img && img.imei && !grp.imeiImages.some(x => x.imei === img.imei)) {
           grp.imeiImages.push(img);
+        }
+      });
+      (scanned.imeiIssues || []).forEach(iss => {
+        if (iss && iss.imei && !grp.imeiIssues.some(x => x.imei === iss.imei)) {
+          grp.imeiIssues.push(iss);
         }
       });
     }
@@ -180,7 +206,8 @@ const submitBranchAudit = async (req, res, next) => {
         scannedImeis,
         missingImeis,
         unexpectedImeis,
-        imeiImages: scanned.imeiImages || []
+        imeiImages: scanned.imeiImages || [],
+        imeiIssues: scanned.imeiIssues || []
       });
     }
 
@@ -347,7 +374,8 @@ const getHqDashboard = async (req, res, next) => {
             scannedImeis: [],
             missingImeis: imei ? [imei] : [],
             unexpectedImeis: [],
-            imeiImages: []
+            imeiImages: [],
+            imeiIssues: []
           };
         });
       }
@@ -703,6 +731,116 @@ const getSystemLogs = async (req, res, next) => {
   }
 };
 
+
+const reportImeiIssue = async (req, res, next) => {
+  try {
+    const { auditDate, branchId, imei, remark } = req.body;
+    if (!auditDate || !branchId || !imei) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุ วันที่, สาขา และ IMEI' });
+    }
+
+    let audit = await DailyAudit.findOne({ auditDate, branch: branchId });
+    if (!audit) {
+      const branch = await Branch.findById(branchId);
+      audit = new DailyAudit({
+        auditDate,
+        branch: branchId,
+        submittedBy: req.user._id,
+        items: [],
+        totalExpected: 0,
+        totalActual: 0,
+        totalVariance: 0
+      });
+    }
+
+    const stockItem = await Stock.findOne({ imei }).populate('product');
+    const product = stockItem ? stockItem.product : null;
+    const productName = stockItem ? (product ? product.name : stockItem.productName) : `IMEI: ${imei}`;
+
+    let foundItem = false;
+    for (const item of audit.items) {
+      const hasImei = (item.expectedImeis && item.expectedImeis.includes(imei)) ||
+                      (item.scannedImeis && item.scannedImeis.includes(imei));
+      if (hasImei) {
+        foundItem = true;
+        item.imeiIssues = item.imeiIssues || [];
+        const existingIdx = item.imeiIssues.findIndex(i => i.imei === imei);
+        if (existingIdx >= 0) {
+          item.imeiIssues[existingIdx].hasIssue = true;
+          item.imeiIssues[existingIdx].remark = remark || '';
+          item.imeiIssues[existingIdx].reportedBy = req.user ? req.user._id : null;
+          item.imeiIssues[existingIdx].reportedByName = req.user ? (req.user.fullName || req.user.username) : 'พนักงานสาขา';
+          item.imeiIssues[existingIdx].reportedAt = new Date();
+        } else {
+          item.imeiIssues.push({
+            imei,
+            hasIssue: true,
+            remark: remark || '',
+            reportedBy: req.user ? req.user._id : null,
+            reportedByName: req.user ? (req.user.fullName || req.user.username) : 'พนักงานสาขา',
+            reportedAt: new Date()
+          });
+        }
+        break;
+      }
+    }
+
+    if (!foundItem) {
+      audit.items.push({
+        product: product ? product._id : req.user._id,
+        productName,
+        expectedCount: 1,
+        actualCount: 0,
+        variance: -1,
+        expectedImeis: [imei],
+        scannedImeis: [],
+        missingImeis: [imei],
+        unexpectedImeis: [],
+        imeiIssues: [{
+          imei,
+          hasIssue: true,
+          remark: remark || '',
+          reportedBy: req.user ? req.user._id : null,
+          reportedByName: req.user ? (req.user.fullName || req.user.username) : 'พนักงานสาขา',
+          reportedAt: new Date()
+        }]
+      });
+    }
+
+    let totalExp = 0;
+    let totalAct = 0;
+    let totalVar = 0;
+    audit.items.forEach(it => {
+      totalExp += it.expectedCount || 0;
+      totalAct += it.actualCount || 0;
+      totalVar += Math.abs(it.variance || 0);
+    });
+
+    audit.totalExpected = totalExp;
+    audit.totalActual = totalAct;
+    audit.totalVariance = totalVar;
+
+    await audit.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'REPORT_AUDIT_IMEI_ISSUE',
+      entity: 'DailyAudit',
+      entityId: audit._id.toString(),
+      details: { auditDate, imei, remark }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `บันทึกรายงานแจ้งปัญหาสำหรับ IMEI ${imei} สำเร็จ`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getSystemLogs,
   getBranchExpectedStock,
@@ -711,5 +849,6 @@ module.exports = {
   verifyOrRejectAudit,
   uploadImeiImage,
   proxyDriveImage,
-  saveImeiDecision
+  saveImeiDecision,
+  reportImeiIssue
 };
