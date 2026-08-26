@@ -723,8 +723,10 @@ const releaseStockItems = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI ที่ต้องการจ่ายออก' });
     }
 
-    // Check roles
-    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+    // Check permission from roles
+    const roleDoc = await Role.findOne({ code: req.user.role });
+    const allowedMenus = roleDoc ? roleDoc.allowedMenus : [];
+    if (req.user.role !== 'admin' && !allowedMenus.includes('release-stock')) {
       return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ทำรายการจ่ายออกสินค้า' });
     }
 
@@ -830,7 +832,9 @@ const releaseStockItems = async (req, res, next) => {
 
 const getReleasedStockHistory = async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+    const roleDoc = await Role.findOne({ code: req.user.role });
+    const allowedMenus = roleDoc ? roleDoc.allowedMenus : [];
+    if (req.user.role !== 'admin' && !allowedMenus.includes('release-stock')) {
       return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงประวัตินี้' });
     }
 
@@ -920,7 +924,9 @@ const cancelReleaseStockItem = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+    const roleDoc = await Role.findOne({ code: req.user.role });
+    const allowedMenus = roleDoc ? roleDoc.allowedMenus : [];
+    if (req.user.role !== 'admin' && !allowedMenus.includes('release-stock')) {
       return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ยกเลิกรายการจ่ายออกสินค้า' });
     }
 

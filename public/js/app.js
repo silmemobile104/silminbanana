@@ -14,7 +14,7 @@ const state = {
 
 // Role Access Matrix - Authorized Menus per Role
 const ROLE_ALLOWED_VIEWS = {
-  'admin': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees', 'roles-permissions'],
+  'admin': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'release-stock', 'master-settings', 'branches', 'employees', 'roles-permissions'],
   'hq_stock_staff': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'release-stock', 'master-settings'],
   'branch_staff': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers'],
   'technical_staff': ['dashboard', 'staff-dashboard', 'pos', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders'],

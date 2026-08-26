@@ -13,6 +13,7 @@ const SYSTEM_MENUS = [
   { key: 'purchase-orders', name: 'สั่งซื้อสินค้าลงสาขา', icon: 'fa-cart-flatbed' },
   { key: 'receipt-verification', name: 'ตรวจสอบรายการรับสินค้าเข้าสต็อก', icon: 'fa-clipboard-check' },
   { key: 'transfers', name: 'โอนย้ายสินค้าระหว่างสาขา', icon: 'fa-arrow-right-arrow-left' },
+  { key: 'release-stock', name: 'จ่ายออกสินค้า', icon: 'fa-circle-minus' },
   { key: 'master-settings', name: 'ตั้งค่าตัวเลือกสินค้า', icon: 'fa-sliders' },
   { key: 'branches', name: 'จัดการสาขา', icon: 'fa-store' },
   { key: 'employees', name: 'จัดการพนักงาน', icon: 'fa-users-gear' },
