@@ -12,6 +12,10 @@ router.delete('/receipts/:receiptId', authenticateToken, stockController.deleteG
 router.get('/my-branch', authenticateToken, stockController.getMyBranchStock);
 router.get('/branch/:branchId', authenticateToken, stockController.getBranchStock);
 router.get('/all', authenticateToken, authorize('admin', 'hq_stock_staff', 'purchase_staff'), stockController.getAllBranchStock);
+router.post('/release', authenticateToken, authorize('admin', 'hq_stock_staff'), stockController.releaseStockItems);
+router.post('/query-imeis', authenticateToken, authorize('admin', 'hq_stock_staff'), stockController.queryImeiDetails);
+router.get('/release/history', authenticateToken, authorize('admin', 'hq_stock_staff'), stockController.getReleasedStockHistory);
+router.post('/release/:id/cancel', authenticateToken, authorize('admin', 'hq_stock_staff'), stockController.cancelReleaseStockItem);
 router.put('/:id', authenticateToken, stockController.updateStock);
 
 module.exports = router;

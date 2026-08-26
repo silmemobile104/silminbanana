@@ -58,7 +58,7 @@ const stockSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['in_stock', 'transferred', 'sold', 'missing', 'in_transit'],
+    enum: ['in_stock', 'transferred', 'sold', 'missing', 'in_transit', 'released'],
     default: 'in_stock'
   },
   import_date: {
@@ -66,6 +66,25 @@ const stockSchema = new mongoose.Schema({
     default: Date.now
   },
   sold_date: {
+    type: Date,
+    default: null
+  },
+  releasedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  releasedByName: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  releaseRemark: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  releasedAt: {
     type: Date,
     default: null
   }

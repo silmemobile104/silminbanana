@@ -15,7 +15,7 @@ const state = {
 // Role Access Matrix - Authorized Menus per Role
 const ROLE_ALLOWED_VIEWS = {
   'admin': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings', 'branches', 'employees', 'roles-permissions'],
-  'hq_stock_staff': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'master-settings'],
+  'hq_stock_staff': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'release-stock', 'master-settings'],
   'branch_staff': ['dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers'],
   'technical_staff': ['dashboard', 'staff-dashboard', 'pos', 'branch-inventory', 'branch-audit', 'goods-receipt', 'purchase-orders'],
   'purchase_staff': ['dashboard', 'staff-dashboard', 'finance', 'branch-inventory', 'goods-receipt', 'purchase-orders', 'receipt-verification', 'master-settings']
@@ -24,7 +24,7 @@ const ROLE_ALLOWED_VIEWS = {
 
 const ALL_SYSTEM_MENUS = [
   'dashboard', 'staff-dashboard', 'pos', 'finance', 'branch-inventory', 'hq-audit', 'branch-audit',
-  'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers',
+  'goods-receipt', 'purchase-orders', 'receipt-verification', 'transfers', 'release-stock',
   'master-settings', 'branches', 'employees', 'roles-permissions', 'edit-branch-inventory', 'system-logs', 'sales-history', 'void-sale'
 ];
 
@@ -307,6 +307,11 @@ async function navigateTo(viewName) {
         heading.innerText = 'สินค้าในสาขา';
         subheading.innerText = 'รายการสินค้าคงคลังที่มีอยู่จริงในสาขาของคุณ';
         await renderBranchInventoryView();
+        break;
+      case 'release-stock':
+        heading.innerText = 'จ่ายออกสินค้าค้างสต็อก';
+        subheading.innerText = 'บันทึกการจ่ายออกสินค้าค้างสต็อกหรือชำรุดเพื่อเคลียร์คลังและคืนวงเงินเครดิตสาขา';
+        await renderReleaseStockView();
         break;
       case 'hq-audit':
         heading.innerText = 'แดชบอร์ดตรวจสอบสต็อก';
@@ -1190,6 +1195,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
     else if (selectedStatus === 'in_transit') statusLabel = 'ระหว่างโอนย้าย';
     else if (selectedStatus === 'transferred') statusLabel = 'โอนย้ายสำเร็จ';
     else if (selectedStatus === 'missing') statusLabel = 'สูญหาย';
+    else if (selectedStatus === 'released') statusLabel = 'จ่ายออกสินค้า';
     else if (selectedStatus === 'all') statusLabel = 'ทุกสถานะ';
 
     const canEdit = getUserAllowedMenus().includes('edit-branch-inventory');
@@ -1214,6 +1220,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               <option value="in_transit" ${selectedStatus === 'in_transit' ? 'selected' : ''}>ระหว่างโอนย้าย</option>
               <option value="transferred" ${selectedStatus === 'transferred' ? 'selected' : ''}>โอนย้ายสำเร็จ</option>
               <option value="missing" ${selectedStatus === 'missing' ? 'selected' : ''}>สูญหาย</option>
+              <option value="released" ${selectedStatus === 'released' ? 'selected' : ''}>จ่ายออกแล้ว</option>
               <option value="all" ${selectedStatus === 'all' ? 'selected' : ''}>ทุกสถานะ</option>
             </select>
           </div>
@@ -1269,6 +1276,8 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                 badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check"></i> โอนย้ายสำเร็จ</span>`;
               } else if (st.status === 'missing') {
                 badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> สูญหาย</span>`;
+              } else if (st.status === 'released') {
+                badgeHtml = `<span class="badge badge-yellow" style="background:#f59e0b; color:#fff; border:none;"><i class="fa-solid fa-circle-minus"></i> จ่ายออกแล้ว</span>`;
               } else {
                 badgeHtml = `<span class="badge badge-gray">${st.status}</span>`;
               }
@@ -1286,7 +1295,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                     ${badgeHtml}
                   </td>
                   ${canEdit ? `
-                    <td style="text-align:center;">
+                    <td style="text-align:center; white-space:nowrap;">
                       <button class="btn btn-secondary btn-sm" onclick="openEditStockModal('${st._id}')">
                         <i class="fa-solid fa-pen-to-square"></i> แก้ไข
                       </button>
@@ -9779,6 +9788,145 @@ async function submitEditStock(stockId) {
     // Handled
   }
 }
+function openSingleReleaseStockModal(imei, productName) {
+  const bodyHtml = `
+    <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
+      <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการจ่ายออกสินค้าค้างสต็อก
+      </div>
+      <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
+        สินค้า: ${productName}
+      </div>
+      <div style="font-size:0.83rem; font-family:monospace; color:var(--text-muted); margin-top:0.2rem;">
+        IMEI: ${imei}
+      </div>
+      <div style="font-size:0.82rem; color:#ef4444; font-weight:700; margin-top:0.4rem;">
+        * การจ่ายออกสินค้าจะปรับสถานะสินค้าเครื่องนี้เป็น "จ่ายออกแล้ว" และคืนวงเงินเครดิตสาขาตามราคาทุนจริง
+      </div>
+    </div>
+
+    <form id="release-single-form" onsubmit="event.preventDefault(); submitReleaseStock(['${imei}']);">
+      <div class="form-group">
+        <label for="release-remark-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
+          ระบุเหตุผล / หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span>
+        </label>
+        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง, เครื่องชำรุดเคลมเปลี่ยนเครื่อง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-warning" onclick="submitReleaseStock(['${imei}'])" style="background:#d97706; border:none; color:#fff; font-weight:700;">
+      <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกสินค้า
+    </button>
+  `;
+
+  openModal(`จ่ายออกสินค้า IMEI: ${imei}`, bodyHtml, footerHtml);
+  
+  setTimeout(() => {
+    const input = document.getElementById('release-remark-input');
+    if (input) input.focus();
+  }, 150);
+}
+
+function openBatchReleaseStockModal() {
+  const bodyHtml = `
+    <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
+      <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i> จ่ายออกสินค้าค้างสต็อกแบบกลุ่ม
+      </div>
+      <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.5;">
+        กรอกหรือวางหมายเลข IMEI ของสินค้าที่ค้างสต็อกและถึงกำหนดจ่ายออก (แยกแต่ละ IMEI ด้วยการขึ้นบรรทัดใหม่ หรือคั่นด้วยเครื่องหมายจุลภาค ,)
+      </div>
+      <div style="font-size:0.82rem; color:#ef4444; font-weight:700; margin-top:0.4rem;">
+        * การดำเนินการนี้จะคืนวงเงินเครดิตกลับไปยังสาขาตามราคาทุนจริงของเครื่องที่ตรวจพบในคลังสาขานั้นๆ
+      </div>
+    </div>
+
+    <form id="release-batch-form" onsubmit="event.preventDefault(); submitBatchReleaseStock();">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="release-imeis-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
+          หมายเลข IMEI สินค้า <span style="color:#ef4444;">*</span>
+        </label>
+        <textarea id="release-imeis-input" class="form-control" rows="6" placeholder="กรอก IMEI หนึ่งตัวต่อบรรทัด เช่น:&#10;358912345678901&#10;358912345678902" required style="font-size:0.88rem; font-family:monospace; margin-top:0.4rem; color:var(--text-main); background:#fff;"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="release-remark-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
+          ระบุเหตุผล / หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span>
+        </label>
+        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-warning" onclick="submitBatchReleaseStock()" style="background:#d97706; border:none; color:#fff; font-weight:700;">
+      <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกทั้งหมด
+    </button>
+  `;
+
+  openModal(`จ่ายออกสินค้าค้างสต็อก (แบบกลุ่ม)`, bodyHtml, footerHtml);
+  
+  setTimeout(() => {
+    const input = document.getElementById('release-imeis-input');
+    if (input) input.focus();
+  }, 150);
+}
+
+async function submitBatchReleaseStock() {
+  const imeisInput = document.getElementById('release-imeis-input');
+  if (!imeisInput || !imeisInput.value.trim()) {
+    showToast('กรุณากรอกหมายเลข IMEI อย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  const text = imeisInput.value.trim();
+  const imeis = text.split(/[\n,]/).map(im => im.trim()).filter(Boolean);
+
+  if (imeis.length === 0) {
+    showToast('ไม่พบหมายเลข IMEI ที่ถูกต้อง', 'error');
+    return;
+  }
+
+  await submitReleaseStock(imeis);
+}
+
+async function submitReleaseStock(imeis) {
+  const remarkInput = document.getElementById('release-remark-input');
+  const remarks = remarkInput ? remarkInput.value.trim() : '';
+
+  if (!remarks) {
+    showToast('กรุณากรอกหมายเหตุหรือเหตุผลการจ่ายออกสินค้า', 'error');
+    return;
+  }
+
+  try {
+    showPageLoading();
+    const res = await apiRequest('/stock/release', 'POST', {
+      imeis,
+      remarks
+    });
+
+    hidePageLoading();
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      
+      const selectEl = document.getElementById('bi-branch-select');
+      const currentBranchId = selectEl ? selectEl.value : null;
+      const statusEl = document.getElementById('bi-status-select');
+      const currentStatus = statusEl ? statusEl.value : 'in_stock';
+      
+      renderBranchInventoryView(currentBranchId, currentStatus);
+    }
+  } catch (err) {
+    hidePageLoading();
+  }
+}
+
 
 async function renderSystemLogsView() {
   const container = document.getElementById('content-container');
@@ -10273,4 +10421,525 @@ function reprintReceiptVoucher(index) {
   } else {
     showToast('ไม่พบข้อมูลบิลขายนี้ในระบบแคช กรุณารีเฟรชหน้าเว็บ', 'error');
   }
+}
+
+
+async function renderReleaseStockView(selectedBranchId = null, startDate = '', endDate = '') {
+  const container = document.getElementById('content-container');
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดระบบจ่ายออกสินค้า...</div>`;
+
+  try {
+    // Ensure master options for branches are loaded
+    if (!state.masterOptions || !state.masterOptions.branches) {
+      const initRes = await apiRequest('/pos/init-options');
+      if (initRes.success) {
+        state.masterOptions = state.masterOptions || {};
+        state.masterOptions.branches = initRes.branches || [];
+      }
+    }
+
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff'].includes((state.user ? state.user.role : 'admin')) || isHqUser;
+
+    let branchIdParam = selectedBranchId;
+    if (isAdminOrHq && branchIdParam === null) {
+      branchIdParam = 'all';
+    }
+
+    const queryParams = new URLSearchParams();
+    if (branchIdParam && branchIdParam !== 'all') {
+      queryParams.append('branchId', branchIdParam);
+    }
+    if (startDate) {
+      queryParams.append('startDate', startDate);
+    }
+    if (endDate) {
+      queryParams.append('endDate', endDate);
+    }
+
+    const res = await apiRequest(`/stock/release/history?${queryParams.toString()}`);
+    const history = res.history || [];
+
+    const totalRefunded = history.reduce((sum, item) => sum + (item.purchase_price || 0), 0);
+
+    container.innerHTML = `
+      <!-- Summary Info Cards -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1.2rem; margin-bottom:1.5rem; text-align:left;">
+        <div class="card" style="display:flex; align-items:center; gap:1rem; padding:1.2rem;">
+          <div style="background:rgba(217,119,6,0.1); color:#d97706; padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
+            <i class="fa-solid fa-circle-minus"></i>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">จำนวนที่จ่ายออกสะสม</div>
+            <div style="font-size:1.6rem; font-weight:800; color:var(--text-main); margin-top:0.2rem;">${history.length} เครื่อง</div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex; align-items:center; gap:1rem; padding:1.2rem;">
+          <div style="background:rgba(16,185,129,0.1); color:#10b981; padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
+            <i class="fa-solid fa-hand-holding-dollar"></i>
+          </div>
+          <div>
+            <div style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">คืนเครดิตกลับสาขาแล้ว</div>
+            <div style="font-size:1.6rem; font-weight:800; color:#10b981; margin-top:0.2rem;">฿${totalRefunded.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Panel Columns -->
+      <div class="grid-2col" style="gap:1.5rem; margin-bottom:1.5rem; align-items:stretch;">
+        <!-- Single Release Form Card -->
+        <div class="card" style="text-align:left; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <h3 style="font-size:1.1rem; font-weight:800; color:var(--accent-primary); margin-bottom:0.4rem; display:flex; align-items:center; gap:0.5rem;">
+              <i class="fa-solid fa-barcode"></i> จ่ายออกสินค้ารายเครื่อง
+            </h3>
+            <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.2rem;">สแกนหรือกรอกหมายเลข IMEI เพื่อทำรายการจ่ายออกเดี่ยว</p>
+            
+            <form id="release-single-dashboard-form" onsubmit="event.preventDefault(); handleDashboardSingleRelease();">
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเลข IMEI <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="db-release-imei" class="form-control" placeholder="พิมพ์หรือยิงสแกน IMEI..." required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+              </div>
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="db-release-single-remark" class="form-control" placeholder="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+              </div>
+              <button class="btn btn-warning" type="submit" style="width:100%; background:#d97706; border:none; color:#fff; font-weight:700; padding:0.6rem;">
+                <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกเครื่องเดี่ยว
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Batch Release Form Card -->
+        <div class="card" style="text-align:left;">
+          <h3 style="font-size:1.1rem; font-weight:800; color:var(--accent-primary); margin-bottom:0.4rem; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-layer-group"></i> จ่ายออกสินค้าแบบกลุ่ม
+          </h3>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.2rem;">เพิ่มช่องกรอกหมายเลข IMEI เพื่อทำรายการจ่ายออกแบบล็อต</p>
+          
+          <form id="release-batch-dashboard-form" onsubmit="event.preventDefault(); handleDashboardBatchRelease();">
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label style="font-size:0.85rem; font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมายเลข IMEI สินค้า <span style="color:#ef4444;">*</span></label>
+              <div id="batch-imei-fields-container" style="display:flex; flex-direction:column; gap:0.5rem; max-height:240px; overflow-y:auto; padding-right:5px; margin-bottom:0.6rem;">
+                <div class="batch-imei-row" style="display:flex; gap:0.5rem; align-items:center;">
+                  <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addBatchImeiField()" style="font-size:0.8rem; padding:0.35rem 0.7rem; display:inline-flex; align-items:center; gap:0.3rem; font-weight:700; background:#f3f4f6; color:#4b5563; border:1px solid #d1d5db; border-radius:6px; cursor:pointer;">
+                <i class="fa-solid fa-plus"></i> เพิ่มช่อง IMEI
+              </button>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="db-release-batch-remark" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+            </div>
+            <button class="btn btn-warning" type="submit" style="width:100%; background:#d97706; border:none; color:#fff; font-weight:700; padding:0.6rem;">
+              <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกสินค้าเป็นกลุ่ม
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- History Table Card -->
+      <div class="card" style="padding:0; overflow:hidden; text-align:left;">
+        <div style="padding:1.2rem; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-clock-rotate-left"></i> ประวัติการจ่ายออกและคืนวงเงินเครดิต</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">รายการสินค้าค้างสต็อกที่ถูกจ่ายออกเพื่อหักลบวงเงินและเคลียร์คลัง</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+            <!-- Branch Select (Only Admin/HQ) -->
+            ${isAdminOrHq ? `
+              <div style="display:flex; align-items:center; gap:0.4rem;">
+                <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">สาขา:</label>
+                <select id="release-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
+                  <option value="all" ${branchIdParam === 'all' ? 'selected' : ''}>ทุกสาขา</option>
+                  ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${branchIdParam === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
+                </select>
+              </div>
+            ` : ''}
+            
+            <!-- Date Filters -->
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ช่วงวันที่:</label>
+              <input type="date" id="release-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
+              <span style="font-size:0.82rem; color:var(--text-muted);">ถึง</span>
+              <input type="date" id="release-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
+            </div>
+
+            <button class="btn btn-secondary btn-sm" onclick="printReleasedStockReport()" style="font-weight:700; font-size:0.8rem; padding:0.35rem 0.7rem;"><i class="fa-solid fa-print"></i> พิมพ์รายงาน</button>
+            <input type="text" id="release-history-search" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า..." style="width:180px; font-size:0.82rem; padding:0.3rem 0.6rem;" onkeyup="filterReleaseHistoryTable()">
+          </div>
+        </div>
+
+        <div id="released-history-print-section">
+          <div class="table-container" style="border:none; margin:0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:50px; text-align:center;">#</th>
+                  <th>วันที่ทำรายการ</th>
+                  <th>สาขาเดิม</th>
+                  <th>หมายเลข IMEI</th>
+                  <th>รายการสินค้า</th>
+                  <th style="text-align:right;">ทุนที่ได้คืน (เครดิต)</th>
+                  <th>เหตุผล/หมายเหตุ</th>
+                  <th>ผู้ดำเนินการ</th>
+                  ${isAdminOrHq ? `<th class="no-print" style="text-align:center;">การจัดการ</th>` : ''}
+                </tr>
+              </thead>
+              <tbody id="release-history-tbody">
+                ${history.length === 0 ? `
+                  <tr>
+                    <td colspan="${isAdminOrHq ? 9 : 8}" style="text-align:center; color:var(--text-muted); padding:3rem;">
+                      <i class="fa-solid fa-clipboard-question" style="font-size:2rem; margin-bottom:0.5rem; display:block;"></i> ไม่พบประวัติการจ่ายออกสินค้าที่ตรงกับเงื่อนไขการค้นหา
+                    </td>
+                  </tr>
+                ` : ''}
+                ${history.map((h, idx) => {
+                  const dateStr = new Date(h.createdAt).toLocaleDateString('th-TH', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                  return `
+                    <tr class="release-history-row" data-search="${(h.imei + ' ' + h.productName + ' ' + h.branchName + ' ' + h.remarks + ' ' + h.username).toLowerCase()}">
+                      <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
+                      <td style="white-space:nowrap; font-size:0.83rem;">${dateStr}</td>
+                      <td><span class="badge badge-gray" style="font-weight:700;">${h.branchName || '-'}</span></td>
+                      <td><strong style="color:#d97706; font-family:monospace; font-size:0.92rem;">${h.imei}</strong></td>
+                      <td><strong>${h.productName}</strong></td>
+                      <td style="text-align:right;"><strong style="color:#10b981;">฿${(h.purchase_price || 0).toLocaleString()}</strong></td>
+                      <td style="font-size:0.85rem;">${h.remarks || '-'}</td>
+                      <td><span class="badge badge-gray">${h.username}</span></td>
+                      ${isAdminOrHq ? `
+                        <td class="no-print" style="text-align:center;">
+                          <button class="btn btn-red btn-sm" onclick="revertReleasedStock('${h.id}', '${h.imei}')" style="background:#ef4444; color:#fff; border:none; padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:4px; cursor:pointer;">
+                            <i class="fa-solid fa-rotate-left"></i> ยกเลิกจ่ายออก
+                          </button>
+                        </td>
+                      ` : ''}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดประวัติจ่ายออกสินค้า: ${err.message}</div>`;
+  }
+}
+function filterReleaseHistoryTable() {
+  const query = document.getElementById('release-history-search').value.toLowerCase().trim();
+  document.querySelectorAll('.release-history-row').forEach(row => {
+    const searchData = row.getAttribute('data-search') || '';
+    if (searchData.includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+async function handleDashboardSingleRelease() {
+  const imeiEl = document.getElementById('db-release-imei');
+  const remarkEl = document.getElementById('db-release-single-remark');
+
+  const imei = imeiEl ? imeiEl.value.trim() : '';
+  const remarks = remarkEl ? remarkEl.value.trim() : '';
+
+  if (!imei || !remarks) {
+    showToast('กรุณากรอก IMEI และหมายเหตุให้ครบถ้วน', 'error');
+    return;
+  }
+
+  await submitReleaseStock([imei]);
+}
+
+async function handleDashboardBatchRelease() {
+  const inputs = document.querySelectorAll('.db-release-batch-imei-input');
+  const remarkEl = document.getElementById('db-release-batch-remark');
+  const remarks = remarkEl ? remarkEl.value.trim() : '';
+
+  const imeis = [];
+  inputs.forEach(input => {
+    const val = input.value.trim();
+    if (val) imeis.push(val);
+  });
+
+  if (imeis.length === 0) {
+    showToast('กรุณากรอกหมายเลข IMEI อย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  if (!remarks) {
+    showToast('กรุณากรอกหมายเหตุการจ่ายออกสินค้า', 'error');
+    return;
+  }
+
+  await submitReleaseStock(imeis);
+}
+
+async function submitReleaseStock(imeis) {
+  const remarkSingleInput = document.getElementById('release-remark-input');
+  const dbSingleRemarkInput = document.getElementById('db-release-single-remark');
+  const dbBatchRemarkInput = document.getElementById('db-release-batch-remark');
+
+  let remarks = '';
+  if (remarkSingleInput && remarkSingleInput.value.trim()) {
+    remarks = remarkSingleInput.value.trim();
+  } else if (dbSingleRemarkInput && dbSingleRemarkInput.value.trim()) {
+    remarks = dbSingleRemarkInput.value.trim();
+  } else if (dbBatchRemarkInput && dbBatchRemarkInput.value.trim()) {
+    remarks = dbBatchRemarkInput.value.trim();
+  }
+
+  if (!remarks) {
+    showToast('กรุณากรอกหมายเหตุหรือเหตุผลการจ่ายออกสินค้า', 'error');
+    return;
+  }
+
+  try {
+    showPageLoading();
+    const verifyRes = await apiRequest('/stock/query-imeis', 'POST', { imeis });
+    hidePageLoading();
+
+    if (!verifyRes.success || !verifyRes.items || verifyRes.items.length === 0) {
+      showToast('ไม่พบหมายเลข IMEI ที่พร้อมขายตามระบุในคลังสินค้า', 'error');
+      return;
+    }
+
+    const items = verifyRes.items;
+    const totalCost = items.reduce((sum, item) => sum + (item.purchase_price || 0), 0);
+    const missingCount = imeis.length - items.length;
+
+    const previewBodyHtml = `
+      <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
+        <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
+          <i class="fa-solid fa-triangle-exclamation"></i> ตรวจสอบข้อมูลสินค้าก่อนยืนยันจ่ายออก
+        </div>
+        <div style="font-size:0.83rem; color:var(--text-muted);">
+          พบรายการสินค้าพร้อมขายตรงตามระบบจำนวน Host ${items.length} เครื่อง ยอดรวมคืนเครดิต <strong>฿${totalCost.toLocaleString()}</strong>
+        </div>
+      </div>
+
+      <div class="table-container" style="max-height: 220px; overflow-y: auto; margin-bottom: 1.2rem; border: 1px solid var(--border-color); border-radius: 6px; text-align:left;">
+        <table class="data-table" style="font-size:0.82rem; margin:0; width:100%;">
+          <thead>
+            <tr>
+              <th>หมายเลข IMEI</th>
+              <th>รายการสินค้า</th>
+              <th>สาขาเดิม</th>
+              <th style="text-align:right;">ราคาทุนคืน</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td><strong style="font-family:monospace; color:#d97706;">${item.imei}</strong></td>
+                <td><strong>${item.productName}</strong></td>
+                <td><span class="badge badge-gray">${item.branchName}</span></td>
+                <td style="text-align:right;"><strong style="color:#10b981;">฿${item.purchase_price.toLocaleString()}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      ${missingCount > 0 ? `
+        <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); padding:0.8rem; border-radius:8px; margin-bottom:1.2rem; font-size:0.82rem; color:#ef4444; text-align:left; line-height:1.4;">
+          <i class="fa-solid fa-circle-exclamation"></i> <strong>คำเตือน:</strong> ไม่พบข้อมูลสินค้าพร้อมขายในระบบจำนวน ${missingCount} เครื่อง (รายการเหล่านี้จะไม่ถูกดำเนินการจ่ายออก)
+        </div>
+      ` : ''}
+
+      <div style="text-align:left; font-size:0.88rem; color:var(--text-main); margin-bottom:0.5rem;">
+        หมายเหตุการจ่ายออก: <strong style="color:#d97706;">${remarks}</strong>
+      </div>
+    `;
+
+    const previewFooterHtml = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-warning" id="btn-execute-release" style="background:#d97706; border:none; color:#fff; font-weight:700;">
+        <i class="fa-solid fa-circle-minus"></i> ยืนยันทำรายการจ่ายออก
+      </button>
+    `;
+
+    openModal('📊 ยืนยันรายการจ่ายออกสินค้า', previewBodyHtml, previewFooterHtml);
+
+    document.getElementById('btn-execute-release').addEventListener('click', async () => {
+      try {
+        closeModal();
+        showPageLoading();
+        
+        const verifiedImeis = items.map(it => it.imei);
+        const res = await apiRequest('/stock/release', 'POST', {
+          imeis: verifiedImeis,
+          remarks
+        });
+
+        hidePageLoading();
+
+        if (res.success) {
+          showToast(res.message);
+          
+          const dbSingleImei = document.getElementById('db-release-imei');
+          if (dbSingleImei) dbSingleImei.value = '';
+          const dbSingleRemark = document.getElementById('db-release-single-remark');
+          if (dbSingleRemark) dbSingleRemark.value = '';
+
+          const dbBatchImeisContainer = document.getElementById('batch-imei-fields-container');
+          if (dbBatchImeisContainer) {
+            dbBatchImeisContainer.innerHTML = `
+              <div class="batch-imei-row" style="display:flex; gap:0.5rem; align-items:center;">
+                <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            `;
+          }
+          const dbBatchRemark = document.getElementById('db-release-batch-remark');
+          if (dbBatchRemark) dbBatchRemark.value = '';
+
+          renderReleaseStockView();
+        }
+      } catch (err) {
+        hidePageLoading();
+      }
+    });
+
+  } catch (err) {
+    hidePageLoading();
+  }
+}
+
+function addBatchImeiField() {
+  const container = document.getElementById('batch-imei-fields-container');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'batch-imei-row';
+  div.style.display = 'flex';
+  div.style.gap = '0.5rem';
+  div.style.alignItems = 'center';
+  div.innerHTML = `
+    <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+    <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  
+  const inputs = div.getElementsByTagName('input');
+  if (inputs.length > 0) inputs[0].focus();
+}
+
+function removeBatchImeiField(button) {
+  const container = document.getElementById('batch-imei-fields-container');
+  if (!container) return;
+  const row = button.closest('.batch-imei-row');
+  
+  const rows = container.querySelectorAll('.batch-imei-row');
+  if (rows.length <= 1) {
+    const input = row.querySelector('input');
+    if (input) input.value = '';
+    showToast('ต้องมีช่องกรอกหมายเลข IMEI อย่างน้อย 1 ช่อง', 'warning');
+    return;
+  }
+  
+  row.remove();
+}
+
+function handleBatchImeiKeydown(event, input) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    if (input.value.trim() !== '') {
+      addBatchImeiField();
+    } else {
+      showToast('กรุณากรอกเลข IMEI ก่อนเพิ่มช่องใหม่', 'warning');
+    }
+  }
+}
+
+function revertReleasedStock(stockId, imei) {
+  showCustomConfirm(
+    'ยืนยันยกเลิกการจ่ายออก',
+    `คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการจ่ายออกของเครื่อง IMEI: ${imei}? การยกเลิกจะคืนสินค้ากลับเข้าสต็อกพร้อมขาย และหักวงเงินเครดิตสาขาต้นทางกลับตามเดิม`,
+    async () => {
+      try {
+        showPageLoading();
+        const res = await apiRequest(`/stock/release/${stockId}/cancel`, 'POST');
+        hidePageLoading();
+        if (res.success) {
+          showToast(res.message);
+          renderReleaseStockView();
+        }
+      } catch (err) {
+        hidePageLoading();
+      }
+    },
+    null,
+    'danger'
+  );
+}
+
+function printReleasedStockReport() {
+  const printContent = document.getElementById('released-history-print-section');
+  if (!printContent) return;
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html>
+      <head>
+        <title>รายงานสรุปรายการสินค้าจ่ายออกค้างสต็อก</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page { size: landscape; }
+          body { font-family: 'Sarabun', sans-serif; padding: 25px; color: #1f2937; line-height: 1.5; }
+          h2 { margin-bottom: 5px; font-weight: 800; font-size: 1.45rem; color: #1e3a8a; }
+          p { font-size: 0.85rem; color: #4b5563; margin-top: 0; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.82rem; }
+          th { background-color: #f3f4f6; color: #374151; font-weight: 700; border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+          td { border: 1px solid #e5e7eb; padding: 10px; color: #4b5563; }
+          strong { color: #111827; }
+          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: #e5e7eb; color: #374151; }
+          .text-right { text-align: right; }
+          .no-print { display: none !important; }
+          .footer { margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 0.78rem; text-align: right; color: #9ca3af; }
+        </style>
+      </head>
+      <body>
+        <h2>รายงานสรุปรายการสินค้าจ่ายออกค้างสต็อก</h2>
+        <p>พิมพ์รายงานเมื่อวันที่: ${new Date().toLocaleDateString('th-TH')} ${new Date().toLocaleTimeString('th-TH')}</p>
+        
+        ${printContent.innerHTML}
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function filterReleaseStockHistory() {
+  const branchEl = document.getElementById('release-branch-select');
+  const startEl = document.getElementById('release-start-date');
+  const endEl = document.getElementById('release-end-date');
+
+  const branchId = branchEl ? branchEl.value : 'all';
+  const startDate = startEl ? startEl.value : '';
+  const endDate = endEl ? endEl.value : '';
+
+  renderReleaseStockView(branchId, startDate, endDate);
 }

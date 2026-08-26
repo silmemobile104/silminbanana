@@ -715,6 +715,275 @@ const updateStock = async (req, res, next) => {
   }
 };
 
+const releaseStockItems = async (req, res, next) => {
+  try {
+    const { imeis, remarks } = req.body;
+
+    if (!Array.isArray(imeis) || imeis.length === 0) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI ที่ต้องการจ่ายออก' });
+    }
+
+    // Check roles
+    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+      return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ทำรายการจ่ายออกสินค้า' });
+    }
+
+    const cleanImeis = imeis.map(im => String(im).trim()).filter(Boolean);
+    if (cleanImeis.length === 0) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI ที่ถูกต้อง' });
+    }
+
+    const stocks = await Stock.find({ imei: { $in: cleanImeis }, status: 'in_stock' }).populate('branch');
+    
+    if (stocks.length === 0) {
+      return res.status(404).json({ success: false, message: 'ไม่พบสินค้าในสต็อกที่มีหมายเลข IMEI ตามที่ระบุ หรือไม่ได้อยู่ในสถานะพร้อมขาย' });
+    }
+
+    const results = [];
+    let releasedCount = 0;
+
+    // Group by branch to minimize save calls and database roundtrips
+    const branchAdjustmentMap = new Map();
+
+    for (const stock of stocks) {
+      stock.status = 'released';
+      stock.releasedBy = req.user._id;
+      stock.releasedByName = req.user.fullName || req.user.username;
+      stock.releaseRemark = remarks || '';
+      stock.releasedAt = new Date();
+      await stock.save();
+
+      const branch = stock.branch;
+      if (branch) {
+        const bIdStr = branch._id.toString();
+        if (!branchAdjustmentMap.has(bIdStr)) {
+          branchAdjustmentMap.set(bIdStr, {
+            branchDoc: branch,
+            refundAmount: 0
+          });
+        }
+        branchAdjustmentMap.get(bIdStr).refundAmount += (stock.purchase_price || 0);
+      }
+
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'RELEASE_STOCK_ITEM',
+        entity: 'Stock',
+        entityId: stock._id.toString(),
+        details: {
+          imei: stock.imei,
+          productName: stock.productName,
+          purchase_price: stock.purchase_price,
+          branchName: branch ? branch.name : 'ไม่ระบุ',
+          remarks: remarks || ''
+        }
+      });
+
+      releasedCount++;
+      results.push({ imei: stock.imei, success: true, productName: stock.productName });
+    }
+
+    // Apply credit refunds to branches
+    for (const adj of branchAdjustmentMap.values()) {
+      const { branchDoc, refundAmount } = adj;
+      const oldUsed = branchDoc.usedCredit || 0;
+      branchDoc.usedCredit = Math.max(0, oldUsed - refundAmount);
+      await branchDoc.save();
+
+      // Log branch credit adjustment
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'REFUND_BRANCH_CREDIT_ON_RELEASE',
+        entity: 'Branch',
+        entityId: branchDoc._id.toString(),
+        details: {
+          branchName: branchDoc.name,
+          refundAmount,
+          oldUsedCredit: oldUsed,
+          newUsedCredit: branchDoc.usedCredit
+        }
+      });
+    }
+
+    // Find any IMEIs that were not found/released
+    const foundImeis = new Set(stocks.map(s => s.imei));
+    const missingImeis = cleanImeis.filter(im => !foundImeis.has(im));
+    missingImeis.forEach(im => {
+      results.push({ imei: im, success: false, reason: 'ไม่พบสินค้าพร้อมขายในระบบ' });
+    });
+
+    res.json({
+      success: true,
+      message: `จ่ายออกสินค้าสำเร็จ ${releasedCount} รายการ และคืนวงเงินเครดิตสาขาเรียบร้อยแล้ว`,
+      releasedCount,
+      failedCount: missingImeis.length,
+      results
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getReleasedStockHistory = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+      return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงประวัตินี้' });
+    }
+
+    const { branchId, startDate, endDate } = req.query;
+    const query = { status: 'released' };
+
+    if (branchId && branchId !== 'all') {
+      query.branch = branchId;
+    }
+
+    if (startDate || endDate) {
+      const dateQuery = {};
+      if (startDate) {
+        dateQuery.$gte = new Date(startDate + 'T00:00:00.000Z');
+      }
+      if (endDate) {
+        dateQuery.$lte = new Date(endDate + 'T23:59:59.999Z');
+      }
+      query.$or = [
+        { releasedAt: dateQuery },
+        { releasedAt: null, updatedAt: dateQuery }
+      ];
+    }
+
+    const stocks = await Stock.find(query)
+      .populate('branch', 'name code')
+      .sort({ releasedAt: -1, updatedAt: -1 });
+
+    const logs = await AuditLog.find({ action: 'RELEASE_STOCK_ITEM' });
+    const logMap = new Map();
+    logs.forEach(l => {
+      if (l.details && l.details.imei) {
+        logMap.set(l.details.imei, l);
+      }
+    });
+
+    res.json({
+      success: true,
+      history: stocks.map(st => {
+        const matchedLog = logMap.get(st.imei);
+        const remark = st.releaseRemark || (matchedLog && matchedLog.details ? matchedLog.details.remarks : '') || '';
+        const operatorName = st.releasedByName || (matchedLog ? matchedLog.username : '') || 'ไม่ระบุ';
+        const dateCreated = st.releasedAt || (matchedLog ? matchedLog.createdAt : st.updatedAt);
+        
+        return {
+          id: st._id,
+          username: operatorName,
+          imei: st.imei,
+          productName: st.productName,
+          purchase_price: st.purchase_price || 0,
+          branchName: st.branch ? st.branch.name : 'ไม่ระบุ',
+          remarks: remark,
+          createdAt: dateCreated
+        };
+      })
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const queryImeiDetails = async (req, res, next) => {
+  try {
+    const { imeis } = req.body;
+    if (!Array.isArray(imeis) || imeis.length === 0) {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุหมายเลข IMEI ที่ต้องการตรวจสอบ' });
+    }
+    const cleanImeis = imeis.map(im => String(im).trim()).filter(Boolean);
+    const stocks = await Stock.find({ imei: { $in: cleanImeis }, status: 'in_stock' }).populate('branch');
+    
+    res.json({
+      success: true,
+      items: stocks.map(st => ({
+        imei: st.imei,
+        productName: st.productName,
+        branchName: st.branch ? st.branch.name : 'ไม่ระบุ',
+        purchase_price: st.purchase_price || 0,
+        selling_price: st.selling_price || 0
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const cancelReleaseStockItem = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role !== 'admin' && req.user.role !== 'hq_stock_staff') {
+      return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ยกเลิกรายการจ่ายออกสินค้า' });
+    }
+
+    const stock = await Stock.findById(id).populate('branch');
+    if (!stock) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการสินค้าที่ระบุ' });
+    }
+
+    if (stock.status !== 'released') {
+      return res.status(400).json({ success: false, message: 'สินค้านี้ไม่ได้อยู่ในสถานะจ่ายออก' });
+    }
+
+    const branch = stock.branch;
+    if (branch) {
+      branch.usedCredit = (branch.usedCredit || 0) + (stock.purchase_price || 0);
+      await branch.save();
+      
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'DEDUCT_BRANCH_CREDIT_ON_REVERT_RELEASE',
+        entity: 'Branch',
+        entityId: branch._id.toString(),
+        details: {
+          branchName: branch.name,
+          deductedAmount: stock.purchase_price,
+          newUsedCredit: branch.usedCredit
+        }
+      });
+    }
+
+    stock.status = 'in_stock';
+    stock.releasedBy = null;
+    stock.releasedByName = '';
+    stock.releaseRemark = '';
+    stock.releasedAt = null;
+    await stock.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'CANCEL_RELEASE_STOCK_ITEM',
+      entity: 'Stock',
+      entityId: stock._id.toString(),
+      details: {
+        imei: stock.imei,
+        productName: stock.productName,
+        purchase_price: stock.purchase_price,
+        branchName: branch ? branch.name : 'ไม่ระบุ'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `ยกเลิกการจ่ายออกเครื่อง IMEI ${stock.imei} สำเร็จ และหักวงเงินเครดิตของสาขา ${branch ? branch.name : ''} กลับตามเดิมเรียบร้อย`
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   updateStock,
   receiveStock,
@@ -725,5 +994,9 @@ module.exports = {
   deleteGoodsReceipt,
   getMyBranchStock,
   getBranchStock,
-  getAllBranchStock
+  getAllBranchStock,
+  releaseStockItems,
+  getReleasedStockHistory,
+  queryImeiDetails,
+  cancelReleaseStockItem
 };
