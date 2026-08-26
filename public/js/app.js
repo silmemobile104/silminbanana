@@ -230,6 +230,102 @@ async function loadMasterOptions() {
 }
 
 // Apply Role-Based Sidebar Navigation Visibility
+async function updateReceiptVerificationBadge() {
+  try {
+    if (!state.token) return;
+
+    const res = await apiRequest('/stock/receipts');
+    const receipts = res.receipts || [];
+    const pendingCount = receipts.filter(r => r.status === 'pending_pricing').length;
+
+    const navLink = document.querySelector('.sidebar-menu a[data-view="receipt-verification"]');
+    if (navLink) {
+      let badge = navLink.querySelector('.menu-notification-badge');
+      if (pendingCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'menu-notification-badge';
+          badge.style.display = 'inline-flex';
+          badge.style.alignItems = 'center';
+          badge.style.justifyContent = 'center';
+          badge.style.background = '#ef4444';
+          badge.style.color = '#ffffff';
+          badge.style.fontSize = '0.72rem';
+          badge.style.fontWeight = '800';
+          badge.style.borderRadius = '20px';
+          badge.style.minWidth = '18px';
+          badge.style.height = '18px';
+          badge.style.padding = '0 6px';
+          badge.style.marginLeft = '8px';
+          badge.style.verticalAlign = 'middle';
+          badge.style.lineHeight = '1';
+          navLink.appendChild(badge);
+        }
+        badge.innerText = pendingCount;
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+  } catch (err) {
+    console.error('Error updating receipt verification badge:', err);
+  }
+}
+
+async function updateGoodsReceiptBadge() {
+  try {
+    if (!state.token || !state.user) return;
+
+    const poRes = await apiRequest('/purchase-orders');
+    if (!poRes.success) return;
+
+    let pendingOrders = (poRes.orders || []).filter(o => o.status === 'pending_imei');
+
+    const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
+    const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes(state.user.role) || isHqUser;
+
+    if (!isAdminOrHq && state.user.branch) {
+      const userBranchId = String(state.user.branch._id || state.user.branch);
+      pendingOrders = pendingOrders.filter(o => {
+        const oBranchId = o.branch ? String(o.branch._id || o.branch) : '';
+        return oBranchId === userBranchId;
+      });
+    }
+
+    const pendingCount = pendingOrders.length;
+
+    const navLink = document.querySelector('.sidebar-menu a[data-view="goods-receipt"]');
+    if (navLink) {
+      let badge = navLink.querySelector('.menu-notification-badge');
+      if (pendingCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'menu-notification-badge';
+          badge.style.display = 'inline-flex';
+          badge.style.alignItems = 'center';
+          badge.style.justifyContent = 'center';
+          badge.style.background = '#ef4444';
+          badge.style.color = '#ffffff';
+          badge.style.fontSize = '0.72rem';
+          badge.style.fontWeight = '800';
+          badge.style.borderRadius = '20px';
+          badge.style.minWidth = '18px';
+          badge.style.height = '18px';
+          badge.style.padding = '0 6px';
+          badge.style.marginLeft = '8px';
+          badge.style.verticalAlign = 'middle';
+          badge.style.lineHeight = '1';
+          navLink.appendChild(badge);
+        }
+        badge.innerText = pendingCount;
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+  } catch (err) {
+    console.error('Error updating goods receipt badge:', err);
+  }
+}
+
 function updateSidebarMenuByRole(userRole) {
   const allowedViews = getUserAllowedMenus(userRole);
   document.querySelectorAll('.sidebar-menu li').forEach(li => {
@@ -243,6 +339,8 @@ function updateSidebarMenuByRole(userRole) {
       }
     }
   });
+  updateReceiptVerificationBadge();
+  updateGoodsReceiptBadge();
 }
 
 // Client Router & View Switcher
@@ -435,6 +533,15 @@ function initAppSession() {
   });
 
   loadMasterOptions();
+
+  // Refresh receipt and goods receipt badges every 30 seconds
+  if (window.receiptBadgeInterval) clearInterval(window.receiptBadgeInterval);
+  window.receiptBadgeInterval = setInterval(() => {
+    updateReceiptVerificationBadge();
+    updateGoodsReceiptBadge();
+  }, 30000);
+  updateReceiptVerificationBadge();
+  updateGoodsReceiptBadge();
 
   const allowedViews = ROLE_ALLOWED_VIEWS[(state.user ? state.user.role : 'admin')] || ['dashboard'];
   navigateTo(allowedViews[0]);
@@ -5756,6 +5863,7 @@ async function renderGoodsReceiptView() {
           });
         }
       }
+      updateGoodsReceiptBadge();
     } catch (poErr) {
       console.warn('Unable to load purchase orders for goods-receipt view:', poErr);
     }
@@ -6647,6 +6755,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
     const res = await apiRequest(`/stock/receipts`);
     const receipts = res.receipts || [];
     state.pendingReceiptsCache = receipts;
+    updateReceiptVerificationBadge();
 
     const isHqOrPurchasing = true;
 
@@ -6757,10 +6866,10 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                   <td>${r.selling_price ? '<strong style="color:#34d399;">฿' + r.selling_price.toLocaleString() + '</strong>' : '<span style="color:#fbbf24;">ยังไม่ได้ตั้ง</span>'}</td>
                   <td style="text-align:center;">
                     ${isPending ? `
-                      <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา & ยืนยัน</span><br>
+                      <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา</span><br>
                       ${isHqOrPurchasing ? `
                         <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', ${r.purchase_price || 0}, ${r.selling_price || 0})">
-                          <i class="fa-solid fa-check"></i> ใส่ราคา & ยืนยัน
+                          <i class="fa-solid fa-check"></i> ใส่ราคา
                         </button>
                       ` : ''}
                     ` : `
@@ -6955,9 +7064,67 @@ async function submitBatchConfirmReceipt() {
   }
 }
 
-function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchasePrice, sellingPrice) {
+function handleModalPoChange(receiptId) {
+  const poSelect = document.getElementById('cr-po-select');
+  if (!poSelect) return;
+  const poId = poSelect.value;
+  
+  const pPriceInput = document.getElementById('cr-pprice');
+  if (!poId) {
+    // Reset or keep empty if desired
+    return;
+  }
+
+  const receipt = (state.pendingReceiptsCache || []).find(r => r._id === receiptId);
+  if (!receipt) return;
+  const { brand, model, capacity, color } = receipt.productInfo;
+
+  const pendingPos = window.currentModalPendingPos || [];
+  const selectedPo = pendingPos.find(po => po._id === poId);
+  if (!selectedPo) return;
+
+  const matchedItem = (selectedPo.items || []).find(item => 
+    (item.brand || '').trim().toLowerCase() === (brand || '').trim().toLowerCase() && 
+    (item.model || '').trim().toLowerCase() === (model || '').trim().toLowerCase() && 
+    (item.capacity || '').trim().toLowerCase() === (capacity || '').trim().toLowerCase() && 
+    (item.color || '').trim().toLowerCase() === (color || '').trim().toLowerCase() &&
+    (item.imeis || []).length < (item.quantity || 0)
+  );
+
+  if (matchedItem) {
+    if (pPriceInput) {
+      pPriceInput.value = matchedItem.unitPrice;
+      showToast(`จับคู่สำเร็จ: โหลดราคาทุน ฿${matchedItem.unitPrice.toLocaleString()} จากใบสั่งซื้อแล้ว`, 'success');
+    }
+  } else {
+    showToast(`ไม่พบสเปกค้างรับของรุ่นนี้ในใบสั่งซื้อที่เลือก`, 'warning');
+  }
+}
+
+async function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchasePrice, sellingPrice) {
   const pPriceVal = (purchasePrice && purchasePrice > 0) ? purchasePrice : '';
   const sPriceVal = (sellingPrice && sellingPrice > 0) ? sellingPrice : '';
+
+  const receipt = (state.pendingReceiptsCache || []).find(r => r._id === receiptId);
+  const branchId = receipt && receipt.branch ? (receipt.branch._id || receipt.branch) : '';
+
+  let poOptionsHtml = '<option value="">-- ไม่เชื่อมโยง (เพิ่มนอกใบสั่งซื้อทั่วไป) --</option>';
+  let pendingPos = [];
+
+  if (branchId) {
+    try {
+      const poRes = await apiRequest(`/purchase-orders?branchId=${branchId}&status=pending_imei`);
+      if (poRes.success) {
+        pendingPos = poRes.orders || [];
+        window.currentModalPendingPos = pendingPos;
+        pendingPos.forEach(po => {
+          poOptionsHtml += `<option value="${po._id}">${po.orderNumber} (ยอดรวม ฿${(po.totalAmount || 0).toLocaleString()})</option>`;
+        });
+      }
+    } catch (err) {
+      console.warn('Unable to load pending POs for matching:', err);
+    }
+  }
 
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
@@ -6970,6 +7137,20 @@ function openConfirmReceiptModal(receiptId, receiptNumber, productName, purchase
     </div>
 
     <form id="confirm-receipt-form">
+      ${pendingPos.length > 0 ? `
+        <div class="form-group" style="margin-bottom:1.2rem;">
+          <label for="cr-po-select" style="font-weight:700; color:var(--accent-gold); display:block; margin-bottom:0.3rem;">
+            <i class="fa-solid fa-link"></i> เชื่อมโยงใบสั่งซื้อค้างส่ง (Optional)
+          </label>
+          <select id="cr-po-select" class="form-select" onchange="handleModalPoChange('${receiptId}')">
+            ${poOptionsHtml}
+          </select>
+          <small class="form-text text-muted" style="font-size:0.75rem; display:block; margin-top:0.25rem;">
+            ระบุใบสั่งซื้อเพื่อนำ IMEI ไปผูกและปิดใบสั่งซื้ออัติโนมัติ พร้อมอ้างอิงราคาทุนตามใบสั่งซื้อ
+          </small>
+        </div>
+      ` : ''}
+
       <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="cr-pprice">กำหนดราคาทุน (บาท)</label>
@@ -7001,6 +7182,9 @@ async function submitConfirmReceipt(receiptId) {
   const selling_price = document.getElementById('cr-sprice').value;
   const remarks = document.getElementById('cr-remarks').value;
 
+  const poSelect = document.getElementById('cr-po-select');
+  const purchaseOrderId = poSelect ? poSelect.value : '';
+
   if (purchase_price === '' || selling_price === '') {
     showToast('กรุณาระบุทั้งราคาทุนและราคาขาย', 'error');
     return;
@@ -7010,7 +7194,8 @@ async function submitConfirmReceipt(receiptId) {
     const res = await apiRequest(`/stock/receipts/${receiptId}/confirm`, 'PUT', {
       purchase_price: Number(purchase_price),
       selling_price: Number(selling_price),
-      remarks
+      remarks,
+      purchaseOrderId: purchaseOrderId || undefined
     });
 
     if (res.success) {

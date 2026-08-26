@@ -4,6 +4,7 @@ const Branch = require('../models/Branch');
 const GoodsReceipt = require('../models/GoodsReceipt');
 const AuditLog = require('../models/AuditLog');
 const Role = require('../models/Role');
+const BranchPurchaseOrder = require('../models/BranchPurchaseOrder');
 
 // Helper to generate Full Product Name
 function generateAutoName(brand = '', model = '', capacity = '', color = '') {
@@ -212,7 +213,7 @@ const getGoodsReceipts = async (req, res, next) => {
 const confirmGoodsReceipt = async (req, res, next) => {
   try {
     const { receiptId } = req.params;
-    const { purchase_price, selling_price, remarks } = req.body;
+    const { purchase_price, selling_price, remarks, purchaseOrderId } = req.body;
 
     if (purchase_price === undefined || selling_price === undefined || Number(purchase_price) < 0 || Number(selling_price) < 0) {
       return res.status(400).json({ success: false, message: 'กรุณาระบุราคาทุนและราคาขายให้ถูกต้อง' });
@@ -230,6 +231,74 @@ const confirmGoodsReceipt = async (req, res, next) => {
     const { name, brand, model, capacity, color, category } = receipt.productInfo;
     const pPrice = Number(purchase_price);
     const sPrice = Number(selling_price);
+
+    let linkedPoInfo = null;
+
+    if (purchaseOrderId) {
+      const order = await BranchPurchaseOrder.findById(purchaseOrderId);
+      if (!order) {
+        return res.status(404).json({ success: false, message: 'ไม่พบใบสั่งซื้อสินค้าที่ระบุเพื่อเชื่อมโยง' });
+      }
+      if (order.status === 'received') {
+        return res.status(400).json({ success: false, message: 'ใบสั่งซื้อที่เลือกถูกรับเข้าคลังเรียบร้อยแล้ว ไม่สามารถเชื่อมโยงเพิ่มได้' });
+      }
+      if (order.status === 'cancelled') {
+        return res.status(400).json({ success: false, message: 'ใบสั่งซื้อที่เลือกถูกยกเลิกไปแล้ว ไม่สามารถเชื่อมโยงได้' });
+      }
+
+      // Match item specs
+      const poItem = order.items.find(item => 
+        item.brand === brand.trim() && 
+        item.model === model.trim() && 
+        item.capacity === (capacity || '').trim() && 
+        item.color === (color || '').trim() &&
+        item.imeis.length < item.quantity
+      );
+
+      if (!poItem) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `ไม่พบรายการสินค้าที่ยังต้องการคีย์ IMEI ในใบสั่งซื้อ ${order.orderNumber} ที่ตรงกับสเปกสินค้านี้ (${brand} ${model} ${capacity} ${color})` 
+        });
+      }
+
+      const targetImeis = (receipt.imeiSerials && receipt.imeiSerials.length > 0) ? receipt.imeiSerials : [];
+      for (const cleanImei of targetImeis.map(x => String(x).trim())) {
+        if (!poItem.imeis.includes(cleanImei)) {
+          poItem.imeis.push(cleanImei);
+        }
+      }
+
+      const allReceived = order.items.every(item => item.imeis.length === item.quantity);
+      if (allReceived) {
+        order.status = 'received';
+        order.receivedBy = req.user._id;
+        order.receivedByName = req.user.fullName || req.user.username;
+        order.receivedAt = new Date();
+      }
+
+      await order.save();
+
+      await AuditLog.create({
+        user: req.user._id,
+        username: req.user.username,
+        userRole: req.user.role,
+        action: 'LINK_RECEIPT_TO_PURCHASE_ORDER',
+        entity: 'BranchPurchaseOrder',
+        entityId: order._id.toString(),
+        details: { 
+          orderNumber: order.orderNumber, 
+          receiptNumber: receipt.receiptNumber,
+          imeis: targetImeis,
+          allReceived
+        }
+      });
+
+      linkedPoInfo = {
+        orderNumber: order.orderNumber,
+        status: order.status
+      };
+    }
 
     // 1. Find or Create Product Master by exact (brand, model, capacity, color)
     let product = await Product.findOne({
@@ -322,8 +391,9 @@ const confirmGoodsReceipt = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: `ยืนยันรายการรับสินค้า IMEI: ${targetImeis.join(', ')} สำเร็จ สินค้าพร้อมขายหน้าร้านแล้ว`,
-      receipt
+      message: `ยืนยันรายการรับสินค้า IMEI: ${targetImeis.join(', ')} สำเร็จ สินค้าพร้อมขายหน้าร้านแล้ว` + (linkedPoInfo ? ` (เชื่อมโยงกับใบสั่งซื้อ ${linkedPoInfo.orderNumber} สำเร็จ)` : ''),
+      receipt,
+      linkedPoInfo
     });
   } catch (err) {
     next(err);
