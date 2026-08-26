@@ -278,6 +278,7 @@ const confirmGoodsReceipt = async (req, res, next) => {
       }
 
       await order.save();
+      receipt.purchaseOrder = order._id;
 
       await AuditLog.create({
         user: req.user._id,
@@ -376,7 +377,17 @@ const confirmGoodsReceipt = async (req, res, next) => {
     receipt.selling_price = sPrice;
     receipt.confirmedBy = req.user._id;
     receipt.confirmedAt = new Date();
-    if (remarks) receipt.remarks = remarks.trim();
+    let finalRemarks = (remarks || '').trim();
+    if (linkedPoInfo) {
+      const poRemarkText = `ใบสั่งซื้อเลขที่: ${linkedPoInfo.orderNumber}`;
+      if (finalRemarks) {
+        receipt.remarks = `${finalRemarks} (${poRemarkText})`;
+      } else {
+        receipt.remarks = `รายการรับสินค้าจากการสั่งซื้อลงสาขา ${poRemarkText}`;
+      }
+    } else if (finalRemarks) {
+      receipt.remarks = finalRemarks;
+    }
     await receipt.save();
 
     await AuditLog.create({

@@ -7,8 +7,12 @@ const GoodsReceipt = require('../models/GoodsReceipt');
 
 const getPurchaseOrders = async (req, res, next) => {
   try {
-    const { branchId, status } = req.query;
+    const { branchId, status, orderNumber } = req.query;
     let query = {};
+
+    if (orderNumber) {
+      query.orderNumber = orderNumber;
+    }
 
     const isHqUser = req.user.branch ? (req.user.branch.code === 'BR-HQ01' || (req.user.branch.name && req.user.branch.name.includes('สำนักงานใหญ่'))) : true;
     const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || req.user.role === 'purchase_staff' || isHqUser;
@@ -264,6 +268,7 @@ const receivePurchaseOrder = async (req, res, next) => {
         await GoodsReceipt.create({
           receiptNumber,
           branch: order.branch._id,
+          purchaseOrder: order._id,
           receivedBy: req.user ? req.user._id : (order.orderedBy || order.branch._id),
           productInfo: {
             name: productName,

@@ -55,6 +55,11 @@ const goodsReceiptSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  purchaseOrder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BranchPurchaseOrder',
+    default: null
+  },
   remarks: {
     type: String,
     default: ''

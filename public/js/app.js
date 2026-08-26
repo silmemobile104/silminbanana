@@ -6873,10 +6873,13 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                         </button>
                       ` : ''}
                     ` : `
-                      <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span><br>
-                      <span style="font-size:0.75rem; color:var(--text-muted);">
+                      <span class="badge badge-green" style="margin-bottom:0.3rem;"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span><br>
+                      <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">
                         อนุมัติโดย: ${r.confirmedBy ? r.confirmedBy.fullName || r.confirmedBy.username : '-'}
                       </span>
+                      <button class="btn btn-secondary btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="printGoodsReceiptSlip('${r._id}')">
+                        <i class="fa-solid fa-print"></i> พิมพ์ใบนำเข้า
+                      </button>
                     `}
                   </td>
                 </tr>
@@ -7206,6 +7209,536 @@ async function submitConfirmReceipt(receiptId) {
   } catch (err) {
     // Handled
   }
+}
+
+function thaiBahtText(num) {
+  if (num === null || num === undefined || isNaN(num)) return '';
+  num = Number(num).toFixed(2);
+  const parts = num.split('.');
+  const intPart = parts[0];
+  const decPart = parts[1];
+  
+  const digits = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+  const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+  
+  function convert(part) {
+    let result = '';
+    const len = part.length;
+    for (let i = 0; i < len; i++) {
+      const digit = Number(part.charAt(i));
+      const pos = len - i - 1;
+      if (digit !== 0) {
+        let digitWord = digits[digit];
+        if (pos % 6 === 1 && digit === 1) {
+          digitWord = '';
+        } else if (pos % 6 === 1 && digit === 2) {
+          digitWord = 'ยี่';
+        } else if (pos % 6 === 0 && digit === 1 && i > 0) {
+          const prevDigit = Number(part.charAt(i - 1));
+          if (prevDigit !== 0 || len === 1) {
+            digitWord = 'เอ็ด';
+          }
+        }
+        
+        result += digitWord + units[pos % 6];
+      }
+      if (pos > 0 && pos % 6 === 0 && i < len - 1) {
+        result += 'ล้าน';
+      }
+    }
+    return result;
+  }
+
+  let text = '';
+  const intVal = Number(intPart);
+  if (intVal === 0) {
+    text += 'ศูนย์บาท';
+  } else {
+    text += convert(intPart) + 'บาท';
+  }
+
+  const decVal = Number(decPart);
+  if (decVal === 0) {
+    text += 'ถ้วน';
+  } else {
+    text += convert(decPart) + 'สตางค์';
+  }
+  return text;
+}
+
+async function printGoodsReceiptSlip(receiptId) {
+  const receipt = (state.pendingReceiptsCache || []).find(r => r._id === receiptId);
+  if (!receipt) {
+    showToast('ไม่พบข้อมูลรายการรับสินค้านี้', 'error');
+    return;
+  }
+
+  // Check if this receipt is linked to a PO
+  const poId = receipt.purchaseOrder;
+  let poNumber = null;
+  if (receipt.remarks && receipt.remarks.includes('ใบสั่งซื้อเลขที่:')) {
+    const parts = receipt.remarks.split('ใบสั่งซื้อเลขที่:');
+    if (parts[1]) {
+      const match = parts[1].match(/BPO-\d+-\d+/);
+      if (match) poNumber = match[0];
+      else poNumber = parts[1].replace(/[)]/g, '').trim();
+    }
+  }
+  if (!poNumber && receipt.receiptNumber && receipt.receiptNumber.includes('GR-BPO-')) {
+    const match = receipt.receiptNumber.match(/BPO-\d+-\d+/);
+    if (match) poNumber = match[0];
+  }
+
+  if (poId || poNumber) {
+    showToast('กำลังดึงข้อมูลใบสั่งซื้อ...', 'info');
+    try {
+      let order = null;
+      if (poId) {
+        const poRes = await apiRequest(`/purchase-orders/${poId}`);
+        if (poRes.success && poRes.order) {
+          order = poRes.order;
+        }
+      } else if (poNumber) {
+        const poRes = await apiRequest(`/purchase-orders?orderNumber=${poNumber}`);
+        if (poRes.success && poRes.orders && poRes.orders.length > 0) {
+          order = poRes.orders[0];
+        }
+      }
+
+      if (order) {
+        const branchName = order.branch ? order.branch.name : 'ไม่ระบุ';
+        const orderedBy = order.orderedByName || (order.orderedBy ? order.orderedBy.fullName || order.orderedBy.username : 'ไม่ระบุ');
+        const receivedBy = order.receivedByName || (order.receivedBy ? order.receivedBy.fullName || order.receivedBy.username : 'ไม่ระบุ');
+        const orderedDate = order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH') : '-';
+        const receivedDate = order.receivedAt ? new Date(order.receivedAt).toLocaleString('th-TH') : '-';
+        const approvedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : 'ไม่ระบุ';
+
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        let itemRowsHtml = '';
+        order.items.forEach((item, idx) => {
+          const itemImeis = (item.imeis || []).join(', ') || '-';
+          const pPrice = item.unitPrice ? '฿' + item.unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+          const tPrice = item.totalPrice ? '฿' + item.totalPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+          itemRowsHtml += `
+            <tr>
+              <td style="text-align: center;">${idx + 1}</td>
+              <td>
+                <strong style="color:#0f172a;">${item.productName}</strong><br>
+                <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
+              </td>
+              <td style="text-align: center;">
+                <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">${item.quantity} เครื่อง</span>
+              </td>
+              <td style="font-family:monospace; font-size:0.82rem; max-width:240px; word-break:break-all; color:#334155;">
+                ${itemImeis}
+              </td>
+              <td style="text-align: right; font-weight:600;">${pPrice}</td>
+              <td style="text-align: right; font-weight:600;">${tPrice}</td>
+            </tr>
+          `;
+        });
+
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>ใบรับรองการนำเข้าสินค้าเข้าสต็อก (ใบสั่งซื้อ ${order.orderNumber})</title>
+              <style>
+                @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
+                body {
+                  font-family: 'Sarabun', sans-serif;
+                  color: #0f172a;
+                  background: #fff;
+                  padding: 20px;
+                  font-size: 13px;
+                  line-height: 1.5;
+                }
+                .info-row {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 4px;
+                  font-size: 12px;
+                }
+                .info-label {
+                  font-weight: 600;
+                  color: #475569;
+                }
+                .info-value {
+                  font-weight: 700;
+                  color: #0f172a;
+                }
+                .product-table {
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-top: 20px;
+                  margin-bottom: 20px;
+                }
+                .product-table th, .product-table td {
+                  border: 1px solid #cbd5e1;
+                  padding: 10px;
+                  text-align: left;
+                }
+                .product-table th {
+                  background-color: #1e293b;
+                  color: #ffffff;
+                  font-weight: 700;
+                  font-size: 12px;
+                }
+                .signatures-container {
+                  margin-top: 40px;
+                  display: grid;
+                  grid-template-columns: 1fr 1fr;
+                  gap: 30px;
+                  text-align: center;
+                  align-items: center;
+                }
+                .signature-box {
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                }
+                .signature-line {
+                  width: 85%;
+                  border-bottom: 1px solid #475569;
+                  margin-top: 35px;
+                  margin-bottom: 6px;
+                }
+                .company-stamp {
+                  width: 90px;
+                  height: 90px;
+                  border: 1px dashed #94a3b8;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 9px;
+                  color: #94a3b8;
+                  margin: 0 auto;
+                }
+                @media print {
+                  body {
+                    padding: 0;
+                  }
+                  .no-print {
+                    display: none;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <!-- Company Header Letterhead -->
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #1e293b; padding-bottom:12px; margin-bottom:20px;">
+                <div>
+                  <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">ซิลมิน บานาน่า</h2>
+                  <span style="font-size:11px; color:#475569; display:block; margin-top:2px;">สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000</span>
+                </div>
+                <div style="text-align:right;">
+                  <span style="font-size:13px; font-weight:700; color:#64748b; display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
+                </div>
+              </div>
+
+              <!-- Info Grid Section -->
+              <div style="display:grid; grid-template-columns: 1.1fr 0.9fr; gap:20px; margin-bottom:20px;">
+                <div style="border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc;">
+                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
+                  <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:#0f172a;">${branchName}</span></div>
+                  <div class="info-row"><span class="info-label">ผู้ส่งคำสั่งนำเข้า:</span> <span class="info-value">${orderedBy}</span></div>
+                  <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${receivedBy}</span></div>
+                  <div class="info-row"><span class="info-label">หมายเหตุคัดย่อ:</span> <span class="info-value" style="color:#475569; font-weight:normal;">${order.note || '-'}</span></div>
+                </div>
+                <div style="border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc;">
+                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
+                  <div class="info-row"><span class="info-label">เลขที่ใบสั่งซื้อ (PO Number):</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:#0f172a;">${order.orderNumber}</span></div>
+                  <div class="info-row"><span class="info-label">วันที่ส่งคำสั่งสั่งซื้อ:</span> <span class="info-value">${orderedDate}</span></div>
+                  <div class="info-row"><span class="info-label">วันที่ตรวจอนุมัติเข้าสต็อก:</span> <span class="info-value">${receivedDate}</span></div>
+                  <div class="info-row"><span class="info-label">สถานะคลังสินค้า:</span> <span class="info-value" style="color:#16a34a; font-weight:800;"><i class="fa-solid fa-circle-check"></i> นำเข้าสต็อกเรียบร้อยแล้ว</span></div>
+                </div>
+              </div>
+
+              <!-- Product List Table -->
+              <table class="product-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px; text-align: center;">ลำดับ</th>
+                    <th>รายละเอียดสเปกอุปกรณ์ (Item Details)</th>
+                    <th style="width: 80px; text-align: center;">จำนวน</th>
+                    <th>หมายเลข IMEI ของเครื่องที่นำเข้า</th>
+                    <th style="width: 110px; text-align: right;">ราคาต่อหน่วย</th>
+                    <th style="width: 110px; text-align: right;">ราคารวม</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemRowsHtml}
+                </tbody>
+              </table>
+
+              <!-- Totals Box Section -->
+              <div style="display:flex; justify-content:space-between; align-items:stretch; margin-top:20px; margin-bottom:40px; gap:20px;">
+                <div style="flex:1; border:1px solid #cbd5e1; border-radius:6px; padding:12px; display:flex; align-items:center; background:#f8fafc;">
+                  <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมสุทธิ (Total in Thai Baht)</span>
+                    <strong style="font-size:13px; color:#1e293b;">( ${thaiBahtText(order.totalAmount)} )</strong>
+                  </div>
+                </div>
+                <div style="width:280px; border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#475569;">
+                    <span>ยอดรวมก่อนภาษี (Sub Total):</span>
+                    <span>฿${(order.totalAmount / 1.07).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#475569; border-bottom:1px dashed #cbd5e1; padding-bottom:4px; margin-bottom:4px;">
+                    <span>ภาษีมูลค่าเพิ่ม 7% (VAT 7%):</span>
+                    <span>฿${(order.totalAmount - (order.totalAmount / 1.07)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:#1e293b;">
+                    <span>ยอดรวมเงินสุทธิ (Net Total):</span>
+                    <span style="font-size:16px; color:#0f172a;">฿${(order.totalAmount || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Signatures Box Section -->
+              <div class="signatures-container">
+                <div class="signature-box">
+                  <span class="info-label">พนักงานผู้รับของสาขา / ผู้สแกน</span>
+                  <div class="signature-line"></div>
+                  <span>( ${receivedBy} )</span>
+                  <span style="font-size: 11px; color: #475569; margin-top: 4px;">ผู้รับมอบสินค้าเข้าคลังสาขา</span>
+                </div>
+                
+                <div class="signature-box">
+                  <span class="info-label">ผู้อนุมัตินำเข้าคลัง / ผู้ตั้งราคา</span>
+                  <div class="signature-line"></div>
+                  <span>( ${approvedBy} )</span>
+                  <span style="font-size: 11px; color: #475569; margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
+                </div>
+              </div>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+      }
+    } catch (poErr) {
+      showToast('ไม่สามารถดึงข้อมูลใบสั่งซื้อสำหรับพิมพ์ได้: ' + poErr.message, 'error');
+    }
+    return;
+  }
+
+  // Fallback: If no PO is linked, print as single item receipt
+  let poNumberText = 'ไม่มี (นำเข้านอกใบสั่งซื้อ)';
+  if (receipt.remarks && receipt.remarks.includes('ใบสั่งซื้อเลขที่:')) {
+    const parts = receipt.remarks.split('ใบสั่งซื้อเลขที่:');
+    if (parts[1]) {
+      const match = parts[1].match(/BPO-\d+-\d+/);
+      if (match) poNumberText = match[0];
+      else poNumberText = parts[1].replace(/[)]/g, '').trim();
+    }
+  }
+
+  const p = receipt.productInfo || {};
+  const branchName = receipt.branch ? receipt.branch.name : 'ไม่ระบุ';
+  const scannedBy = receipt.receivedBy ? (receipt.receivedBy.fullName || receipt.receivedBy.username) : 'ไม่ระบุ';
+  const approvedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : 'ไม่ระบุ';
+  const scannedDate = receipt.createdAt ? new Date(receipt.createdAt).toLocaleString('th-TH') : '-';
+  const approvedDate = receipt.confirmedAt ? new Date(receipt.confirmedAt).toLocaleString('th-TH') : '-';
+  const purchasePrice = receipt.purchase_price ? '฿' + receipt.purchase_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+  const sellingPrice = receipt.selling_price ? '฿' + receipt.selling_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+  const imei = (receipt.imeiSerials && receipt.imeiSerials[0]) || '-';
+
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>ใบนำเข้าสินค้าเข้าสต็อก - ${receipt.receiptNumber}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
+          body {
+            font-family: 'Sarabun', sans-serif;
+            color: #0f172a;
+            background: #fff;
+            padding: 20px;
+            font-size: 13px;
+            line-height: 1.5;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 12px;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #475569;
+          }
+          .info-value {
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 20px;
+          }
+          .product-table th, .product-table td {
+            border: 1px solid #cbd5e1;
+            padding: 10px;
+            text-align: left;
+          }
+          .product-table th {
+            background-color: #1e293b;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 12px;
+          }
+          .signatures-container {
+            margin-top: 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            text-align: center;
+            align-items: center;
+          }
+          .signature-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          .signature-line {
+            width: 85%;
+            border-bottom: 1px solid #475569;
+            margin-top: 35px;
+            margin-bottom: 6px;
+          }
+          .company-stamp {
+            width: 90px;
+            height: 90px;
+            border: 1px dashed #94a3b8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            color: #94a3b8;
+            margin: 0 auto;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+            .no-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- Company Header Letterhead -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #1e293b; padding-bottom:12px; margin-bottom:20px;">
+          <div>
+            <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">บริษัท ซิลมิน บานาน่า จำกัด</h2>
+            <span style="font-size:11px; color:#475569; display:block; margin-top:2px;">สำนักงานใหญ่: 123/45 ถนนราชดำเนิน แขวงบวรนิเวศ เขตพระนคร กรุงเทพฯ 10200</span>
+            <span style="font-size:11px; color:#475569; display:block;">โทร: 02-123-4567 | อีเมล: contact@silminbanana.com | เลขประจำตัวผู้เสียภาษี: 0105569000123</span>
+          </div>
+          <div style="text-align:right;">
+            <h1 style="margin:0; font-size:22px; font-weight:800; color:#1e293b;">GOODS IMPORT SLIP</h1>
+            <span style="font-size:13px; font-weight:700; color:#64748b; display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1.1fr 0.9fr; gap:20px; margin-bottom:20px;">
+          <div style="border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc;">
+            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
+            <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:#0f172a;">${branchName}</span></div>
+            <div class="info-row"><span class="info-label">ผู้ส่งคำสั่งนำเข้า:</span> <span class="info-value">${scannedBy}</span></div>
+            <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${approvedBy}</span></div>
+            <div class="info-row"><span class="info-label">หมายเหตุอนุมัติ:</span> <span class="info-value" style="color:#475569; font-weight:normal;">${receipt.remarks || '-'}</span></div>
+          </div>
+          <div style="border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc;">
+            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
+            <div class="info-row"><span class="info-label">เลขที่ใบรับสินค้า:</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:#0f172a;">${receipt.receiptNumber}</span></div>
+            <div class="info-row"><span class="info-label">วันที่ส่งรายการสแกน:</span> <span class="info-value">${scannedDate}</span></div>
+            <div class="info-row"><span class="info-label">วันที่ตรวจอนุมัติเข้าสต็อก:</span> <span class="info-value">${approvedDate}</span></div>
+            <div class="info-row"><span class="info-label">อ้างอิงใบสั่งซื้อ:</span> <span class="info-value" style="font-weight:700;">${poNumberText}</span></div>
+          </div>
+        </div>
+
+        <table class="product-table">
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">ลำดับ</th>
+              <th>รายละเอียดสเปกอุปกรณ์ (Item Details)</th>
+              <th style="width: 80px; text-align: center;">จำนวน</th>
+              <th>หมายเลข IMEI ของเครื่องที่นำเข้า</th>
+              <th style="width: 110px; text-align: right;">ราคาทุน</th>
+              <th style="width: 110px; text-align: right;">ราคาขาย</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: center;">1</td>
+              <td>
+                <strong style="color:#0f172a;">${p.name}</strong><br>
+                <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${p.brand}, รุ่น: ${p.model}, ความจุ: ${p.capacity || ''}, สี: ${p.color || ''})</span>
+              </td>
+              <td style="text-align: center;">
+                <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
+              </td>
+              <td style="font-family:monospace; font-size:0.82rem; text-align: center; color:#334155;">${imei}</td>
+              <td style="text-align: right; font-weight:600;">${purchasePrice}</td>
+              <td style="text-align: right; font-weight:600;">${sellingPrice}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Totals Box Section for Single Slip -->
+        <div style="display:flex; justify-content:space-between; align-items:stretch; margin-top:20px; margin-bottom:40px; gap:20px;">
+          <div style="flex:1; border:1px solid #cbd5e1; border-radius:6px; padding:12px; display:flex; align-items:center; background:#f8fafc;">
+            <div>
+              <span style="font-size:11px; color:#64748b; font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมทุน (Total Cost in Thai Baht)</span>
+              <strong style="font-size:13px; color:#1e293b;">( ${thaiBahtText(receipt.purchase_price || 0)} )</strong>
+            </div>
+          </div>
+          <div style="width:280px; border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc; display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:#1e293b;">
+              <span>ยอดรวมเงินทุนสุทธิ (Net Cost):</span>
+              <span style="font-size:16px; color:#0f172a;">${purchasePrice}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="signatures-container">
+          <div class="signature-box">
+            <span class="info-label">พนักงานผู้นำเข้า / ผู้ส่งมอบ</span>
+            <div class="signature-line"></div>
+            <span>( ${scannedBy} )</span>
+            <span style="font-size: 11px; color: #475569; margin-top: 4px;">ผู้สแกนรับเข้าสต็อกหน้าร้าน</span>
+          </div>
+
+
+
+          <div class="signature-box">
+            <span class="info-label">ผู้อนุมัตินำเข้าคลัง / ผู้ตั้งราคา</span>
+            <div class="signature-line"></div>
+            <span>( ${approvedBy} )</span>
+            <span style="font-size: 11px; color: #475569; margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center; font-size: 11px; color: #64748b;" class="no-print">
+          พิมพ์จากระบบ Silmin Banana Stock Management System เมื่อวันที่ ${new Date().toLocaleString('th-TH')}
+        </div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 250);
 }
 
 /* ==========================================================================
