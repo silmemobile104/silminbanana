@@ -2158,7 +2158,7 @@ function openFullTaxInvoiceModal(sale, tax) {
             <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:50px; width:50px; object-fit:contain;">
             <div>
               <h1 style="font-size:1.6rem; font-weight:900; margin:0; color:#000;">SILMIN BANANA</h1>
-              <span style="font-size:0.72rem; color:#444;">ซิลมิน บานาน่า (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
+              <span style="font-size:0.72rem; color:#444;">ซิลมีน บานาน่า (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
             </div>
           </div>
           <div style="font-size:0.8rem; color:#333;">
@@ -5678,7 +5678,7 @@ async function printPurchaseOrderDoc(orderId) {
             <div style="display:flex; gap:1.2rem; align-items:center;">
               <img src="/image/icon_silminbanana.png" style="height:70px; width:auto; object-fit:contain;" alt="Logo">
               <div>
-                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมิน บานาน่า</h2>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมีน บานาน่า</h2>
                 <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
                   สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000<br>
                   เลขประจำตัวผู้เสียภาษี: 1930400058472
@@ -7312,31 +7312,55 @@ async function printGoodsReceiptSlip(receiptId) {
         const orderedDate = order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH') : '-';
         const receivedDate = order.receivedAt ? new Date(order.receivedAt).toLocaleString('th-TH') : '-';
         const approvedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : 'ไม่ระบุ';
+        const scannedBy = receipt.receivedBy ? (receipt.receivedBy.fullName || receipt.receivedBy.username) : 'ไม่ระบุ';
 
         const printWindow = window.open('', '_blank', 'width=800,height=600');
         
         let itemRowsHtml = '';
-        order.items.forEach((item, idx) => {
-          const itemImeis = (item.imeis || []).join(', ') || '-';
+        let globalIndex = 1;
+        order.items.forEach((item) => {
+          const imeis = item.imeis || [];
           const pPrice = item.unitPrice ? '฿' + item.unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
-          const tPrice = item.totalPrice ? '฿' + item.totalPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
-          itemRowsHtml += `
-            <tr>
-              <td style="text-align: center;">${idx + 1}</td>
-              <td>
-                <strong style="color:#0f172a;">${item.productName}</strong><br>
-                <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
-              </td>
-              <td style="text-align: center;">
-                <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">${item.quantity} เครื่อง</span>
-              </td>
-              <td style="font-family:monospace; font-size:0.82rem; max-width:240px; word-break:break-all; color:#334155;">
-                ${itemImeis}
-              </td>
-              <td style="text-align: right; font-weight:600;">${pPrice}</td>
-              <td style="text-align: right; font-weight:600;">${tPrice}</td>
-            </tr>
-          `;
+          
+          if (imeis.length === 0) {
+            itemRowsHtml += `
+              <tr>
+                <td style="text-align: center;">${globalIndex++}</td>
+                <td>
+                  <strong style="color:#0f172a;">${item.productName}</strong><br>
+                  <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
+                </td>
+                <td style="text-align: center;">
+                  <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
+                </td>
+                <td style="font-family:monospace; font-size:0.82rem; text-align: center; color:#ef4444; font-weight:700;">
+                  ยังไม่ได้รับเครื่อง (No IMEI)
+                </td>
+                <td style="text-align: right; font-weight:600;">${pPrice}</td>
+                <td style="text-align: right; font-weight:600;">${pPrice}</td>
+              </tr>
+            `;
+          } else {
+            imeis.forEach((imei) => {
+              itemRowsHtml += `
+                <tr>
+                  <td style="text-align: center;">${globalIndex++}</td>
+                  <td>
+                    <strong style="color:#0f172a;">${item.productName}</strong><br>
+                    <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
+                  </td>
+                  <td style="text-align: center;">
+                    <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
+                  </td>
+                  <td style="font-family:monospace; font-size:0.82rem; text-align: center; color:#334155;">
+                    ${imei}
+                  </td>
+                  <td style="text-align: right; font-weight:600;">${pPrice}</td>
+                  <td style="text-align: right; font-weight:600;">${pPrice}</td>
+                </tr>
+              `;
+            });
+          }
         });
 
         printWindow.document.write(`
@@ -7429,7 +7453,7 @@ async function printGoodsReceiptSlip(receiptId) {
               <!-- Company Header Letterhead -->
               <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #1e293b; padding-bottom:12px; margin-bottom:20px;">
                 <div>
-                  <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">ซิลมิน บานาน่า</h2>
+                  <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">ซิลมีน บานาน่า</h2>
                   <span style="font-size:11px; color:#475569; display:block; margin-top:2px;">สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000</span>
                 </div>
                 <div style="text-align:right;">
@@ -7443,7 +7467,7 @@ async function printGoodsReceiptSlip(receiptId) {
                   <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
                   <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:#0f172a;">${branchName}</span></div>
                   <div class="info-row"><span class="info-label">ผู้ส่งคำสั่งนำเข้า:</span> <span class="info-value">${orderedBy}</span></div>
-                  <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${receivedBy}</span></div>
+                  <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${scannedBy}</span></div>
                   <div class="info-row"><span class="info-label">หมายเหตุคัดย่อ:</span> <span class="info-value" style="color:#475569; font-weight:normal;">${order.note || '-'}</span></div>
                 </div>
                 <div style="border:1px solid #cbd5e1; border-radius:6px; padding:12px; background:#f8fafc;">
@@ -7501,7 +7525,7 @@ async function printGoodsReceiptSlip(receiptId) {
                 <div class="signature-box">
                   <span class="info-label">พนักงานผู้รับของสาขา / ผู้สแกน</span>
                   <div class="signature-line"></div>
-                  <span>( ${receivedBy} )</span>
+                  <span>( ${scannedBy} )</span>
                   <span style="font-size: 11px; color: #475569; margin-top: 4px;">ผู้รับมอบสินค้าเข้าคลังสาขา</span>
                 </div>
                 
@@ -7639,7 +7663,7 @@ async function printGoodsReceiptSlip(receiptId) {
         <!-- Company Header Letterhead -->
         <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #1e293b; padding-bottom:12px; margin-bottom:20px;">
           <div>
-            <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">บริษัท ซิลมิน บานาน่า จำกัด</h2>
+            <h2 style="margin:0; font-size:22px; font-weight:800; color:#1e293b; letter-spacing:0.5px;">บริษัท ซิลมีน บานาน่า จำกัด</h2>
             <span style="font-size:11px; color:#475569; display:block; margin-top:2px;">สำนักงานใหญ่: 123/45 ถนนราชดำเนิน แขวงบวรนิเวศ เขตพระนคร กรุงเทพฯ 10200</span>
             <span style="font-size:11px; color:#475569; display:block;">โทร: 02-123-4567 | อีเมล: contact@silminbanana.com | เลขประจำตัวผู้เสียภาษี: 0105569000123</span>
           </div>
@@ -7936,10 +7960,10 @@ async function printTransferDoc(transferId) {
             <div style="display:flex; gap:1.2rem; align-items:center;">
               <img src="/image/icon_silminbanana.png" style="height:70px; width:auto; object-fit:contain;" alt="Logo">
               <div>
-                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมิน บานาน่า</h2>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#000; margin:0; line-height:1.2;">ซิลมีน บานาน่า</h2>
                 <p style="font-size:0.82rem; color:#444; margin:0.3rem 0 0 0; line-height:1.4;">
                   สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000<br>
-                  เลขประจำตัวผู้เสียภาษี: 0000000000000
+                  เลขประจำตัวผู้เสียภาษี: 1930400058472
                 </p>
               </div>
             </div>
