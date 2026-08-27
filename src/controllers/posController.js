@@ -257,11 +257,7 @@ const getFinanceProfitReport = async (req, res, next) => {
     const isAdminOrHq = req.user.role === 'admin' || req.user.role === 'hq_stock_staff' || req.user.role === 'purchase_staff' || isHqUser;
 
     // Branch filtering
-    if (!isAdminOrHq) {
-      if (req.user.branch) {
-        query.branch = req.user.branch._id || req.user.branch;
-      }
-    } else if (branchId) {
+    if (branchId) {
       query.branch = branchId;
     }
 
@@ -289,11 +285,7 @@ const getFinanceProfitReport = async (req, res, next) => {
 
     // Query expenses with same branch and date filtering
     let queryExpense = {};
-    if (!isAdminOrHq) {
-      if (req.user.branch) {
-        queryExpense.branch = req.user.branch._id || req.user.branch;
-      }
-    } else if (branchId) {
+    if (branchId) {
       queryExpense.branch = branchId === 'hq' ? null : branchId;
     }
 

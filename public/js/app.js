@@ -2401,15 +2401,13 @@ async function renderFinanceView(filterParams = {}) {
           </h3>
           
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem;">
-            ${isAdminOrHq ? `
-              <div>
-                <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">สาขา:</label>
-                <select id="fin-branch-filter" class="form-select" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
-                  <option value="">-- ทุกสาขา --</option>
-                  ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${filterParams.branchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
-                </select>
-              </div>
-            ` : ''}
+            <div>
+              <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">สาขา:</label>
+              <select id="fin-branch-filter" class="form-select" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
+                <option value="">-- ทุกสาขา --</option>
+                ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${filterParams.branchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
+              </select>
+            </div>
 
             <div>
               <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">การชำระเงิน:</label>
@@ -2604,16 +2602,14 @@ async function renderFinanceView(filterParams = {}) {
         <!-- Dynamic Detailed Expense Filters -->
         <div style="background:rgba(0,0,0,0.025); padding:1rem; border-radius:6px; border:1px solid var(--border-color); margin-bottom:1.5rem;">
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem; margin-bottom:0.8rem;">
-            ${isAdminOrHq ? `
-              <div>
-                <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
-                <select id="exp-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
-                  <option value="" ${!filterParams.branchId ? 'selected' : ''}>-- ทุกสาขา --</option>
-                  <option value="hq" ${filterParams.branchId === 'hq' ? 'selected' : ''}>ส่วนกลาง (สำนักงานใหญ่)</option>
-                  ${(state.masterOptions.branches || []).map(b => `<option value="${b._id}" ${filterParams.branchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
-                </select>
-              </div>
-            ` : ''}
+            <div>
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">สาขา:</label>
+              <select id="exp-branch-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+                <option value="" ${!filterParams.branchId ? 'selected' : ''}>-- ทุกสาขา --</option>
+                <option value="hq" ${filterParams.branchId === 'hq' ? 'selected' : ''}>ส่วนกลาง (สำนักงานใหญ่)</option>
+                ${(state.masterOptions.branches || []).map(b => `<option value="${b._id}" ${filterParams.branchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
+              </select>
+            </div>
 
             <div>
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">หมวดหมู่:</label>
@@ -9236,14 +9232,12 @@ function openPrintFinanceReportModal() {
         <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
       </div>
       
-      ${isAdminOrHq ? `
-        <div style="display:flex; align-items:center; gap:0.4rem;">
-          <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
-          <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
-            ${branchOptionsHtml}
-          </select>
-        </div>
-      ` : ''}
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
+        <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
+          ${branchOptionsHtml}
+        </select>
+      </div>
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
@@ -9426,7 +9420,20 @@ async function updatePrintFinanceReportPreview() {
           const price = i.unitPrice || 0;
           const discount = (itemIdx === 0 && s.discountTotal) ? s.discountTotal : 0;
           const subtotal = (qty * price) - discount;
-          const cost = (i.costPrice || 0) * qty;
+          const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
+          let cost = (i.costPrice || 0) * qty;
+          let oldCostStr = '';
+
+          if (isReturnedCost) {
+            const originalCost = s.totalCost || 0;
+            const newCost = s.actualCostReturned;
+            if (originalCost && newCost && originalCost !== newCost) {
+              const itemOriginalCost = (i.costPrice || 0) * qty;
+              const itemNewCost = originalCost > 0 ? (itemOriginalCost / originalCost) * newCost : newCost;
+              cost = itemNewCost;
+              oldCostStr = `<br><span style="font-size:0.6rem; color:#777; text-decoration:line-through; display:block; margin-top:1px; line-height:1.1;">เดิม: ${itemOriginalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+            }
+          }
           const profit = subtotal - cost;
           const net = subtotal;
 
@@ -9451,7 +9458,7 @@ async function updatePrintFinanceReportPreview() {
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${oldCostStr}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
@@ -9640,14 +9647,12 @@ function openPrintFinanceReportModal() {
         <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
       </div>
       
-      ${isAdminOrHq ? `
-        <div style="display:flex; align-items:center; gap:0.4rem;">
-          <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
-          <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
-            ${branchOptionsHtml}
-          </select>
-        </div>
-      ` : ''}
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <label style="font-size:0.8rem; font-weight:600; color:#000;">สาขา:</label>
+        <select id="print-branch-filter" class="form-select" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; color:#000; border:1px solid #ccc; background:#fff; height:auto; min-height:auto;" onchange="updatePrintFinanceReportPreview()">
+          ${branchOptionsHtml}
+        </select>
+      </div>
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
@@ -9824,7 +9829,20 @@ async function updatePrintFinanceReportPreview() {
           const price = i.unitPrice || 0;
           const discount = (itemIdx === 0 && s.discountTotal) ? s.discountTotal : 0;
           const subtotal = (qty * price) - discount;
-          const cost = (i.costPrice || 0) * qty;
+          const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
+          let cost = (i.costPrice || 0) * qty;
+          let oldCostStr = '';
+
+          if (isReturnedCost) {
+            const originalCost = s.totalCost || 0;
+            const newCost = s.actualCostReturned;
+            if (originalCost && newCost && originalCost !== newCost) {
+              const itemOriginalCost = (i.costPrice || 0) * qty;
+              const itemNewCost = originalCost > 0 ? (itemOriginalCost / originalCost) * newCost : newCost;
+              cost = itemNewCost;
+              oldCostStr = `<br><span style="font-size:0.6rem; color:#777; text-decoration:line-through; display:block; margin-top:1px; line-height:1.1;">เดิม: ${itemOriginalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+            }
+          }
           const profit = subtotal - cost;
           const net = subtotal;
 
@@ -9849,7 +9867,7 @@ async function updatePrintFinanceReportPreview() {
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${oldCostStr}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td style="padding:4px 6px; border:1px solid #111; font-size:0.68rem; text-align:right; font-family:'Sarabun';">${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>

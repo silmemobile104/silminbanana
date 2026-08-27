@@ -269,6 +269,26 @@ const confirmGoodsReceipt = async (req, res, next) => {
         }
       }
 
+      // Update PO item price to match the actual verified cost price
+      const oldTotalAmount = order.totalAmount || 0;
+      
+      poItem.unitPrice = pPrice;
+      poItem.totalPrice = poItem.quantity * pPrice;
+      
+      const newTotalAmount = order.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+      order.orderNumber = order.orderNumber; // Keep same
+      order.totalAmount = newTotalAmount;
+
+      // Adjust branch used credit by the difference
+      const Branch = require('../models/Branch');
+      const branch = await Branch.findById(order.branch);
+      if (branch) {
+        const creditDiff = oldTotalAmount - newTotalAmount;
+        branch.usedCredit = (branch.usedCredit || 0) - creditDiff;
+        await branch.save();
+        console.log(`PO Price verified: Adjusted branch ${branch.name} usedCredit by -${creditDiff}. New: ${branch.usedCredit}`);
+      }
+
       const allReceived = order.items.every(item => item.imeis.length === item.quantity);
       if (allReceived) {
         order.status = 'received';
