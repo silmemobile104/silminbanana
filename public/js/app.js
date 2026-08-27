@@ -360,7 +360,6 @@ async function navigateTo(viewName) {
   const allowedViews = getUserAllowedMenus(userRole);
 
   if (!allowedViews.includes(viewName)) {
-    showToast('ตำแหน่งของคุณไม่มีสิทธิ์เข้าถึงเมนูนี้', 'error');
     viewName = allowedViews[0] || 'dashboard';
   }
 
