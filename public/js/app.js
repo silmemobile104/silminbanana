@@ -1547,11 +1547,11 @@ async function renderPosView(selectedBranchId = null) {
             <!-- Customer Info Form -->
             <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
               <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--accent-secondary);">
-                <i class="fa-solid fa-user-tag"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ)
+                <i class="fa-solid fa-user-tag"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ) <span style="color:#f87171; font-weight:800;">* จำเป็น</span>
               </div>
               <div class="grid-2col" style="gap:0.6rem;">
-                <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (เช่น ลูกค้าทั่วไป)" value="ลูกค้าทั่วไป">
-                <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (ถ้ามี)">
+                <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (จำเป็น)" required>
+                <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (จำเป็น)" required>
               </div>
             </div>
 
@@ -1797,8 +1797,20 @@ async function submitPosCheckout(branchId) {
     return;
   }
 
-  const custName = document.getElementById('pos-cust-name') ? document.getElementById('pos-cust-name').value : 'ลูกค้าทั่วไป';
-  const custPhone = document.getElementById('pos-cust-phone') ? document.getElementById('pos-cust-phone').value : '';
+  const custName = document.getElementById('pos-cust-name') ? document.getElementById('pos-cust-name').value.trim() : '';
+  const custPhone = document.getElementById('pos-cust-phone') ? document.getElementById('pos-cust-phone').value.trim() : '';
+
+  if (!custName) {
+    showToast('กรุณากรอกชื่อลูกค้าสำหรับออกใบเสร็จ', 'error');
+    return;
+  }
+
+  if (!custPhone) {
+    showToast('กรุณากรอกเบอร์โทรศัพท์ลูกค้าสำหรับออกใบเสร็จ', 'error');
+    return;
+  }
+
+  // Customer details already validated above
   const discountTotal = document.getElementById('pos-discount-input') ? Number(document.getElementById('pos-discount-input').value) || 0 : 0;
   const paymentMethod = document.getElementById('pos-payment-method') ? document.getElementById('pos-payment-method').value : 'cash';
   const receivedAmount = document.getElementById('pos-received-input') ? Number(document.getElementById('pos-received-input').value) || 0 : 0;
@@ -6868,18 +6880,26 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                     ${isPending ? `
                       <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา</span><br>
                       ${isHqOrPurchasing ? `
-                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', ${r.purchase_price || 0}, ${r.selling_price || 0})">
+                        <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem; margin-right:0.25rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', ${r.purchase_price || 0}, ${r.selling_price || 0})">
                           <i class="fa-solid fa-check"></i> ใส่ราคา
                         </button>
                       ` : ''}
+                      <button class="btn btn-info btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="viewGoodsReceiptDetails('${r._id}')">
+                        <i class="fa-solid fa-circle-info"></i> รายละเอียด
+                      </button>
                     ` : `
                       <span class="badge badge-green" style="margin-bottom:0.3rem;"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span><br>
                       <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">
                         อนุมัติโดย: ${r.confirmedBy ? r.confirmedBy.fullName || r.confirmedBy.username : '-'}
                       </span>
-                      <button class="btn btn-secondary btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="printGoodsReceiptSlip('${r._id}')">
-                        <i class="fa-solid fa-print"></i> พิมพ์ใบนำเข้า
-                      </button>
+                      <div style="display:flex; justify-content:center; gap:0.25rem; flex-wrap:wrap; margin-top:0.3rem;">
+                        <button class="btn btn-secondary btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="printGoodsReceiptSlip('${r._id}')">
+                          <i class="fa-solid fa-print"></i> พิมพ์ใบนำเข้า
+                        </button>
+                        <button class="btn btn-info btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="viewGoodsReceiptDetails('${r._id}')">
+                          <i class="fa-solid fa-circle-info"></i> รายละเอียด
+                        </button>
+                      </div>
                     `}
                   </td>
                 </tr>
@@ -7327,8 +7347,7 @@ async function printGoodsReceiptSlip(receiptId) {
               <tr>
                 <td style="text-align: center;">${globalIndex++}</td>
                 <td>
-                  <strong style="color:#0f172a;">${item.productName}</strong><br>
-                  <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
+                  <strong style="color:#0f172a;">${item.productName}</strong>
                 </td>
                 <td style="text-align: center;">
                   <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
@@ -7346,8 +7365,7 @@ async function printGoodsReceiptSlip(receiptId) {
                 <tr>
                   <td style="text-align: center;">${globalIndex++}</td>
                   <td>
-                    <strong style="color:#0f172a;">${item.productName}</strong><br>
-                    <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${item.brand || '-'}, รุ่น: ${item.model || '-'}, ความจุ: ${item.capacity || '-'}, สี: ${item.color || '-'})</span>
+                    <strong style="color:#0f172a;">${item.productName}</strong>
                   </td>
                   <td style="text-align: center;">
                     <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
@@ -7484,9 +7502,9 @@ async function printGoodsReceiptSlip(receiptId) {
                 <thead>
                   <tr>
                     <th style="width: 40px; text-align: center;">ลำดับ</th>
-                    <th>รายละเอียดสเปกอุปกรณ์ (Item Details)</th>
+                    <th>สินค้า</th>
                     <th style="width: 80px; text-align: center;">จำนวน</th>
-                    <th>หมายเลข IMEI ของเครื่องที่นำเข้า</th>
+                    <th>หมายเลข IMEI</th>
                     <th style="width: 110px; text-align: right;">ราคาต่อหน่วย</th>
                     <th style="width: 110px; text-align: right;">ราคารวม</th>
                   </tr>
@@ -7705,8 +7723,7 @@ async function printGoodsReceiptSlip(receiptId) {
             <tr>
               <td style="text-align: center;">1</td>
               <td>
-                <strong style="color:#0f172a;">${p.name}</strong><br>
-                <span style="font-size:0.75rem; color:#475569;">(ยี่ห้อ: ${p.brand}, รุ่น: ${p.model}, ความจุ: ${p.capacity || ''}, สี: ${p.color || ''})</span>
+                <strong style="color:#0f172a;">${p.name}</strong>
               </td>
               <td style="text-align: center;">
                 <span style="font-weight:700; border:1px solid #94a3b8; padding:2px 6px; border-radius:3px; font-size:11px; background:#f1f5f9;">1 เครื่อง</span>
@@ -11684,4 +11701,132 @@ function filterReleaseStockHistory() {
   const endDate = endEl ? endEl.value : '';
 
   renderReleaseStockView(branchId, startDate, endDate);
+}
+
+function viewGoodsReceiptDetails(receiptId) {
+  const receipt = (state.pendingReceiptsCache || []).find(r => r._id === receiptId);
+  if (!receipt) {
+    showToast('ไม่พบข้อมูลรายการรับสินค้านี้', 'error');
+    return;
+  }
+
+  const p = receipt.productInfo || {};
+  const branchName = receipt.branch ? receipt.branch.name : 'สาขาทั่วไป';
+  const receivedBy = receipt.receivedBy ? (receipt.receivedBy.fullName || receipt.receivedBy.username) : '-';
+  const confirmedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : '-';
+  
+  const createdDate = receipt.createdAt ? new Date(receipt.createdAt).toLocaleString('th-TH') : '-';
+  const confirmedDate = receipt.confirmedAt ? new Date(receipt.confirmedAt).toLocaleString('th-TH') : '-';
+
+  // Extract PO Number if present in remarks or receipt number
+  let poNumber = 'ไม่มี (นำเข้านอกใบสั่งซื้อ)';
+  if (receipt.remarks && receipt.remarks.includes('ใบสั่งซื้อเลขที่:')) {
+    const parts = receipt.remarks.split('ใบสั่งซื้อเลขที่:');
+    if (parts[1]) {
+      const match = parts[1].match(/BPO-\d+-\d+/);
+      poNumber = match ? match[0] : parts[1].replace(/[)]/g, '').trim();
+    }
+  }
+  if (poNumber === 'ไม่มี (นำเข้านอกใบสั่งซื้อ)' && receipt.receiptNumber && receipt.receiptNumber.includes('GR-BPO-')) {
+    const match = receipt.receiptNumber.match(/BPO-\d+-\d+/);
+    if (match) poNumber = match[0];
+  }
+
+  // Set status badge
+  let statusBadge = '';
+  if (receipt.status === 'pending_pricing') {
+    statusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอตั้งราคาคลัง</span>`;
+  } else if (receipt.status === 'confirmed') {
+    statusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span>`;
+  } else if (receipt.status === 'rejected') {
+    statusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ถูกปฏิเสธ</span>`;
+  }
+
+  const bodyHtml = `
+    <div style="display:flex; flex-direction:column; gap:1.2rem; font-size:0.88rem; color:var(--text-main);">
+      <!-- Status & Reference -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; background:rgba(255,255,255,0.02); padding:1rem; border-radius:6px; border:1px solid var(--border-color);">
+        <div>
+          <span style="color:var(--text-muted); display:block; font-size:0.75rem; font-weight:600;">เลขที่ใบรับสินค้า</span>
+          <strong style="font-size:0.95rem; color:var(--accent-primary); font-family:monospace;">${receipt.receiptNumber}</strong>
+        </div>
+        <div>
+          <span style="color:var(--text-muted); display:block; font-size:0.75rem; font-weight:600;">สถานะรายการ</span>
+          <div style="margin-top:0.2rem;">${statusBadge}</div>
+        </div>
+      </div>
+
+      <!-- Product Spec Details -->
+      <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
+        <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
+          <i class="fa-solid fa-mobile-screen" style="color:var(--accent-gold);"></i> รายละเอียดสินค้า (Product Specs)
+        </div>
+        <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
+          <div><span style="color:var(--text-muted);">ชื่อรุ่นทางการ:</span> <strong>${p.name || '-'}</strong></div>
+          <div><span style="color:var(--text-muted);">หมวดหมู่:</span> <strong>${p.category || '-'}</strong></div>
+          <div><span style="color:var(--text-muted);">ยี่ห้อ:</span> <strong>${p.brand || '-'}</strong></div>
+          <div><span style="color:var(--text-muted);">รุ่น:</span> <strong>${p.model || '-'}</strong></div>
+          <div><span style="color:var(--text-muted);">ความจุ:</span> <strong>${p.capacity || '-'}</strong></div>
+          <div><span style="color:var(--text-muted);">สี:</span> <strong>${p.color || '-'}</strong></div>
+        </div>
+      </div>
+
+      <!-- IMEI & Pricing Details -->
+      <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
+        <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
+          <i class="fa-solid fa-barcode" style="color:var(--accent-gold);"></i> ข้อมูลประจำตัวเครื่อง & ราคา
+        </div>
+        <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
+          <div style="grid-column: span 2;">
+            <span style="color:var(--text-muted);">หมายเลข IMEI:</span>
+            <strong style="color:#38bdf8; font-family:monospace; font-size:1.05rem; letter-spacing:0.5px; display:block; margin-top:0.2rem;">
+              ${(receipt.imeiSerials || []).join(', ') || '-'}
+            </strong>
+          </div>
+          <div>
+            <span style="color:var(--text-muted);">กำหนดราคาทุน:</span>
+            <strong style="font-size:1rem; color:var(--text-main);">
+              ${receipt.purchase_price ? '฿' + receipt.purchase_price.toLocaleString() : '<span style="color:var(--accent-gold);">ยังไม่ได้กำหนด</span>'}
+            </strong>
+          </div>
+          <div>
+            <span style="color:var(--text-muted);">กำหนดราคาขาย:</span>
+            <strong style="font-size:1rem; color:#34d399;">
+              ${receipt.selling_price ? '฿' + receipt.selling_price.toLocaleString() : '<span style="color:var(--accent-gold);">ยังไม่ได้กำหนด</span>'}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tracking & Log info -->
+      <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
+        <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
+          <i class="fa-solid fa-user-gear" style="color:var(--accent-gold);"></i> ประวัติการทำรายการ (Audits)
+        </div>
+        <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
+          <div><span style="color:var(--text-muted);">คลังปลายทาง:</span> <strong>${branchName}</strong></div>
+          <div><span style="color:var(--text-muted);">ใบสั่งซื้ออ้างอิง:</span> <strong style="color:var(--accent-gold); font-family:monospace;">${poNumber}</strong></div>
+          
+          <div><span style="color:var(--text-muted);">ผู้สแกนรับของ:</span> <strong>${receivedBy}</strong></div>
+          <div><span style="color:var(--text-muted);">วันเวลาสแกนรับ:</span> <strong>${createdDate}</strong></div>
+          
+          <div><span style="color:var(--text-muted);">ผู้อนุมัติราคา/เข้าคลัง:</span> <strong>${confirmedBy}</strong></div>
+          <div><span style="color:var(--text-muted);">วันเวลาอนุมัติ:</span> <strong>${confirmedDate}</strong></div>
+
+          <div style="grid-column: span 2; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.6rem;">
+            <span style="color:var(--text-muted); display:block; margin-bottom:0.2rem;">หมายเหตุการทำรายการ:</span>
+            <div style="background:rgba(0,0,0,0.15); padding:0.6rem; border-radius:4px; border:1px solid rgba(255,255,255,0.02); font-style:italic;">
+              ${receipt.remarks ? receipt.remarks : '<span style="color:var(--text-muted);">ไม่มีหมายเหตุ</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
+  `;
+
+  openModal(`รายละเอียดใบรับสินค้า: ${receipt.receiptNumber}`, bodyHtml, footerHtml);
 }
