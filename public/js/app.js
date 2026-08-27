@@ -341,6 +341,7 @@ function updateSidebarMenuByRole(userRole) {
   });
   updateReceiptVerificationBadge();
   updateGoodsReceiptBadge();
+  updateBranchAuditBadge();
 }
 
 // Client Router & View Switcher
@@ -538,9 +539,11 @@ function initAppSession() {
   window.receiptBadgeInterval = setInterval(() => {
     updateReceiptVerificationBadge();
     updateGoodsReceiptBadge();
+    updateBranchAuditBadge();
   }, 30000);
   updateReceiptVerificationBadge();
   updateGoodsReceiptBadge();
+  updateBranchAuditBadge();
 
   const allowedViews = ROLE_ALLOWED_VIEWS[(state.user ? state.user.role : 'admin')] || ['dashboard'];
   navigateTo(allowedViews[0]);
@@ -4303,6 +4306,8 @@ async function renderBranchAuditView() {
         runScan();
       };
     }
+    // Update badge from current rendered items cache
+    updateBranchAuditBadgeFromCache();
   } catch (err) {
     container.innerHTML = `<div style="color:#ef4444; padding:2rem;">เกิดข้อผิดพลาดในการโหลดรายการสต็อก: ${err.message}</div>`;
   }
@@ -4339,6 +4344,9 @@ function updateRowVariance(idx) {
   } else {
     statusTd.innerHTML = `<span class="badge badge-red">ยอดเกิน</span>`;
   }
+
+  // Update badge dynamically
+  updateBranchAuditBadgeFromCache();
 
   // Update photo cell dynamically
   const photoCell = document.getElementById(`photo-cell-${idx}`);
@@ -12017,5 +12025,116 @@ async function fetchSaleAuditHistory(saleId) {
     }
   } catch (err) {
     historyList.innerHTML = `<div style="color:#ef4444;">ไม่สามารถโหลดประวัติได้: ${err.message}</div>`;
+  }
+}
+
+/* ==========================================================================
+   DAILY STOCK AUDIT SIDEBAR BADGE UPDATER
+   ========================================================================== */
+function updateBranchAuditBadgeFromCache() {
+  if (!state.expectedStockCache) return;
+  
+  let pendingCount = 0;
+  state.expectedStockCache.forEach(item => {
+    if (item.expectedCount > 0) {
+      const scannedImeis = item.scannedImeis || [];
+      const actual = scannedImeis.length;
+      const diff = actual - item.expectedCount;
+      if (diff < 0 && !item.hasIssue) {
+        pendingCount++;
+      }
+    }
+  });
+
+  const navLink = document.querySelector('.sidebar-menu a[data-view="branch-audit"]');
+  if (navLink) {
+    let badge = navLink.querySelector('.menu-notification-badge');
+    if (pendingCount > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'menu-notification-badge';
+        badge.style.display = 'inline-flex';
+        badge.style.alignItems = 'center';
+        badge.style.justifyContent = 'center';
+        badge.style.background = '#ef4444';
+        badge.style.color = '#ffffff';
+        badge.style.fontSize = '0.72rem';
+        badge.style.fontWeight = '800';
+        badge.style.borderRadius = '20px';
+        badge.style.minWidth = '18px';
+        badge.style.height = '18px';
+        badge.style.padding = '0 6px';
+        badge.style.marginLeft = '8px';
+        badge.style.verticalAlign = 'middle';
+        badge.style.lineHeight = '1';
+        navLink.appendChild(badge);
+      }
+      badge.innerText = pendingCount;
+    } else {
+      if (badge) badge.remove();
+    }
+  }
+}
+
+async function updateBranchAuditBadge() {
+  try {
+    if (!state.token || !state.user) return;
+
+    let branchId = state.user.branch ? (state.user.branch._id || state.user.branch) : (state.selectedBranchAuditId || 'all');
+    if (!branchId) {
+      const navLink = document.querySelector('.sidebar-menu a[data-view="branch-audit"]');
+      if (navLink) {
+        const badge = navLink.querySelector('.menu-notification-badge');
+        if (badge) badge.remove();
+      }
+      return;
+    }
+
+    const res = await apiRequest(`/audit/expected?branchId=${branchId}`);
+    if (!res.success) return;
+
+    const items = res.items || [];
+    let pendingCount = 0;
+    items.forEach(item => {
+      if (item.expectedCount > 0) {
+        const scannedImeis = item.scannedImeis || [];
+        const actual = scannedImeis.length;
+        const diff = actual - item.expectedCount;
+        if (diff < 0 && !item.hasIssue) {
+          pendingCount++;
+        }
+      }
+    });
+
+    const navLink = document.querySelector('.sidebar-menu a[data-view="branch-audit"]');
+    if (navLink) {
+      let badge = navLink.querySelector('.menu-notification-badge');
+      if (pendingCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'menu-notification-badge';
+          badge.style.display = 'inline-flex';
+          badge.style.alignItems = 'center';
+          badge.style.justifyContent = 'center';
+          badge.style.background = '#ef4444';
+          badge.style.color = '#ffffff';
+          badge.style.fontSize = '0.72rem';
+          badge.style.fontWeight = '800';
+          badge.style.borderRadius = '20px';
+          badge.style.minWidth = '18px';
+          badge.style.height = '18px';
+          badge.style.padding = '0 6px';
+          badge.style.marginLeft = '8px';
+          badge.style.verticalAlign = 'middle';
+          badge.style.lineHeight = '1';
+          navLink.appendChild(badge);
+        }
+        badge.innerText = pendingCount;
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+  } catch (err) {
+    console.error('Error updating branch audit badge:', err);
   }
 }
