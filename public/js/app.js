@@ -2576,9 +2576,16 @@ async function renderFinanceView(filterParams = {}) {
                       `}
                     </td>
                     <td style="text-align:center; vertical-align:middle;">
-                      <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
-                        <i class="fa-solid fa-print"></i> พิมพ์
-                      </button>
+                      <div style="display:flex; justify-content:center; gap:0.25rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
+                          <i class="fa-solid fa-print"></i> พิมพ์
+                        </button>
+                        ${!isVoided ? `
+                          <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="openEditSalePricesModal('${s._id}')">
+                            <i class="fa-solid fa-tags"></i> แก้ราคา
+                          </button>
+                        ` : ''}
+                      </div>
                     </td>
                   </tr>
                 `;
@@ -11847,4 +11854,169 @@ function viewGoodsReceiptDetails(receiptId) {
   `;
 
   openModal(`รายละเอียดใบรับสินค้า: ${receipt.receiptNumber}`, bodyHtml, footerHtml);
+}
+
+/* ==========================================================================
+   EDIT COMPLETED SALE PRICES MODAL & ACTION
+   ========================================================================== */
+function openEditSalePricesModal(saleId) {
+  const sale = (state.salesCache || []).find(s => s._id === saleId);
+  if (!sale) {
+    showToast('ไม่พบข้อมูลรายการขายนี้', 'error');
+    return;
+  }
+
+  let itemsHtml = (sale.items || []).map((item, idx) => {
+    return `
+      <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:0.8rem;">
+        <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.4rem; color:var(--text-main);">
+          ${idx + 1}. ${item.productName} <span style="font-family:monospace; color:#fbbf24; font-size:0.78rem;">(${item.imei || '-'})</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-muted);">ราคาทุนต่อหน่วย:</label>
+            <div style="font-size:0.85rem; font-weight:600; padding:0.2rem 0.4rem; background:rgba(0,0,0,0.1); border-radius:4px;">฿${(item.costPrice || 0).toLocaleString()}</div>
+          </div>
+          <div>
+            <label for="edit-unit-price-${item._id}" style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ราคาขายหน่วยละ (บาท) <span style="color:#ef4444;">*</span></label>
+            <input type="number" id="edit-unit-price-${item._id}" data-item-id="${item._id}" class="form-control edit-sale-item-price" style="font-size:0.82rem; padding:0.25rem 0.5rem;" min="0" value="${item.unitPrice || 0}">
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const bodyHtml = `
+    <form id="edit-sale-prices-form" onsubmit="event.preventDefault(); submitEditSalePrices('${saleId}');">
+      <div style="margin-bottom:1rem; font-size:0.85rem; background:rgba(0,0,0,0.1); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px;">
+        <div><strong>เลขที่ใบเสร็จ:</strong> <span style="font-family:monospace; font-weight:700; color:var(--accent-primary);">${sale.receiptNumber}</span></div>
+        <div style="margin-top:0.2rem;"><strong>สาขา:</strong> ${sale.branch ? sale.branch.name : 'สาขาทั่วไป'}</div>
+        <div style="margin-top:0.2rem;"><strong>ยอดขายสุทธิเดิม:</strong> <strong style="color:#34d399;">฿${(sale.grandTotal || 0).toLocaleString()}</strong></div>
+      </div>
+
+      <div style="max-height:280px; overflow-y:auto; margin-bottom:1rem; padding-right:0.3rem;">
+        ${itemsHtml}
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem; background:rgba(255,255,255,0.01); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px;">
+        <label for="edit-discount-total" style="font-weight:700; font-size:0.85rem; color:var(--accent-secondary);">ส่วนลดรวมท้ายบิล (บาท)</label>
+        <input type="number" id="edit-discount-total" class="form-control" style="font-size:0.85rem; padding:0.3rem 0.6rem; width:100%; margin-top:0.3rem;" min="0" value="${sale.discountTotal || 0}">
+      </div>
+      
+      <!-- History Container -->
+      <div style="margin-top:1.2rem; border-top:1px dashed var(--border-color); padding-top:1rem; text-align:left;">
+        <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--text-muted);">
+          <i class="fa-solid fa-clock-rotate-left"></i> ประวัติการแก้ไขราคาย้อนหลัง
+        </div>
+        <div id="sale-edit-history-list" style="max-height:150px; overflow-y:auto; font-size:0.78rem; background:rgba(0,0,0,0.1); border:1px solid var(--border-color); border-radius:6px; padding:0.6rem; color:var(--text-muted);">
+          <i class="fa-solid fa-spinner fa-spin" style="margin-right:0.3rem;"></i> กำลังโหลดประวัติ...
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="submit" form="edit-sale-prices-form" class="btn btn-warning"><i class="fa-solid fa-save"></i> บันทึกราคาใหม่</button>
+  `;
+
+  openModal(`แก้ไขราคาขายบิล: ${sale.receiptNumber}`, bodyHtml, footerHtml);
+  
+  // Load and show previous edit history
+  fetchSaleAuditHistory(saleId);
+}
+
+async function submitEditSalePrices(saleId) {
+  const inputs = document.querySelectorAll('.edit-sale-item-price');
+  const items = [];
+  
+  for (const input of inputs) {
+    const itemId = input.getAttribute('data-item-id');
+    const unitPrice = Number(input.value);
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      showToast('กรุณาระบุราคาขายให้ถูกต้องมากกว่าหรือเท่ากับ 0', 'error');
+      return;
+    }
+    items.push({ itemId, unitPrice });
+  }
+
+  const discountInput = document.getElementById('edit-discount-total');
+  const discountTotal = discountInput ? Number(discountInput.value) || 0 : 0;
+  if (discountTotal < 0) {
+    showToast('กรุณาระบุส่วนลดให้ถูกต้องมากกว่าหรือเท่ากับ 0', 'error');
+    return;
+  }
+
+  showToast('กำลังบันทึกราคาใหม่...', 'info');
+  try {
+    const res = await apiRequest(`/pos/sales/${saleId}/prices`, 'PUT', { items, discountTotal });
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      
+      // Reload financial view using current active filters
+      const branchSelect = document.getElementById('fin-branch-filter');
+      const startDateInput = document.getElementById('fin-start-date');
+      const endDateInput = document.getElementById('fin-end-date');
+      
+      const filterParams = {};
+      if (branchSelect && branchSelect.value) filterParams.branchId = branchSelect.value;
+      if (startDateInput && startDateInput.value) filterParams.startDate = startDateInput.value;
+      if (endDateInput && endDateInput.value) filterParams.endDate = endDateInput.value;
+      
+      const paymentSelect = document.getElementById('fin-payment-filter');
+      if (paymentSelect && paymentSelect.value) filterParams.paymentMethod = paymentSelect.value;
+      const payoutSelect = document.getElementById('fin-payout-filter');
+      if (payoutSelect && payoutSelect.value) filterParams.payoutStatus = payoutSelect.value;
+
+      renderFinanceView(filterParams);
+    }
+  } catch (err) {
+    // Handled
+  }
+}
+
+async function fetchSaleAuditHistory(saleId) {
+  const historyList = document.getElementById('sale-edit-history-list');
+  if (!historyList) return;
+  
+  try {
+    const res = await apiRequest(`/pos/sales/${saleId}/audit-history`);
+    if (res.success && res.logs && res.logs.length > 0) {
+      // Filter out logs that are not price edits or where the price/discount did not actually change
+      const filteredLogs = res.logs.filter(log => {
+        if (log.action !== 'UPDATE_SALE_SELLING_PRICES') return false;
+        const det = log.details || {};
+        return det.originalGrandTotal !== undefined && 
+               det.newGrandTotal !== undefined && 
+               det.originalGrandTotal !== det.newGrandTotal;
+      });
+
+      if (filteredLogs.length > 0) {
+        let html = '<div style="display:flex; flex-direction:column; gap:0.6rem;">';
+        filteredLogs.forEach(log => {
+          const dateStr = new Date(log.timestamp).toLocaleString('th-TH');
+          const det = log.details || {};
+          const diffText = `ยอดสุทธิ: ฿${(det.originalGrandTotal || 0).toLocaleString()} ➔ ฿${(det.newGrandTotal || 0).toLocaleString()} (ส่วนลด: ฿${(det.discountTotal || 0).toLocaleString()})`;
+          html += `
+            <div style="border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.4rem; line-height:1.35;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
+                <strong style="color:var(--text-main); font-size:0.8rem;">ผู้แก้ไข: ${log.operator}</strong>
+                <span style="font-size:0.7rem; color:var(--text-muted);">${dateStr}</span>
+              </div>
+              <div style="color:var(--accent-gold); font-size:0.75rem; font-family:monospace;">${diffText}</div>
+            </div>
+          `;
+        });
+        html += '</div>';
+        historyList.innerHTML = html;
+      } else {
+        historyList.innerHTML = '<div style="text-align:center; padding:0.4rem; color:var(--text-muted); font-style:italic;">ยังไม่มีประวัติการแก้ไขราคาในบิลนี้</div>';
+      }
+    } else {
+      historyList.innerHTML = '<div style="text-align:center; padding:0.4rem; color:var(--text-muted); font-style:italic;">ยังไม่มีประวัติการแก้ไขราคาในบิลนี้</div>';
+    }
+  } catch (err) {
+    historyList.innerHTML = `<div style="color:#ef4444;">ไม่สามารถโหลดประวัติได้: ${err.message}</div>`;
+  }
 }

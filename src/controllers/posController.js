@@ -958,6 +958,118 @@ const getStaffDashboard = async (req, res, next) => {
   }
 };
 
+
+const updateSalePrices = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { items: updatedItems, discountTotal } = req.body;
+
+    const Sale = require('../models/Sale');
+    const AuditLog = require('../models/AuditLog');
+
+    const sale = await Sale.findById(id).populate('branch');
+    if (!sale) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรายการขายที่ต้องการแก้ไข' });
+    }
+
+    if (sale.status === 'voided') {
+      return res.status(400).json({ success: false, message: 'ไม่สามารถแก้ไขรายการขายที่ถูกยกเลิกไปแล้วได้' });
+    }
+
+    const originalGrandTotal = sale.grandTotal;
+
+    // Loop and update item prices
+    if (Array.isArray(updatedItems)) {
+      for (const updated of updatedItems) {
+        const item = sale.items.id(updated.itemId);
+        if (item) {
+          const newUnitPrice = Number(updated.unitPrice);
+          if (isNaN(newUnitPrice) || newUnitPrice < 0) {
+            return res.status(400).json({ success: false, message: 'ราคาขายสินค้าต้องเป็นตัวเลขมากกว่าหรือเท่ากับ 0' });
+          }
+          item.unitPrice = newUnitPrice;
+          item.totalPrice = item.quantity * newUnitPrice;
+          item.profit = item.totalPrice - (item.costPrice * item.quantity);
+        }
+      }
+    }
+
+    // Update discountTotal if provided
+    if (discountTotal !== undefined) {
+      const newDiscountTotal = Number(discountTotal);
+      if (isNaN(newDiscountTotal) || newDiscountTotal < 0) {
+        return res.status(400).json({ success: false, message: 'ส่วนลดรวมต้องเป็นตัวเลขมากกว่าหรือเท่ากับ 0' });
+      }
+      sale.discountTotal = newDiscountTotal;
+    }
+
+    // Recalculate subtotal, grandTotal, totalProfit
+    sale.subtotal = sale.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+    sale.grandTotal = Math.max(0, sale.subtotal - sale.discountTotal);
+    sale.totalProfit = sale.grandTotal - (sale.totalCost || 0);
+
+    // If paymentMethod is cash, update changeAmount or receivedAmount
+    if (sale.paymentMethod === 'cash') {
+      sale.changeAmount = Math.max(0, sale.receivedAmount - sale.grandTotal);
+    } else {
+      sale.receivedAmount = sale.grandTotal;
+      sale.changeAmount = 0;
+    }
+
+    await sale.save();
+
+    await AuditLog.create({
+      user: req.user._id,
+      username: req.user.username,
+      userRole: req.user.role,
+      action: 'UPDATE_SALE_SELLING_PRICES',
+      entity: 'Sale',
+      entityId: sale._id.toString(),
+      details: {
+        receiptNumber: sale.receiptNumber,
+        originalGrandTotal,
+        newGrandTotal: sale.grandTotal,
+        discountTotal: sale.discountTotal
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `แก้ไขราคาขายของบิล ${sale.receiptNumber} สำเร็จ เรียบร้อยแล้ว`,
+      sale
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+const getSaleAuditHistory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const AuditLog = require('../models/AuditLog');
+
+    const logs = await AuditLog.find({
+      entity: 'Sale',
+      entityId: id
+    })
+    .populate('user', 'fullName username')
+    .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      logs: logs.map(l => ({
+        operator: l.user ? l.user.fullName || l.user.username : l.username,
+        action: l.action,
+        timestamp: l.createdAt,
+        details: l.details
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   returnCostToHq,
   createSale,
@@ -968,5 +1080,7 @@ module.exports = {
   getExecutiveDashboard,
   getExecutiveReportRange,
   voidSale,
-  getStaffDashboard
+  getStaffDashboard,
+  updateSalePrices,
+  getSaleAuditHistory
 };

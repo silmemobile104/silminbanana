@@ -11,6 +11,8 @@ router.get('/finance-report', authenticateToken, posController.getFinanceProfitR
 router.put('/finance-payout/:id', authenticateToken, posController.updateFinancePayoutStatus);
 router.put('/return-cost/:saleId', authenticateToken, posController.returnCostToHq);
 router.put('/void/:id', authenticateToken, posController.voidSale);
+router.put('/sales/:id/prices', authenticateToken, posController.updateSalePrices);
+router.get('/sales/:id/audit-history', authenticateToken, posController.getSaleAuditHistory);
 router.get('/executive-dashboard', authenticateToken, posController.getExecutiveDashboard);
 router.get('/executive-report', authenticateToken, posController.getExecutiveReportRange);
 router.get('/staff-dashboard', authenticateToken, posController.getStaffDashboard);
