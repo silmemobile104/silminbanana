@@ -1274,7 +1274,7 @@ function triggerCustomReportModal() {
 /* ==========================================================================
    VIEW 1.5: BRANCH INVENTORY VIEW
    ========================================================================== */
-async function renderBranchInventoryView(selectedBranchId = null, selectedStatus = 'in_stock') {
+async function renderBranchInventoryView(selectedBranchId = null, selectedStatus = 'in_stock', selectedBrand = 'all') {
   const container = document.getElementById('content-container');
   container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
 
@@ -1290,10 +1290,32 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
     const queryParam = branchIdParam ? `?branchId=${branchIdParam}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
     
-    // Filter stock list based on selected status
+    // Collect unique brands dynamically
+    const uniqueBrands = new Set();
+    (res.stock || []).forEach(st => {
+      const brand = (st.brand || (st.product && st.product.brand) || '').trim();
+      if (brand) uniqueBrands.add(brand);
+    });
+    if (state.masterOptions && state.masterOptions.brands) {
+      state.masterOptions.brands.forEach(b => {
+        const val = typeof b === 'string' ? b.trim() : (b && b.value ? b.value.trim() : '');
+        if (val) uniqueBrands.add(val);
+      });
+    }
+    const brandsList = Array.from(uniqueBrands).sort((a, b) => a.localeCompare(b));
+
+    // Filter stock list based on selected status and brand
     const activeStockList = (res.stock || []).filter(st => {
-      if (selectedStatus === 'all') return true;
-      return st.status === selectedStatus;
+      let statusMatch = true;
+      if (selectedStatus !== 'all') {
+        statusMatch = st.status === selectedStatus;
+      }
+      let brandMatch = true;
+      if (selectedBrand !== 'all') {
+        const itemBrand = (st.brand || (st.product && st.product.brand) || '').trim().toLowerCase();
+        brandMatch = itemBrand === selectedBrand.trim().toLowerCase();
+      }
+      return statusMatch && brandMatch;
     });
     
     state.branchStockCache = res.stock || [];
@@ -1323,21 +1345,26 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
           
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">สถานะ:</label>
-            <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value)">
+            <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value, document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
               <option value="in_stock" ${selectedStatus === 'in_stock' ? 'selected' : ''}>พร้อมขาย</option>
               <option value="sold" ${selectedStatus === 'sold' ? 'selected' : ''}>ขายแล้ว</option>
-              <option value="in_transit" ${selectedStatus === 'in_transit' ? 'selected' : ''}>ระหว่างโอนย้าย</option>
-              <option value="transferred" ${selectedStatus === 'transferred' ? 'selected' : ''}>โอนย้ายสำเร็จ</option>
-              <option value="missing" ${selectedStatus === 'missing' ? 'selected' : ''}>สูญหาย</option>
-              <option value="released" ${selectedStatus === 'released' ? 'selected' : ''}>จ่ายออกแล้ว</option>
+              <option value="released" ${selectedStatus === 'released' ? 'selected' : ''}>จ่ายออก</option>
               <option value="all" ${selectedStatus === 'all' ? 'selected' : ''}>ทุกสถานะ</option>
+            </select>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">ยี่ห้อ:</label>
+            <select id="bi-brand-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', this.value)">
+              <option value="all" ${selectedBrand === 'all' ? 'selected' : ''}>ทุกยี่ห้อ</option>
+              ${brandsList.map(b => `<option value="${b}" ${selectedBrand === b ? 'selected' : ''}>${b}</option>`).join('')}
             </select>
           </div>
 
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
-              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value, document.getElementById('bi-status-select').value)">
+              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
                 <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
@@ -10571,9 +10598,16 @@ async function submitEditStock(stockId) {
     if (res.success) {
       showToast(res.message);
       closeModal();
-      const selectEl = document.getElementById('bi-branch-select');
-      const currentBranchId = selectEl ? selectEl.value : null;
-      renderBranchInventoryView(currentBranchId);
+      
+      const branchSelect = document.getElementById('bi-branch-select');
+      const statusSelect = document.getElementById('bi-status-select');
+      const brandSelect = document.getElementById('bi-brand-select');
+      
+      const currentBranchId = branchSelect ? branchSelect.value : null;
+      const currentStatus = statusSelect ? statusSelect.value : 'in_stock';
+      const currentBrand = brandSelect ? brandSelect.value : 'all';
+      
+      renderBranchInventoryView(currentBranchId, currentStatus, currentBrand);
     }
   } catch (err) {
     // Handled
@@ -10710,8 +10744,10 @@ async function submitReleaseStock(imeis) {
       const currentBranchId = selectEl ? selectEl.value : null;
       const statusEl = document.getElementById('bi-status-select');
       const currentStatus = statusEl ? statusEl.value : 'in_stock';
+      const brandEl = document.getElementById('bi-brand-select');
+      const currentBrand = brandEl ? brandEl.value : 'all';
       
-      renderBranchInventoryView(currentBranchId, currentStatus);
+      renderBranchInventoryView(currentBranchId, currentStatus, currentBrand);
     }
   } catch (err) {
     hidePageLoading();
