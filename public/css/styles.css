@@ -2,7 +2,10 @@
    Silmin Banana Multi-Branch POS & Audit System - Design System (Thai Localized)
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap');
+/* The Google Fonts request used to live here as an @import, which forced the
+   browser to download and parse this file before it could even discover the
+   font stylesheet — a four-level serial chain. It is now a <link> in
+   index.html so it downloads in parallel with this file. */
 
 :root {
   /* Color Palette - Soft Warm White Theme */
@@ -1060,4 +1063,83 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 
 @keyframes pageSpinnerRotate {
   to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Accessibility — keyboard focus & reduced motion
+   Added as new rules only; nothing above is overridden.
+   ========================================================================== */
+
+/* Visible focus ring for keyboard users on every interactive element.
+   :focus-visible keeps mouse clicks from showing the ring. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+label.sidebar-toggle-label:focus-visible,
+[tabindex]:focus-visible,
+.nav-link:focus-visible,
+.btn:focus-visible {
+  outline: 3px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* Form fields already have a styled :focus state above. Give them the same
+   ring when reached by keyboard so they match everything else. */
+.form-control:focus-visible,
+.form-select:focus-visible {
+  outline: 3px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* #page-heading receives focus after every SPA view change so screen readers
+   land in the new content. It is a destination, not a control, so it takes no
+   visible ring — sighted users already saw the page change. */
+#page-heading:focus,
+#page-heading:focus-visible {
+  outline: none;
+}
+
+/* Skip link — visually hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10000;
+  padding: 0.75rem 1.25rem;
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 0 0 var(--radius-md, 8px) 0;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+/* Screen-reader-only helper for live regions and off-screen labels. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Respect the OS "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

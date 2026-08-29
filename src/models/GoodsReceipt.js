@@ -66,4 +66,8 @@ const goodsReceiptSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Receipt verification filters by status and branch, sorted newest-first.
+goodsReceiptSchema.index({ status: 1, branch: 1, createdAt: -1 });
+goodsReceiptSchema.index({ branch: 1, createdAt: -1 });
+
 module.exports = mongoose.model('GoodsReceipt', goodsReceiptSchema);

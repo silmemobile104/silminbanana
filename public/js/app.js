@@ -65,6 +65,58 @@ function formatRoleThai(roleKey) {
   return formatRoleName(roleKey);
 }
 
+/* ==========================================================================
+   On-demand library loading
+   Chart.js is only needed on the executive dashboard, and SheetJS only when
+   someone actually exports a file. Loading them up front cost ~375KB (gzip)
+   of render-blocking JavaScript on every single page view.
+   Each loader caches its promise, so concurrent callers share one download.
+   ========================================================================== */
+const _scriptCache = {};
+
+function loadScriptOnce(key, src) {
+  if (window[key]) return Promise.resolve(window[key]);
+  if (_scriptCache[src]) return _scriptCache[src];
+
+  _scriptCache[src] = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.async = true;
+    el.onload = () => {
+      if (window[key]) resolve(window[key]);
+      else reject(new Error(`โหลด ${key} แล้วแต่ไม่พบตัวไลบรารี`));
+    };
+    el.onerror = () => {
+      delete _scriptCache[src]; // allow a retry on the next attempt
+      reject(new Error(`ไม่สามารถโหลดไลบรารีจากเครือข่ายได้: ${key}`));
+    };
+    document.head.appendChild(el);
+  });
+
+  return _scriptCache[src];
+}
+
+// Pinned to 4.5.1 — the exact version the previous unpinned URL was serving,
+// so behaviour is unchanged and a future Chart.js release cannot break the
+// dashboard on its own.
+function loadChartJs() {
+  return loadScriptOnce('Chart', 'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js');
+}
+
+function loadXlsx() {
+  return loadScriptOnce('XLSX', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+}
+
+// Escape a string for safe interpolation into HTML text or attribute values
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Helper to generate auto name
 function generateAutoSKU(brand = '', model = '', capacity = '') {
   return '';
@@ -76,16 +128,30 @@ function generateAutoName(brand = '', model = '', capacity = '', color = '') {
   return parts.join(' ');
 }
 
+// Announce a message to screen readers without showing anything on screen.
+// Used for errors and for SPA page changes, which produce no navigation event.
+function announce(message) {
+  const region = document.getElementById('a11y-alert');
+  if (!region) return;
+  // Clearing first guarantees the reader re-announces an identical message.
+  region.textContent = '';
+  setTimeout(() => { region.textContent = message; }, 60);
+}
+
 // Global Toast Notification Helper
 function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
-    <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'}" style="color: ${type === 'success' ? '#10b981' : '#ef4444'}"></i>
-    <span>${message}</span>
+    <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'}" style="color: ${type === 'success' ? '#10b981' : '#ef4444'}" aria-hidden="true"></i>
+    <span>${escapeHtml(message)}</span>
   `;
   container.appendChild(toast);
+
+  // Errors interrupt; successes wait for a pause in speech.
+  if (type !== 'success') announce(message);
+
   setTimeout(() => {
     toast.remove();
   }, 4000);
@@ -151,28 +217,103 @@ function fillLogin(username, password) {
 }
 
 // Modal Helpers
+// Remembers whatever had focus before the dialog opened, so it can be given
+// back on close. Without this, focus falls back to <body> and keyboard users
+// lose their place in the page.
+let lastFocusedBeforeModal = null;
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+function getModalFocusable() {
+  const modal = document.getElementById('app-modal');
+  if (!modal) return [];
+  return Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR))
+    .filter(el => el.offsetParent !== null || el === document.activeElement);
+}
+
+function isModalOpen() {
+  const modal = document.getElementById('app-modal');
+  return !!modal && modal.classList.contains('active');
+}
+
 function openModal(title, bodyHtml, footerHtml = '') {
+  const modal = document.getElementById('app-modal');
+
+  lastFocusedBeforeModal = document.activeElement;
+
   document.getElementById('modal-title').innerText = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
   document.getElementById('modal-footer').innerHTML = footerHtml;
-  document.getElementById('app-modal').classList.add('active');
+  modal.classList.add('active');
+  modal.setAttribute('aria-hidden', 'false');
+  modal.removeAttribute('inert');
+
+  // Move focus into the dialog: first real control, else the close button.
+  const focusable = getModalFocusable();
+  const firstField = focusable.find(el => el.id !== 'modal-close');
+  const target = firstField || document.getElementById('modal-close');
+  if (target) setTimeout(() => target.focus(), 30);
 }
 
 function closeModal() {
-  document.getElementById('app-modal').classList.remove('active');
+  const modal = document.getElementById('app-modal');
+  const wasOpen = isModalOpen();
+
+  modal.classList.remove('active');
+  modal.setAttribute('aria-hidden', 'true');
+  // Blur anything inside before making it inert, or focus is left nowhere.
+  if (modal.contains(document.activeElement)) document.activeElement.blur();
+  modal.setAttribute('inert', '');
+
   const modalCard = document.querySelector('#app-modal .modal-card');
   if (modalCard) {
     modalCard.style.maxWidth = '';
     modalCard.style.width = '';
   }
+
+  // Hand focus back to whatever opened the dialog.
+  if (wasOpen && lastFocusedBeforeModal && document.contains(lastFocusedBeforeModal)) {
+    try { lastFocusedBeforeModal.focus(); } catch (e) { /* element may be gone */ }
+  }
+  lastFocusedBeforeModal = null;
 }
 
+// Escape closes the dialog; Tab cycles inside it instead of escaping behind it.
+document.addEventListener('keydown', (e) => {
+  if (!isModalOpen()) return;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeModal();
+    return;
+  }
+
+  if (e.key !== 'Tab') return;
+
+  const focusable = getModalFocusable();
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
+
 function showCustomConfirm(title, message, onConfirm, onCancel = null, type = 'confirm') {
-  let iconHtml = '<i class="fa-solid fa-circle-question" style="color:#0284c7;"></i>';
+  let iconHtml = '<i class="fa-solid fa-circle-question" style="color:#0284c7;" aria-hidden="true"></i>';
   let confirmBtnStyle = 'background:#0284c7; border:none;';
   
   if (type === 'warning' || type === 'danger') {
-    iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="color:#e11d48;"></i>';
+    iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="color:#e11d48;" aria-hidden="true"></i>';
     confirmBtnStyle = 'background:#e11d48; border:none;';
   }
   
@@ -369,8 +510,10 @@ async function navigateTo(viewName) {
   document.querySelectorAll('.nav-link').forEach(link => {
     if (link.getAttribute('data-view') === viewName) {
       link.classList.add('active');
+      link.setAttribute('aria-current', 'page');
     } else {
       link.classList.remove('active');
+      link.removeAttribute('aria-current');
     }
   });
 
@@ -474,6 +617,14 @@ async function navigateTo(viewName) {
     }
   } finally {
     hidePageLoading();
+
+    // A single-page app produces no navigation event, so nothing tells a
+    // screen reader the page changed. Announce it, and move focus to the
+    // heading so the next Tab starts inside the new view instead of the menu.
+    if (heading) {
+      announce(`${heading.innerText}. โหลดหน้าเรียบร้อยแล้ว`);
+      heading.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -556,7 +707,7 @@ async function renderStaffDashboardView() {
   const container = document.getElementById('content-container');
   container.innerHTML = `
     <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-      <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;"></i>
+      <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;" aria-hidden="true"></i>
       <br><span style="font-size:1.1rem; font-weight:600; color:var(--text-main);">กำลังโหลดแดชบอร์ดพนักงาน...</span>
     </div>
   `;
@@ -567,14 +718,14 @@ async function renderStaffDashboardView() {
     const recentSales = stats.recentSales || [];
     const stockSummary = stats.stockSummary || [];
 
-    let auditStatusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> ยังไม่ได้ส่งตรวจสต็อก</span>`;
+    let auditStatusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> ยังไม่ได้ส่งตรวจสต็อก</span>`;
     if (stats.auditSubmitted) {
       if (stats.auditStatus === 'approved') {
-        auditStatusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ตรวจสต็อกผ่านแล้ว (Approved)</span>`;
+        auditStatusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ตรวจสต็อกผ่านแล้ว (Approved)</span>`;
       } else if (stats.auditStatus === 'rejected') {
-        auditStatusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ตรวจสต็อกไม่ผ่าน (Rejected)</span>`;
+        auditStatusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ตรวจสต็อกไม่ผ่าน (Rejected)</span>`;
       } else {
-        auditStatusBadge = `<span class="badge badge-blue"><i class="fa-solid fa-paper-plane"></i> ส่งตรวจแล้ว รอการอนุมัติ</span>`;
+        auditStatusBadge = `<span class="badge badge-blue"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ส่งตรวจแล้ว รอการอนุมัติ</span>`;
       }
     }
 
@@ -584,7 +735,7 @@ async function renderStaffDashboardView() {
         <div class="card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">ยอดขายวันนี้ (Revenue)</span>
-            <i class="fa-solid fa-money-bill-trend-up" style="color: var(--accent-primary); font-size:1.4rem;"></i>
+            <i class="fa-solid fa-money-bill-trend-up" style="color: var(--accent-primary); font-size:1.4rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">฿${(stats.todayRevenue || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
@@ -595,7 +746,7 @@ async function renderStaffDashboardView() {
         <div class="card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">บิลสำเร็จวันนี้ (Bills)</span>
-            <i class="fa-solid fa-receipt" style="color: var(--accent-gold); font-size:1.4rem;"></i>
+            <i class="fa-solid fa-receipt" style="color: var(--accent-gold); font-size:1.4rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.todaySalesCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">บิล</span></div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
@@ -606,7 +757,7 @@ async function renderStaffDashboardView() {
         <div class="card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">สต็อกสินค้าพร้อมขาย (In Stock)</span>
-            <i class="fa-solid fa-boxes-stacked" style="color: #10b981; font-size:1.4rem;"></i>
+            <i class="fa-solid fa-boxes-stacked" style="color: #10b981; font-size:1.4rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.inStockCount || 0} <span style="font-size:1rem; font-weight:500; color:var(--text-muted);">เครื่อง</span></div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
@@ -617,7 +768,7 @@ async function renderStaffDashboardView() {
         <div class="card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
             <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">การนับสต็อกวันนี้ (Audit)</span>
-            <i class="fa-solid fa-clipboard-list" style="color: #e11d48; font-size:1.4rem;"></i>
+            <i class="fa-solid fa-clipboard-list" style="color: #e11d48; font-size:1.4rem;" aria-hidden="true"></i>
           </div>
           <div style="margin-top:0.3rem;">${auditStatusBadge}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.6rem;">
@@ -628,7 +779,7 @@ async function renderStaffDashboardView() {
 
       <!-- Branch Cards Section -->
       <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin:1.8rem 0 0.8rem 0; display:flex; align-items:center; gap:0.5rem;">
-        <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สรุปข้อมูลสินค้าและยอดขายรายสาขา
+        <i class="fa-solid fa-store" style="color:var(--accent-primary);" aria-hidden="true"></i> สรุปข้อมูลสินค้าและยอดขายรายสาขา
       </h3>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.2rem; margin-bottom:1.8rem;">
         ${(stats.branchCards || []).map(card => {
@@ -636,7 +787,7 @@ async function renderStaffDashboardView() {
             <div class="card" style="background: linear-gradient(135deg, #ffffff, #faf8f5); border: 1px solid var(--border-color); padding: 1.4rem; border-radius:12px; display:flex; flex-direction:column; gap:1rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:0.6rem;">
                 <h4 style="font-size:1.05rem; font-weight:800; color:var(--text-main); margin:0; display:flex; align-items:center; gap:0.4rem;">
-                  <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ${card.branchName}
+                  <i class="fa-solid fa-store" style="color:var(--accent-gold);" aria-hidden="true"></i> ${card.branchName}
                 </h4>
                 <span style="font-size:0.75rem; font-weight:700; background:rgba(0,0,0,0.04); color:var(--text-muted); padding:0.15rem 0.5rem; border-radius:4px;">
                   รหัส: ${card.branchCode}
@@ -647,7 +798,7 @@ async function renderStaffDashboardView() {
                 <!-- Total Stock Today -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-layer-group" style="width:16px; color:#0891b2;"></i> สินค้าทั้งหมดของวันนี้:
+                    <i class="fa-solid fa-layer-group" style="width:16px; color:#0891b2;" aria-hidden="true"></i> สินค้าทั้งหมดของวันนี้:
                   </span>
                   <strong style="color:var(--text-main);">${card.totalStockToday.toLocaleString()} เครื่อง</strong>
                 </div>
@@ -655,7 +806,7 @@ async function renderStaffDashboardView() {
                 <!-- Stock -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-boxes-stacked" style="width:16px; color:#10b981;"></i> สินค้าคงเหลือขณะนี้:
+                    <i class="fa-solid fa-boxes-stacked" style="width:16px; color:#10b981;" aria-hidden="true"></i> สินค้าคงเหลือขณะนี้:
                   </span>
                   <strong style="color:var(--text-main);">${card.totalStockCount.toLocaleString()} เครื่อง</strong>
                 </div>
@@ -663,7 +814,7 @@ async function renderStaffDashboardView() {
                 <!-- Today Sales Qty -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-cart-shopping" style="width:16px; color:#e11d48;"></i> วันนี้ขายได้แล้ว:
+                    <i class="fa-solid fa-cart-shopping" style="width:16px; color:#e11d48;" aria-hidden="true"></i> วันนี้ขายได้แล้ว:
                   </span>
                   <strong style="color:var(--text-main);">${card.todaySalesQty.toLocaleString()} เครื่อง</strong>
                 </div>
@@ -671,7 +822,7 @@ async function renderStaffDashboardView() {
                 <!-- Today Revenue -->
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
                   <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-wallet" style="width:16px; color:var(--accent-primary);"></i> ยอดขายวันนี้:
+                    <i class="fa-solid fa-wallet" style="width:16px; color:var(--accent-primary);" aria-hidden="true"></i> ยอดขายวันนี้:
                   </span>
                   <strong style="color:var(--accent-gold); font-size:1rem;">฿${card.todaySalesAmount.toLocaleString()}</strong>
                 </div>
@@ -687,10 +838,10 @@ async function renderStaffDashboardView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
             <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);"></i> รายการขายล่าสุดของสาขาวันนี้
+              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการขายล่าสุดของสาขาวันนี้
             </h3>
             <button class="btn btn-secondary btn-sm" onclick="navigateTo('sales-history')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
-              ดูประวัติทั้งหมด <i class="fa-solid fa-arrow-right"></i>
+              ดูประวัติทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
             </button>
           </div>
 
@@ -698,10 +849,10 @@ async function renderStaffDashboardView() {
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>เลขที่ใบเสร็จ / เวลา</th>
-                  <th>ผู้ขาย</th>
-                  <th>การชำระเงิน</th>
-                  <th>ยอดขายสุทธิ</th>
+                  <th scope="col">เลขที่ใบเสร็จ / เวลา</th>
+                  <th scope="col">ผู้ขาย</th>
+                  <th scope="col">การชำระเงิน</th>
+                  <th scope="col">ยอดขายสุทธิ</th>
                 </tr>
               </thead>
               <tbody>
@@ -735,7 +886,7 @@ async function renderStaffDashboardView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
             <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <i class="fa-solid fa-boxes-packing" style="color:var(--accent-gold);"></i> สินค้าคงคลังแยกตามรุ่น
+              <i class="fa-solid fa-boxes-packing" style="color:var(--accent-gold);" aria-hidden="true"></i> สินค้าคงคลังแยกตามรุ่น
             </h3>
             <button class="btn btn-secondary btn-sm" onclick="navigateTo('branch-inventory')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
               ดูสต็อกทั้งหมด
@@ -782,7 +933,7 @@ async function renderDashboardView() {
     window._execBranchChart = null;
   }
 
-  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร</span></div>`;
+  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);" aria-hidden="true"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร</span></div>`;
 
   try {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -811,13 +962,13 @@ async function renderDashboardView() {
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem;">
         <div>
           <h3 style="font-size:1.25rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);"></i> ภาพรวมแดชบอร์ดผู้บริหาร
+            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);" aria-hidden="true"></i> ภาพรวมแดชบอร์ดผู้บริหาร
           </h3>
         </div>
 
         <div>
           <button class="btn btn-primary" onclick="openExecutiveReportModal()" style="padding:0.6rem 1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 14px rgba(79,70,229,0.25);">
-            <i class="fa-solid fa-file-invoice-dollar"></i> ดูรายงานสรุปผู้บริหาร
+            <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i> ดูรายงานสรุปผู้บริหาร
           </button>
         </div>
       </div>
@@ -829,7 +980,7 @@ async function renderDashboardView() {
         <div class="card" style="background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02)); border: 1px solid rgba(16,185,129,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">ยอดขายรวมวันนี้</span>
-            <i class="fa-solid fa-sack-dollar" style="color:#059669; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-sack-dollar" style="color:#059669; font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:2.2rem; font-weight:800; color:#059669;">฿${todayRevenue.toLocaleString()}</div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
@@ -841,7 +992,7 @@ async function renderDashboardView() {
         <div class="card" style="background: linear-gradient(135deg, rgba(8,145,178,0.08), rgba(8,145,178,0.02)); border: 1px solid rgba(8,145,178,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">บิลขายวันนี้</span>
-            <i class="fa-solid fa-receipt" style="color:#0891b2; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-receipt" style="color:#0891b2; font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:2.2rem; font-weight:800; color:#0891b2;">${todayBills} <span style="font-size:0.95rem; color:var(--text-muted);">บิล</span></div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
@@ -853,7 +1004,7 @@ async function renderDashboardView() {
         <div class="card" style="background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02)); border: 1px solid rgba(99,102,241,0.25);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">มูลค่าสต็อกสินค้าคงเหลือ</span>
-            <i class="fa-solid fa-boxes-stacked" style="color:var(--accent-primary); font-size:1.5rem;"></i>
+            <i class="fa-solid fa-boxes-stacked" style="color:var(--accent-primary); font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:2.2rem; font-weight:800; color:var(--text-main);">฿${totalStockValue.toLocaleString()}</div>
           <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
@@ -865,7 +1016,7 @@ async function renderDashboardView() {
         <div class="card" style="background: linear-gradient(135deg, rgba(217,119,6,0.08), rgba(217,119,6,0.02)); border: 1px solid rgba(217,119,6,0.25);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">สถานะนับสต็อกประจำวัน</span>
-            <i class="fa-solid fa-clipboard-check" style="color:#d97706; font-size:1.5rem;"></i>
+            <i class="fa-solid fa-clipboard-check" style="color:#d97706; font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:2.2rem; font-weight:800; color:${pendingAuditsCount > 0 ? '#d97706' : '#059669'};">
             ${submittedCount} / 5 <span style="font-size:0.95rem; color:var(--text-muted);">สาขาส่งแล้ว</span>
@@ -883,9 +1034,9 @@ async function renderDashboardView() {
         <div class="card" style="display:flex; flex-direction:column;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
             <h3 style="font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก
+              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);" aria-hidden="true"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก
             </h3>
-            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#059669;"></i> ข้อมูลประจำวันวันนี้</span>
+            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:#059669;" aria-hidden="true"></i> ข้อมูลประจำวันวันนี้</span>
           </div>
           <div style="position:relative; flex:1; min-height:260px;">
             <canvas id="executive-branch-chart"></canvas>
@@ -898,7 +1049,7 @@ async function renderDashboardView() {
           <!-- Top Selling Products Widget -->
           <div class="card" style="flex:1;">
             <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:var(--accent-primary); display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-fire" style="color:#ea580c;"></i> สินค้าขายดีประจำวัน Top 5
+              <i class="fa-solid fa-fire" style="color:#ea580c;" aria-hidden="true"></i> สินค้าขายดีประจำวัน Top 5
             </h4>
             <div style="font-size:0.82rem;">
               ${topSellingProducts.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:1rem 0; text-align:center;">ยังไม่มีรายการขายในวันนี้</div>' : ''}
@@ -919,7 +1070,7 @@ async function renderDashboardView() {
           <!-- Low Stock Alerts Widget -->
           <div class="card" style="flex:1;">
             <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:#e11d48; display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-triangle-exclamation"></i> แจ้งเตือนสินค้าสต็อกต่ำ (เหลือ ≤ 2)
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งเตือนสินค้าสต็อกต่ำ (เหลือ ≤ 2)
             </h4>
             <div style="font-size:0.8rem; max-height:140px; overflow-y:auto;">
               ${lowStockAlerts.length === 0 ? '<div style="color:#059669; font-style:italic; padding:0.5rem 0;">ไม่มีสินค้าสต็อกต่ำในขณะนี้ ทุกสาขามีสต็อกเพียงพอ</div>' : ''}
@@ -941,7 +1092,7 @@ async function renderDashboardView() {
       <!-- Real-time 5-Branch Operational & Audit Health Grid -->
       <div class="card" style="margin-bottom: 1.5rem;">
         <h3 style="font-size: 1.1rem; font-weight:700; margin-bottom: 1rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> สถานะการนับสต็อกประจำวัน (${todayStr})
+          <i class="fa-solid fa-store" style="color:var(--accent-primary);" aria-hidden="true"></i> สถานะการนับสต็อกประจำวัน (${todayStr})
         </h3>
         
         <div class="audit-grid">
@@ -974,6 +1125,12 @@ async function renderDashboardView() {
         </div>
       </div>
     `;
+
+    // Chart.js is fetched on demand — this is the only view that draws a chart.
+    // Awaiting it here keeps the rest of the dashboard painting immediately.
+    if (!window.Chart) {
+      try { await loadChartJs(); } catch (err) { console.warn('Chart.js load failed:', err.message); }
+    }
 
     // Render Chart.js Chart (no setTimeout — render immediately to avoid blank flash)
     requestAnimationFrame(() => {
@@ -1045,7 +1202,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
 
   const modalTitle = `📊 สรุปรายงานผู้บริหาร`;
 
-  openModal(modalTitle, `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังรวบรวมรายงานสรุปผู้บริหาร (${startVal} ถึง ${endVal})...</span></div>`);
+  openModal(modalTitle, `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);" aria-hidden="true"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังรวบรวมรายงานสรุปผู้บริหาร (${startVal} ถึง ${endVal})...</span></div>`);
 
   try {
     const res = await apiRequest(`/pos/executive-report?startDate=${startVal}&endDate=${endVal}`);
@@ -1079,10 +1236,10 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
 
             <!-- Custom Date Range Form -->
             <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-              <input type="date" id="exec-modal-start" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${startVal}">
+              <input aria-label="รายงานผู้บริหาร เริ่มวันที่" type="date" id="exec-modal-start" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${startVal}">
               <span style="font-size:0.8rem; color:var(--text-muted);">ถึง</span>
-              <input type="date" id="exec-modal-end" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${endVal}">
-              <button class="btn btn-sm btn-primary" onclick="triggerCustomReportModal()"><i class="fa-solid fa-rotate"></i> แสดงรายงาน</button>
+              <input aria-label="รายงานผู้บริหาร ถึงวันที่" type="date" id="exec-modal-end" class="form-control" style="width:auto; padding:0.25rem 0.5rem; font-size:0.82rem;" value="${endVal}">
+              <button class="btn btn-sm btn-primary" onclick="triggerCustomReportModal()"><i class="fa-solid fa-rotate" aria-hidden="true"></i> แสดงรายงาน</button>
             </div>
 
           </div>
@@ -1095,7 +1252,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
           <div style="background:rgba(99,102,241,0.06); border:1px solid var(--border-glow); padding:0.8rem 1rem; border-radius:8px; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
             <div>
               <h4 style="font-size:1.05rem; font-weight:800; color:var(--text-main); margin-bottom:0.15rem;">
-                <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร
+                <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent-primary);" aria-hidden="true"></i> รายงานสรุปผลการดำเนินงานผู้บริหาร
               </h4>
               <div style="font-size:0.83rem; color:var(--text-muted);">
                 ประจำช่วงวันที่: <strong style="color:#d97706;">${startVal}</strong> ถึง <strong style="color:#d97706;">${endVal}</strong>
@@ -1139,19 +1296,19 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
 
           <!-- Branch Performance Breakdown Table -->
           <h5 style="font-size:0.95rem; font-weight:700; color:#38bdf8; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
-            <i class="fa-solid fa-store"></i> 1. สรุปผลงานและยอดขายแยกรายสาขา (5 สาขา)
+            <i class="fa-solid fa-store" aria-hidden="true"></i> 1. สรุปผลงานและยอดขายแยกรายสาขา (5 สาขา)
           </h5>
 
           <div class="table-container" style="margin-bottom:1.5rem;">
             <table class="data-table" style="font-size:0.83rem;">
               <thead>
                 <tr>
-                  <th>รหัสสาขา / ชื่อสาขา</th>
-                  <th>จำนวนบิลขาย</th>
-                  <th>ยอดขายรวม (บาท)</th>
-                  <th>ต้นทุนรวม (บาท)</th>
-                  <th>กำไรขั้นต้น (บาท)</th>
-                  <th>สัดส่วนยอดขาย</th>
+                  <th scope="col">รหัสสาขา / ชื่อสาขา</th>
+                  <th scope="col">จำนวนบิลขาย</th>
+                  <th scope="col">ยอดขายรวม (บาท)</th>
+                  <th scope="col">ต้นทุนรวม (บาท)</th>
+                  <th scope="col">กำไรขั้นต้น (บาท)</th>
+                  <th scope="col">สัดส่วนยอดขาย</th>
                 </tr>
               </thead>
               <tbody>
@@ -1184,18 +1341,18 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
 
           <!-- Top 10 Best Selling Products Table -->
           <h5 style="font-size:0.95rem; font-weight:700; color:#fbbf24; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
-            <i class="fa-solid fa-trophy"></i> 2. Top 10 สินค้าขายดีที่สุด (ประจำช่วงเวลา)
+            <i class="fa-solid fa-trophy" aria-hidden="true"></i> 2. Top 10 สินค้าขายดีที่สุด (ประจำช่วงเวลา)
           </h5>
 
           <div class="table-container">
             <table class="data-table" style="font-size:0.83rem;">
               <thead>
                 <tr>
-                  <th style="width:50px; text-align:center;">อันดับ</th>
-                  <th>ชื่อสินค้า</th>
-                  <th>จำนวนที่ขายได้</th>
-                  <th>ยอดขายรวม (บาท)</th>
-                  <th>กำไรรวม (บาท)</th>
+                  <th scope="col" style="width:50px; text-align:center;">อันดับ</th>
+                  <th scope="col">ชื่อสินค้า</th>
+                  <th scope="col">จำนวนที่ขายได้</th>
+                  <th scope="col">ยอดขายรวม (บาท)</th>
+                  <th scope="col">กำไรรวม (บาท)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1221,8 +1378,8 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-      <button class="btn btn-success" onclick="exportExecutiveReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์รายงาน / Export PDF</button>
+      <button class="btn btn-success" onclick="exportExecutiveReportToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์รายงาน / Export PDF</button>
     `;
 
     openModal(modalTitle, bodyHtml, footerHtml);
@@ -1276,7 +1433,7 @@ function triggerCustomReportModal() {
    ========================================================================== */
 async function renderBranchInventoryView(selectedBranchId = null, selectedStatus = 'in_stock', selectedBrand = 'all') {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดคลังสินค้าสาขา...</div>`;
 
   try {
     const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
@@ -1335,19 +1492,22 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);"></i> รายการสินค้าในคลัง: ${currentBranch.name}
+            <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้า${statusLabel} (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
-          <button class="btn btn-success btn-sm" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          <button class="btn btn-success btn-sm" onclick="exportBranchInventoryToExcel()" style="font-weight:700;"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
           
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">สถานะ:</label>
             <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value, document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
               <option value="in_stock" ${selectedStatus === 'in_stock' ? 'selected' : ''}>พร้อมขาย</option>
               <option value="sold" ${selectedStatus === 'sold' ? 'selected' : ''}>ขายแล้ว</option>
+              <option value="in_transit" ${selectedStatus === 'in_transit' ? 'selected' : ''}>ระหว่างโอนย้าย</option>
+              <option value="transferred" ${selectedStatus === 'transferred' ? 'selected' : ''}>โอนย้ายสำเร็จ</option>
+              <option value="missing" ${selectedStatus === 'missing' ? 'selected' : ''}>สูญหาย</option>
               <option value="released" ${selectedStatus === 'released' ? 'selected' : ''}>จ่ายออก</option>
               <option value="all" ${selectedStatus === 'all' ? 'selected' : ''}>ทุกสถานะ</option>
             </select>
@@ -1357,7 +1517,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
             <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">ยี่ห้อ:</label>
             <select id="bi-brand-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', this.value)">
               <option value="all" ${selectedBrand === 'all' ? 'selected' : ''}>ทุกยี่ห้อ</option>
-              ${brandsList.map(b => `<option value="${b}" ${selectedBrand === b ? 'selected' : ''}>${b}</option>`).join('')}
+              ${brandsList.map(b => `<option value="${escapeHtml(b)}" ${selectedBrand === b ? 'selected' : ''}>${escapeHtml(b)}</option>`).join('')}
             </select>
           </div>
 
@@ -1370,7 +1530,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               </select>
             </div>
           ` : ''}
-          <input type="text" id="bi-search-input" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า, สี..." style="width:220px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterBranchInventoryTable()">
+          <input type="text" id="bi-search-input" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า, สี..." aria-label="ค้นหา IMEI, ชื่อสินค้า, สี..." style="width:220px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterBranchInventoryTable()">
         </div>
       </div>
 
@@ -1378,15 +1538,15 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
         <table class="data-table" id="bi-table">
           <thead>
             <tr>
-              <th style="width:50px; text-align:center;">#</th>
-              <th>หมายเลข IMEI</th>
-              <th>รายการสินค้า</th>
-              <th>ยี่ห้อ / ชื่อรุ่น</th>
-              <th>ความจุ / สีสินค้า</th>
-              ${currentBranch._id === 'all' ? '<th>สาขา</th>' : ''}
-              <th>ราคาขาย</th>
-              <th style="text-align:center;">สถานะสต็อก</th>
-              ${canEdit ? `<th style="text-align:center;">การจัดการ</th>` : ''}
+              <th scope="col" style="width:50px; text-align:center;">#</th>
+              <th scope="col">หมายเลข IMEI</th>
+              <th scope="col">รายการสินค้า</th>
+              <th scope="col">ยี่ห้อ / ชื่อรุ่น</th>
+              <th scope="col">ความจุ / สีสินค้า</th>
+              ${currentBranch._id === 'all' ? '<th scope="col">สาขา</th>' : ''}
+              <th scope="col">ราคาขาย</th>
+              <th scope="col" style="text-align:center;">สถานะสต็อก</th>
+              ${canEdit ? `<th scope="col" style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
@@ -1403,17 +1563,17 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               // Render beautiful localized badges
               let badgeHtml = '';
               if (st.status === 'in_stock') {
-                badgeHtml = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> พร้อมขาย</span>`;
+                badgeHtml = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> พร้อมขาย</span>`;
               } else if (st.status === 'sold') {
-                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-dollar-to-slot"></i> ขายแล้ว</span>`;
+                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-dollar-to-slot" aria-hidden="true"></i> ขายแล้ว</span>`;
               } else if (st.status === 'in_transit') {
-                badgeHtml = `<span class="badge badge-yellow"><i class="fa-solid fa-truck-ramp-box"></i> ระหว่างโอนย้าย</span>`;
+                badgeHtml = `<span class="badge badge-yellow"><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i> ระหว่างโอนย้าย</span>`;
               } else if (st.status === 'transferred') {
-                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check"></i> โอนย้ายสำเร็จ</span>`;
+                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> โอนย้ายสำเร็จ</span>`;
               } else if (st.status === 'missing') {
-                badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> สูญหาย</span>`;
+                badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> สูญหาย</span>`;
               } else if (st.status === 'released') {
-                badgeHtml = `<span class="badge badge-yellow" style="background:#f59e0b; color:#fff; border:none;"><i class="fa-solid fa-circle-minus"></i> จ่ายออกแล้ว</span>`;
+                badgeHtml = `<span class="badge badge-yellow" style="background:#f59e0b; color:#fff; border:none;"><i class="fa-solid fa-circle-minus" aria-hidden="true"></i> จ่ายออกแล้ว</span>`;
               } else {
                 badgeHtml = `<span class="badge badge-gray">${st.status}</span>`;
               }
@@ -1433,7 +1593,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                   ${canEdit ? `
                     <td style="text-align:center; white-space:nowrap;">
                       <button class="btn btn-secondary btn-sm" onclick="openEditStockModal('${st._id}')">
-                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                       </button>
                     </td>
                   ` : ''}
@@ -1466,7 +1626,7 @@ function filterBranchInventoryTable() {
    ========================================================================== */
 async function renderPosView(selectedBranchId = null) {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดระบบขายสินค้า POS...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดระบบขายสินค้า POS...</div>`;
 
   try {
     const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
@@ -1490,7 +1650,7 @@ async function renderPosView(selectedBranchId = null) {
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1rem;">
               <div>
                 <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-                  <i class="fa-solid fa-cash-register" style="color:var(--accent-primary);"></i> รายการสินค้าในสต็อก: ${currentBranch.name}
+                  <i class="fa-solid fa-cash-register" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการสินค้าในสต็อก: ${currentBranch.name}
                 </h3>
                 <p style="font-size:0.8rem; color:var(--text-muted);">เลือกสินค้าตามหมายเลข IMEI เพื่อเพิ่มลงตะกร้าขาย</p>
               </div>
@@ -1509,23 +1669,23 @@ async function renderPosView(selectedBranchId = null) {
             <!-- Barcode / IMEI Fast Scanner -->
             <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.25); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
               <label style="font-size:0.8rem; font-weight:700; color:var(--accent-secondary);">
-                <i class="fa-solid fa-barcode"></i> ยิงสแกน IMEI / บาร์โค้ด สินค้าเพื่อเพิ่มลงตะกร้ารวดเร็ว
+                <i class="fa-solid fa-barcode" aria-hidden="true"></i> ยิงสแกน IMEI / บาร์โค้ด สินค้าเพื่อเพิ่มลงตะกร้ารวดเร็ว
               </label>
-              <input type="text" id="pos-barcode-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." style="margin-top:0.4rem;" autofocus>
+              <input type="text" id="pos-barcode-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." aria-label="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." style="margin-top:0.4rem;" autofocus>
             </div>
 
-            <input type="text" id="pos-search-input" class="form-control" placeholder="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." onkeyup="filterPosCatalogTable()" style="margin-bottom:1rem;">
+            <input type="text" id="pos-search-input" class="form-control" placeholder="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." aria-label="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." onkeyup="filterPosCatalogTable()" style="margin-bottom:1rem;">
 
             <!-- Stock Product Table -->
             <div class="table-container" style="max-height:450px; overflow-y:auto;">
               <table class="data-table" id="pos-catalog-table">
                 <thead>
                   <tr>
-                    <th style="width:40px; text-align:center;">ไอคอน</th>
-                    <th>รายการสินค้า</th>
-                    <th>หมายเลข IMEI</th>
-                    <th>ราคาขาย</th>
-                    <th style="text-align:center;">ดำเนินการ</th>
+                    <th scope="col" style="width:40px; text-align:center;">ไอคอน</th>
+                    <th scope="col">รายการสินค้า</th>
+                    <th scope="col">หมายเลข IMEI</th>
+                    <th scope="col">ราคาขาย</th>
+                    <th scope="col" style="text-align:center;">ดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1541,7 +1701,7 @@ async function renderPosView(selectedBranchId = null) {
                     return `
                       <tr class="pos-item-row" data-search="${(imei + ' ' + productName + ' ' + brandStr + ' ' + specStr).toLowerCase()}">
                         <td style="text-align:center; font-size:1.3rem; color:var(--accent-primary);">
-                          <i class="fa-solid fa-mobile-screen-button"></i>
+                          <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>
                         </td>
                         <td>
                           <strong>${productName}</strong>
@@ -1551,7 +1711,7 @@ async function renderPosView(selectedBranchId = null) {
                         <td><strong style="color:#34d399;">฿${sellingPrice.toLocaleString()}</strong></td>
                         <td style="text-align:center;">
                           <button class="btn btn-primary btn-sm" onclick="addToPosCart('${p._id || ''}', '${productName.replace(/'/g, "\\'")}', ${sellingPrice}, null, '${imei}')">
-                            <i class="fa-solid fa-cart-plus"></i> เพิ่ม
+                            <i class="fa-solid fa-cart-plus" aria-hidden="true"></i> เพิ่ม
                           </button>
                         </td>
                       </tr>
@@ -1568,19 +1728,19 @@ async function renderPosView(selectedBranchId = null) {
           <div class="card" style="position:sticky; top:1rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.6rem;">
               <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; color:#34d399;">
-                <i class="fa-solid fa-shopping-cart"></i> ตะกร้าสินค้าชำระเงิน
+                <i class="fa-solid fa-shopping-cart" aria-hidden="true"></i> ตะกร้าสินค้าชำระเงิน
               </h3>
-              <button class="btn btn-danger btn-sm" onclick="clearPosCart()"><i class="fa-solid fa-trash"></i> ล้างตะกร้า</button>
+              <button class="btn btn-danger btn-sm" onclick="clearPosCart()"><i class="fa-solid fa-trash" aria-hidden="true"></i> ล้างตะกร้า</button>
             </div>
 
             <!-- Customer Info Form -->
             <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
               <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--accent-secondary);">
-                <i class="fa-solid fa-user-tag"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ) <span style="color:#f87171; font-weight:800;">* จำเป็น</span>
+                <i class="fa-solid fa-user-tag" aria-hidden="true"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ) <span style="color:#f87171; font-weight:800;">* จำเป็น</span>
               </div>
               <div class="grid-2col" style="gap:0.6rem;">
-                <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (จำเป็น)" required>
-                <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (จำเป็น)" required>
+                <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (จำเป็น)" aria-label="ชื่อลูกค้า (จำเป็น)" required>
+                <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (จำเป็น)" aria-label="เบอร์โทรศัพท์ (จำเป็น)" required>
               </div>
             </div>
 
@@ -1598,7 +1758,7 @@ async function renderPosView(selectedBranchId = null) {
 
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; font-size:0.85rem;">
                 <span>ส่วนลดพิเศษ (Discount):</span>
-                <input type="number" id="pos-discount-input" class="form-control" style="width:110px; padding:0.25rem 0.5rem; text-align:right;" min="0" value="0" oninput="updatePosCartTotals()">
+                <input type="number" id="pos-discount-input" aria-label="ส่วนลดพิเศษ (บาท)" class="form-control" style="width:110px; padding:0.25rem 0.5rem; text-align:right;" min="0" value="0" oninput="updatePosCartTotals()">
               </div>
 
               <div style="display:flex; justify-content:space-between; margin-top:0.8rem; padding-top:0.6rem; border-top:1px solid rgba(255,255,255,0.15); font-size:1.2rem; font-weight:800; color:#34d399;">
@@ -1620,7 +1780,7 @@ async function renderPosView(selectedBranchId = null) {
             <div id="pos-cash-container" class="grid-2col" style="gap:0.6rem; margin-bottom:1rem;">
               <div>
                 <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">รับเงินมา (บาท)</label>
-                <input type="number" id="pos-received-input" class="form-control" placeholder="0" min="0" oninput="updatePosCartTotals()">
+                <input type="number" id="pos-received-input" class="form-control" placeholder="0" aria-label="รับเงินมา (บาท)" min="0" oninput="updatePosCartTotals()">
               </div>
               <div>
                 <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">เงินทอน (บาท)</label>
@@ -1630,15 +1790,15 @@ async function renderPosView(selectedBranchId = null) {
 
             <div id="pos-finance-container" style="display:none; margin-bottom:1rem; background:rgba(192,132,252,0.1); border:1px solid rgba(192,132,252,0.3); padding:0.8rem; border-radius:6px;">
               <label for="pos-finance-company" style="font-size:0.82rem; font-weight:700; color:#c084fc;">
-                <i class="fa-solid fa-file-contract"></i> ชื่อบริษัทไฟแนนซ์ / สถาบันการเงิน (จำเป็น)
+                <i class="fa-solid fa-file-contract" aria-hidden="true"></i> ชื่อบริษัทไฟแนนซ์ / สถาบันการเงิน (จำเป็น)
               </label>
-              <input type="text" id="pos-finance-company" class="form-control" placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" style="margin-top:0.4rem;" value="Banana">
+              <input type="text" id="pos-finance-company" class="form-control" placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" aria-label="เช่น SG Capital, AEON, KB J Capital ฯลฯ" style="margin-top:0.4rem;" value="Banana">
               <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* รายการขายจัดไฟแนนซ์จะเข้าสู่สถานะ "รอรับเงินจากไฟแนนซ์" ในเมนูการเงิน</span>
             </div>
 
             <!-- Submit Checkout & Print Receipt Button -->
             <button class="btn btn-success" style="width:100%; padding:0.8rem; font-size:1.05rem; font-weight:800;" onclick="submitPosCheckout('${currentBranch._id}')">
-              <i class="fa-solid fa-receipt"></i> ชำระเงิน & ออกใบเสร็จรับเงิน
+              <i class="fa-solid fa-receipt" aria-hidden="true"></i> ชำระเงิน & ออกใบเสร็จรับเงิน
             </button>
           </div>
         </div>
@@ -1755,10 +1915,10 @@ function renderPosCartUI() {
         </div>
         <div style="text-align:right; display:flex; align-items:center; gap:0.3rem;">
           <span style="color:#059669; font-weight:700;">฿</span>
-          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:#059669; margin:0; background:#ffffff;" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
+          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:#059669; aria-label="ราคาขายต่อเครื่อง (บาท)" margin:0; background:#ffffff;" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
         </div>
-        <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="removeFromPosCart(${idx})">
-          <i class="fa-solid fa-xmark"></i>
+        <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="removeFromPosCart(${idx})" aria-label="นำสินค้าออกจากตะกร้า">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
         </button>
       </div>
     `).join('');
@@ -1922,9 +2082,9 @@ function openReceiptVoucherModal(sale) {
       <table style="width:100%; border-collapse:collapse; font-size:0.8rem; margin-bottom:0.8rem; color:#000;">
         <thead>
           <tr style="border-bottom:1px solid #000; text-align:left;">
-            <th style="padding:4px 0;">รายการสินค้า</th>
-            <th style="padding:4px 0; text-align:center;">จำนวน</th>
-            <th style="padding:4px 0; text-align:right;">ราคา</th>
+            <th scope="col" style="padding:4px 0;">รายการสินค้า</th>
+            <th scope="col" style="padding:4px 0; text-align:center;">จำนวน</th>
+            <th scope="col" style="padding:4px 0; text-align:right;">ราคา</th>
           </tr>
         </thead>
         <tbody>
@@ -1973,7 +2133,7 @@ function openReceiptVoucherModal(sale) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบเสร็จรับเงิน</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบเสร็จรับเงิน</button>
   `;
 
   openModal(`ใบเสร็จรับเงิน: ${sale.receiptNumber}`, bodyHtml, footerHtml);
@@ -2049,7 +2209,7 @@ function openSelectReceiptTypeModal(sale) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.25); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
       <div style="font-weight:800; font-size:1.05rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
-        <i class="fa-solid fa-circle-check" style="color:#34d399;"></i> บันทึกการขายสำเร็จ: ${sale.receiptNumber}
+        <i class="fa-solid fa-circle-check" style="color:#34d399;" aria-hidden="true"></i> บันทึกการขายสำเร็จ: ${sale.receiptNumber}
       </div>
       <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.3rem;">
         กรุณาเลือกรูปแบบเอกสารที่ต้องการพิมพ์ออกเครื่องพิมพ์หรือดาวน์โหลด
@@ -2061,7 +2221,7 @@ function openSelectReceiptTypeModal(sale) {
         <label style="font-weight:700; margin-bottom:0.5rem; display:block;">รูปแบบเอกสาร:</label>
         
         <div style="background:#ffffff; border:1px solid var(--border-color); padding:0.8rem 1rem; border-radius:6px; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-abbreviated').checked = true">
-          <input type="radio" id="r-type-abbreviated" name="receiptType" value="abbreviated" checked style="transform:scale(1.2);">
+          <input aria-label="ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ" type="radio" id="r-type-abbreviated" name="receiptType" value="abbreviated" checked style="transform:scale(1.2);">
           <div>
             <strong style="color:var(--text-main); font-size:0.9rem;">ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ</strong>
             <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์ใบเสร็จย่อหน้ากว้าง 58-80mm สำหรับลูกค้าทั่วไป (ไม่แสดงคำนวณ VAT)</div>
@@ -2069,7 +2229,7 @@ function openSelectReceiptTypeModal(sale) {
         </div>
 
         <div style="background:#ffffff; border:1px solid var(--border-color); padding:0.8rem 1rem; border-radius:6px; display:flex; align-items:center; gap:0.8rem; cursor:pointer;" onclick="document.getElementById('r-type-full').checked = true">
-          <input type="radio" id="r-type-full" name="receiptType" value="full" style="transform:scale(1.2);">
+          <input aria-label="ใบกำกับภาษีเต็มรูปแบบ" type="radio" id="r-type-full" name="receiptType" value="full" style="transform:scale(1.2);">
           <div>
             <strong style="color:var(--accent-primary); font-size:0.9rem;">ใบกำกับภาษีเต็มรูปแบบ (Full Tax Invoice)</strong>
             <div style="font-size:0.75rem; color:var(--text-muted);">พิมพ์เอกสารขนาด A4 แสดงข้อมูลผู้เสียภาษีของลูกค้าและการแยกภาษีมูลค่าเพิ่ม 7%</div>
@@ -2081,7 +2241,7 @@ function openSelectReceiptTypeModal(sale) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิด</button>
-    <button class="btn btn-success" onclick="handleSelectReceiptType()"><i class="fa-solid fa-arrow-right"></i> ดำเนินการต่อ</button>
+    <button class="btn btn-success" onclick="handleSelectReceiptType()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i> ดำเนินการต่อ</button>
   `;
 
   openModal(`เลือกรูปแบบเอกสารการขาย`, bodyHtml, footerHtml);
@@ -2105,7 +2265,7 @@ function openFullTaxInvoiceDetailsModal(sale) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.25); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
       <div style="font-weight:700; font-size:0.95rem; color:#38bdf8;">
-        <i class="fa-solid fa-file-invoice"></i> กรอกข้อมูลผู้เสียภาษี (สำหรับใบกำกับภาษีเต็มรูปแบบ)
+        <i class="fa-solid fa-file-invoice" aria-hidden="true"></i> กรอกข้อมูลผู้เสียภาษี (สำหรับใบกำกับภาษีเต็มรูปแบบ)
       </div>
       <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.2rem;">
         ระบุข้อมูลชื่อ ที่อยู่ และเลขผู้เสียภาษีให้ถูกต้องเพื่อพิมพ์เอกสารขนาด A4
@@ -2115,17 +2275,17 @@ function openFullTaxInvoiceDetailsModal(sale) {
     <form id="full-tax-details-form" onsubmit="event.preventDefault(); submitFullTaxInvoice();">
       <div class="form-group">
         <label for="tax-name">ชื่อผู้ซื้อสินค้า / ชื่อบริษัท <span style="color:#ef4444;">*</span></label>
-        <input type="text" id="tax-name" class="form-control" value="${customer.name || ''}" placeholder="เช่น นายสมชาย ดีมาก หรือ บริษัท กขค จำกัด" required autofocus>
+        <input type="text" id="tax-name" class="form-control" value="${customer.name || ''}" placeholder="เช่น นายสมชาย ดีมาก หรือ บริษัท กขค จำกัด" aria-label="เช่น นายสมชาย ดีมาก หรือ บริษัท กขค จำกัด" required autofocus>
       </div>
 
       <div class="grid-2_5-1" style="gap:0.8rem;">
         <div class="form-group">
           <label for="tax-id">เลขประจำตัวผู้เสียภาษี (13 หลัก) <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="tax-id" class="form-control" maxlength="13" placeholder="ระบุเลขประจำตัวผู้เสียภาษี 13 หลัก" required>
+          <input type="text" id="tax-id" class="form-control" maxlength="13" placeholder="ระบุเลขประจำตัวผู้เสียภาษี 13 หลัก" aria-label="ระบุเลขประจำตัวผู้เสียภาษี 13 หลัก" required>
         </div>
         <div class="form-group">
           <label for="tax-branch">สาขา <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="tax-branch" class="form-control" value="สำนักงานใหญ่" placeholder="เช่น สำนักงานใหญ่ หรือ 00001" required>
+          <input type="text" id="tax-branch" class="form-control" value="สำนักงานใหญ่" placeholder="เช่น สำนักงานใหญ่ หรือ 00001" aria-label="เช่น สำนักงานใหญ่ หรือ 00001" required>
         </div>
       </div>
 
@@ -2136,14 +2296,14 @@ function openFullTaxInvoiceDetailsModal(sale) {
 
       <div class="form-group">
         <label for="tax-phone">เบอร์โทรศัพท์ (ถ้ามี)</label>
-        <input type="text" id="tax-phone" class="form-control" value="${customer.phone || ''}" placeholder="ระบุเบอร์โทรศัพท์">
+        <input type="text" id="tax-phone" class="form-control" value="${customer.phone || ''}" placeholder="ระบุเบอร์โทรศัพท์" aria-label="ระบุเบอร์โทรศัพท์">
       </div>
     </form>
   `;
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="openSelectReceiptTypeModal(window.currentReceiptSale)">ย้อนกลับ</button>
-    <button class="btn btn-success" onclick="submitFullTaxInvoice()"><i class="fa-solid fa-print"></i> ออกใบกำกับภาษีเต็มรูปแบบ</button>
+    <button class="btn btn-success" onclick="submitFullTaxInvoice()"><i class="fa-solid fa-print" aria-hidden="true"></i> ออกใบกำกับภาษีเต็มรูปแบบ</button>
   `;
 
   openModal(`กรอกข้อมูลใบกำกับภาษีเต็มรูปแบบ`, bodyHtml, footerHtml);
@@ -2241,11 +2401,11 @@ function openFullTaxInvoiceModal(sale, tax) {
       <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.2rem; color:#000;">
         <thead>
           <tr style="background:#f1f5f9; border:1px solid #000; text-align:left;">
-            <th style="padding:8px; border-right:1px solid #ddd; width:45px; text-align:center;">ลำดับ</th>
-            <th style="padding:8px; border-right:1px solid #ddd;">ชื่อรายการสินค้า / สเปกเครื่อง (Product Description)</th>
-            <th style="padding:8px; border-right:1px solid #ddd; width:55px; text-align:center;">จำนวน</th>
-            <th style="padding:8px; border-right:1px solid #ddd; width:110px; text-align:right;">ราคาต่อหน่วย</th>
-            <th style="padding:8px; width:110px; text-align:right;">จำนวนเงิน (บาท)</th>
+            <th scope="col" style="padding:8px; border-right:1px solid #ddd; width:45px; text-align:center;">ลำดับ</th>
+            <th scope="col" style="padding:8px; border-right:1px solid #ddd;">ชื่อรายการสินค้า / สเปกเครื่อง (Product Description)</th>
+            <th scope="col" style="padding:8px; border-right:1px solid #ddd; width:55px; text-align:center;">จำนวน</th>
+            <th scope="col" style="padding:8px; border-right:1px solid #ddd; width:110px; text-align:right;">ราคาต่อหน่วย</th>
+            <th scope="col" style="padding:8px; width:110px; text-align:right;">จำนวนเงิน (บาท)</th>
           </tr>
         </thead>
         <tbody>
@@ -2328,7 +2488,7 @@ function openFullTaxInvoiceModal(sale, tax) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="openFullTaxInvoiceDetailsModal(window.currentReceiptSale)">ย้อนกลับ</button>
-    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบกำกับภาษี</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบกำกับภาษี</button>
   `;
 
   openModal(`ใบกำกับภาษีเต็มรูปแบบ: ${sale.receiptNumber}`, bodyHtml, footerHtml);
@@ -2339,7 +2499,7 @@ function openFullTaxInvoiceModal(sale, tax) {
    ========================================================================== */
 async function renderFinanceView(filterParams = {}) {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายงานการเงินและกำไรจากการขาย...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายงานการเงินและกำไรจากการขาย...</div>`;
 
   try {
     const queryParams = new URLSearchParams(filterParams).toString();
@@ -2358,7 +2518,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">ยอดขายรวม (Revenue)</span>
-            <i class="fa-solid fa-cart-shopping" style="color: var(--accent-primary); font-size:1.3rem;"></i>
+            <i class="fa-solid fa-cart-shopping" style="color: var(--accent-primary); font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:var(--text-main);">฿${(summary.totalRevenue || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2369,7 +2529,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขั้นต้น (Gross Profit)</span>
-            <i class="fa-solid fa-coins" style="color: var(--accent-gold); font-size:1.3rem;"></i>
+            <i class="fa-solid fa-coins" style="color: var(--accent-gold); font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:#d97706;">฿${(summary.totalProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2380,7 +2540,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card" style="border: 1px solid ${(summary.totalExpenses || 0) > 0 ? '#e11d48' : 'var(--border-color)'};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">รายจ่ายรวม (Expenses)</span>
-            <i class="fa-solid fa-receipt" style="color: #e11d48; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-receipt" style="color: #e11d48; font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:#e11d48;">฿${(summary.totalExpenses || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2391,7 +2551,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card" style="border: 1px solid #10b981; background: rgba(16, 185, 129, 0.04);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรสุทธิ (Net Profit)</span>
-            <i class="fa-solid fa-hand-holding-dollar" style="color: #059669; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-hand-holding-dollar" style="color: #059669; font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:#059669;">฿${(summary.netProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2402,7 +2562,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรที่รอรับจากไฟแนนซ์</span>
-            <i class="fa-solid fa-clock-rotate-left" style="color: #d97706; font-size:1.3rem;"></i>
+            <i class="fa-solid fa-clock-rotate-left" style="color: #d97706; font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:#d97706;">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2413,7 +2573,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรขายสด / โอน / บัตร</span>
-            <i class="fa-solid fa-money-bill-wave" style="color: var(--accent-primary); font-size:1.3rem;"></i>
+            <i class="fa-solid fa-money-bill-wave" style="color: var(--accent-primary); font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:var(--text-main);">฿${(summary.cashProfit || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2426,7 +2586,7 @@ async function renderFinanceView(filterParams = {}) {
       <div id="fin-filter-panel" class="card" style="margin-bottom:1.5rem;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <h3 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-filter" style="color:var(--accent-primary);"></i> กรองข้อมูลรายงานการเงิน
+            <i class="fa-solid fa-filter" style="color:var(--accent-primary);" aria-hidden="true"></i> กรองข้อมูลรายงานการเงิน
           </h3>
           
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem;">
@@ -2460,28 +2620,28 @@ async function renderFinanceView(filterParams = {}) {
 
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">เริ่มวันที่:</label>
-              <input type="date" id="fin-start-date" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
+              <input type="date" id="fin-start-date" aria-label="รายงานการเงิน เริ่มวันที่" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
             </div>
 
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">ถึงวันที่:</label>
-              <input type="date" id="fin-end-date" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
+              <input type="date" id="fin-end-date" aria-label="รายงานการเงิน ถึงวันที่" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;">
             </div>
 
             <div style="display:flex; align-items:center; gap:0.4rem;">
-              <input type="text" id="fin-search-input" class="form-control" placeholder="ค้นหาบิล, ลูกค้า, IMEI..." style="width:180px; padding:0.3rem 0.6rem; font-size:0.82rem;" onkeyup="filterFinanceTable()">
+              <input type="text" id="fin-search-input" class="form-control" placeholder="ค้นหาบิล, ลูกค้า, IMEI..." aria-label="ค้นหาบิล, ลูกค้า, IMEI..." style="width:180px; padding:0.3rem 0.6rem; font-size:0.82rem;" onkeyup="filterFinanceTable()">
             </div>
 
             <button class="btn btn-primary btn-sm" onclick="applyFinanceFilters()">
-              <i class="fa-solid fa-magnifying-glass"></i> ค้นหา
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ค้นหา
             </button>
             <button class="btn btn-secondary btn-sm" onclick="openPrintFinanceReportModal()" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
-              <i class="fa-solid fa-print"></i> พิมพ์รายงาน
+              <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์รายงาน
             </button>
             
             ${(filterParams.branchId || filterParams.paymentMethod || filterParams.payoutStatus || filterParams.startDate || filterParams.endDate) ? `
               <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="font-size:0.82rem; padding:0.3rem 0.6rem; font-weight:700;">
-                <i class="fa-solid fa-rotate-left"></i> ล้างตัวกรอง
+                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ล้างตัวกรอง
               </button>
             ` : ''}
           </div>
@@ -2491,10 +2651,10 @@ async function renderFinanceView(filterParams = {}) {
       <!-- Tab Selection -->
       <div style="display:flex; gap:0.5rem; margin-bottom:1.2rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.6rem;">
         <button id="fin-tab-sales" class="btn btn-primary btn-sm" onclick="switchFinanceTab('sales')" style="font-weight:700; border-radius:4px 4px 0 0; padding:0.5rem 1.2rem;">
-          <i class="fa-solid fa-cash-register"></i> รายการขายสินค้า & กำไร
+          <i class="fa-solid fa-cash-register" aria-hidden="true"></i> รายการขายสินค้า & กำไร
         </button>
         <button id="fin-tab-expenses" class="btn btn-secondary btn-sm" onclick="switchFinanceTab('expenses')" style="font-weight:700; border-radius:4px 4px 0 0; padding:0.5rem 1.2rem;">
-          <i class="fa-solid fa-receipt"></i> บันทึกรายจ่ายดำเนินงาน
+          <i class="fa-solid fa-receipt" aria-hidden="true"></i> บันทึกรายจ่ายดำเนินงาน
         </button>
       </div>
 
@@ -2504,16 +2664,16 @@ async function renderFinanceView(filterParams = {}) {
           <table class="data-table">
             <thead>
               <tr>
-                <th>เลขที่ใบเสร็จ / วันเวลา</th>
-                <th>สาขา & ลูกค้า</th>
-                <th>รายการสินค้า (IMEI)</th>
-                <th>ช่องทางชำระเงิน</th>
-                <th>ราคาต้นทุน (บาท)</th>
-                <th>ราคาขาย (บาท)</th>
-                <th>กำไรสุทธิ (บาท)</th>
-                <th style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
-                <th style="text-align:center;">การคืนเงินทุนสาขา</th>
-                <th style="text-align:center;">ดำเนินการ</th>
+                <th scope="col">เลขที่ใบเสร็จ / วันเวลา</th>
+                <th scope="col">สาขา & ลูกค้า</th>
+                <th scope="col">รายการสินค้า (IMEI)</th>
+                <th scope="col">ช่องทางชำระเงิน</th>
+                <th scope="col">ราคาต้นทุน (บาท)</th>
+                <th scope="col">ราคาขาย (บาท)</th>
+                <th scope="col">กำไรสุทธิ (บาท)</th>
+                <th scope="col" style="text-align:center;">สถานะรับเงินกำไรไฟแนนซ์</th>
+                <th scope="col" style="text-align:center;">การคืนเงินทุนสาขา</th>
+                <th scope="col" style="text-align:center;">ดำเนินการ</th>
               </tr>
             </thead>
             <tbody>
@@ -2547,7 +2707,7 @@ async function renderFinanceView(filterParams = {}) {
                   <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: rgba(239, 68, 68, 0.05);' : ''}">
                     <td>
                       <strong>${s.receiptNumber}</strong>
-                      ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
+                      ${isVoided ? '<br><span class="badge badge-red" style="font-size:0.68rem; padding:0.1rem 0.3rem;"><i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิกบิลแล้ว (Voided)</span>' : ''}<br>
                       <span style="font-size:0.78rem; color:var(--text-muted);">${new Date(s.createdAt).toLocaleString('th-TH')}</span>
                     </td>
                     <td>
@@ -2559,7 +2719,7 @@ async function renderFinanceView(filterParams = {}) {
                       ${s.paymentMethod === 'cash' ? '<span class="badge badge-green">เงินสด</span>' :
                         s.paymentMethod === 'transfer' ? '<span class="badge badge-blue">โอนเงิน</span>' :
                         s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
-                        `<span class="badge badge-gold"><i class="fa-solid fa-file-contract"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
+                        `<span class="badge badge-gold"><i class="fa-solid fa-file-contract" aria-hidden="true"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
                     </td>
                     <td>
                       ฿${costTotal.toLocaleString()}
@@ -2572,12 +2732,12 @@ async function renderFinanceView(filterParams = {}) {
                     <td style="text-align:center;">
                       ${isFinance ? `
                         ${isPending ? `
-                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอรับเงินกำไรจากไฟแนนซ์</span><br>
+                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอรับเงินกำไรจากไฟแนนซ์</span><br>
                           <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordFinancePayoutModal('${s._id}', '${s.receiptNumber}', ${profitTotal}, '${(finDetails.companyName || '').replace(/'/g, "\\'")}')">
-                            <i class="fa-solid fa-calendar-check"></i> บันทึกรับเงินกำไร (฿${profitTotal.toLocaleString()})
+                            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i> บันทึกรับเงินกำไร (฿${profitTotal.toLocaleString()})
                           </button>
                         ` : `
-                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเงินกำไรแล้ว</span><br>
+                          <span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> รับเงินกำไรแล้ว</span><br>
                           <span style="font-size:0.75rem; color:var(--text-muted);">
                             วันที่รับ: ${finDetails.payoutReceivedDate ? new Date(finDetails.payoutReceivedDate).toLocaleDateString('th-TH') : '-'}
                           </span>
@@ -2589,12 +2749,12 @@ async function renderFinanceView(filterParams = {}) {
                         <span style="color:var(--text-muted); font-size:0.8rem;">- (คืนวงเงินอัตโนมัติ) -</span>
                       ` : `
                         ${(s.costReturnedStatus || 'pending') === 'pending' ? `
-                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอโอนทุนคืน (฿${costTotal.toLocaleString()})</span><br>
+                          <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอโอนทุนคืน (฿${costTotal.toLocaleString()})</span><br>
                           <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="openRecordCostReturnModal('${s._id}', '${s.receiptNumber}', ${costTotal})">
-                            <i class="fa-solid fa-check"></i> บันทึกโอนทุนคืน
+                            <i class="fa-solid fa-check" aria-hidden="true"></i> บันทึกโอนทุนคืน
                           </button>
                         ` : `
-                          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> โอนทุนคืนแล้ว (฿${(s.actualCostReturned || s.totalCost || 0).toLocaleString()})</span><br>
+                          <span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> โอนทุนคืนแล้ว (฿${(s.actualCostReturned || s.totalCost || 0).toLocaleString()})</span><br>
                           <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.15rem; line-height:1.35;">
                             วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}<br>
                             ${s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== costTotal ? `
@@ -2607,11 +2767,11 @@ async function renderFinanceView(filterParams = {}) {
                     <td style="text-align:center; vertical-align:middle;">
                       <div style="display:flex; justify-content:center; gap:0.25rem; flex-wrap:wrap;">
                         <button class="btn btn-primary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="reprintReceiptVoucher(${idx})">
-                          <i class="fa-solid fa-print"></i> พิมพ์
+                          <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์
                         </button>
                         ${!isVoided ? `
                           <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.5rem; font-size:0.78rem; font-weight:700;" onclick="openEditSalePricesModal('${s._id}')">
-                            <i class="fa-solid fa-tags"></i> แก้ราคา
+                            <i class="fa-solid fa-tags" aria-hidden="true"></i> แก้ราคา
                           </button>
                         ` : ''}
                       </div>
@@ -2628,10 +2788,10 @@ async function renderFinanceView(filterParams = {}) {
       <div id="fin-expenses-panel" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">
-            <i class="fa-solid fa-list-check" style="color:var(--accent-primary);"></i> ตารางรายการรายจ่ายระบบ
+            <i class="fa-solid fa-list-check" style="color:var(--accent-primary);" aria-hidden="true"></i> ตารางรายการรายจ่ายระบบ
           </div>
           <button class="btn btn-danger btn-sm" style="font-weight:700;" onclick="openAddExpenseModal()">
-            <i class="fa-solid fa-plus-circle"></i> + บันทึกรายจ่ายใหม่
+            <i class="fa-solid fa-plus-circle" aria-hidden="true"></i> + บันทึกรายจ่ายใหม่
           </button>
         </div>
 
@@ -2684,38 +2844,38 @@ async function renderFinanceView(filterParams = {}) {
 
             <div style="display:flex; align-items:center; gap:0.3rem;">
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
-              <input type="date" id="exp-start-date" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+              <input type="date" id="exp-start-date" aria-label="รายการค่าใช้จ่าย เริ่มวันที่" class="form-control" value="${filterParams.startDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
             </div>
 
             <div style="display:flex; align-items:center; gap:0.3rem;">
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
-              <input type="date" id="exp-end-date" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
+              <input type="date" id="exp-end-date" aria-label="รายการค่าใช้จ่าย ถึงวันที่" class="form-control" value="${filterParams.endDate || ''}" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;">
             </div>
           </div>
 
           <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem;">
             <div style="display:flex; align-items:center; gap:0.3rem;">
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">จำนวนเงินต่ำสุด:</label>
-              <input type="number" id="exp-min-amount" class="form-control" placeholder="Min" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
+              <input type="number" id="exp-min-amount" class="form-control" placeholder="Min" aria-label="จำนวนเงินต่ำสุด" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
             </div>
 
             <div style="display:flex; align-items:center; gap:0.3rem;">
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">จำนวนเงินสูงสุด:</label>
-              <input type="number" id="exp-max-amount" class="form-control" placeholder="Max" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
+              <input type="number" id="exp-max-amount" class="form-control" placeholder="Max" aria-label="จำนวนเงินสูงสุด" style="width:100px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()" onchange="filterExpenseTable()">
             </div>
 
             <div style="display:flex; align-items:center; gap:0.3rem;">
               <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ค้นหาคำสำคัญ:</label>
-              <input type="text" id="exp-search-input" class="form-control" placeholder="ค้นหาเลขที่, ชื่อรายการ, หมายเหตุ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()">
+              <input type="text" id="exp-search-input" class="form-control" placeholder="ค้นหาเลขที่, ชื่อรายการ, หมายเหตุ..." aria-label="ค้นหาเลขที่, ชื่อรายการ, หมายเหตุ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onkeyup="filterExpenseTable()">
             </div>
 
             <button class="btn btn-primary btn-sm" onclick="applyExpenseFilters()" style="padding:0.35rem 0.8rem; font-size:0.78rem; font-weight:700;">
-              <i class="fa-solid fa-magnifying-glass"></i> ค้นหาตามสาขา/วันที่
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ค้นหาตามสาขา/วันที่
             </button>
             
             ${(filterParams.branchId || filterParams.startDate || filterParams.endDate) ? `
               <button class="btn btn-secondary btn-sm" onclick="renderFinanceView({})" style="padding:0.35rem 0.8rem; font-size:0.78rem; font-weight:700;">
-                <i class="fa-solid fa-rotate-left"></i> ล้างตัวกรอง
+                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ล้างตัวกรอง
               </button>
             ` : ''}
           </div>
@@ -2725,14 +2885,14 @@ async function renderFinanceView(filterParams = {}) {
           <table class="data-table">
             <thead>
               <tr>
-                <th>เลขที่รายจ่าย / วันที่</th>
-                <th>ชื่อรายการ</th>
-                <th>สาขา</th>
-                <th>หมวดหมู่</th>
-                <th>จำนวนเงิน (บาท)</th>
-                <th>ผู้บันทึก</th>
-                <th>หมายเหตุ / รายละเอียด</th>
-                <th style="text-align:center;">จัดการ</th>
+                <th scope="col">เลขที่รายจ่าย / วันที่</th>
+                <th scope="col">ชื่อรายการ</th>
+                <th scope="col">สาขา</th>
+                <th scope="col">หมวดหมู่</th>
+                <th scope="col">จำนวนเงิน (บาท)</th>
+                <th scope="col">ผู้บันทึก</th>
+                <th scope="col">หมายเหตุ / รายละเอียด</th>
+                <th scope="col" style="text-align:center;">จัดการ</th>
               </tr>
             </thead>
             <tbody id="expenses-tbody">
@@ -2766,10 +2926,10 @@ async function renderFinanceView(filterParams = {}) {
                     <td style="font-size:0.83rem; max-width:250px; word-break:break-word;">${exp.note || '-'}</td>
                     <td style="text-align:center; white-space:nowrap;">
                       <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; font-weight:700; margin-right:0.25rem;" onclick="openEditExpenseModal('${exp._id}')">
-                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                       </button>
                       <button class="btn btn-danger btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; font-weight:700;" onclick="deleteExpenseAction('${exp._id}')">
-                        <i class="fa-solid fa-trash-can"></i> ลบ
+                        <i class="fa-solid fa-trash-can" aria-hidden="true"></i> ลบ
                       </button>
                     </td>
                   </tr>
@@ -2878,7 +3038,7 @@ function openAddExpenseModal() {
     <form id="add-expense-form" onsubmit="event.preventDefault(); submitAddExpense();">
       <div class="form-group" style="margin-bottom:1rem;">
         <label for="exp-title">ชื่อรายการรายจ่าย <span style="color:#ef4444;">*</span></label>
-        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตเดือน 8, ซื้อหลอดไฟใหม่..." required style="width:100%;">
+        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตเดือน 8, ซื้อหลอดไฟใหม่..." aria-label="เช่น ค่าอินเทอร์เน็ตเดือน 8, ซื้อหลอดไฟใหม่..." required style="width:100%;">
       </div>
 
       ${isAdminOrHq ? `
@@ -2904,13 +3064,13 @@ function openAddExpenseModal() {
           <option value="NEW_CATEGORY" style="color:var(--accent-secondary); font-weight:700;">+ เพิ่มหมวดหมู่ใหม่...</option>
         </select>
         <div id="exp-custom-category-group" style="display:none; margin-top:0.5rem;">
-          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
+          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." aria-label="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
         </div>
       </div>
 
       <div class="form-group" style="margin-bottom:1rem;">
         <label for="exp-amount">จำนวนเงิน (บาท) <span style="color:#ef4444;">*</span></label>
-        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" required style="width:100%;">
+        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." aria-label="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" required style="width:100%;">
       </div>
 
       <div class="form-group" style="margin-bottom:1rem;">
@@ -2928,7 +3088,7 @@ function openAddExpenseModal() {
   const footerHtml = `
     <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button type="submit" form="add-expense-form" class="btn btn-primary">
-      <i class="fa-solid fa-save"></i> บันทึกรายจ่าย
+      <i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกรายจ่าย
     </button>
   `;
 
@@ -3008,7 +3168,7 @@ function openEditExpenseModal(expenseId) {
     <form id="edit-expense-form" onsubmit="event.preventDefault(); submitEditExpense('${expenseId}');">
       <div class="form-group" style="margin-bottom:1rem;">
         <label for="exp-title">ชื่อรายการรายจ่าย <span style="color:#ef4444;">*</span></label>
-        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตสาขาเดือน 8, ซื้อหลอดไฟใหม่..." value="${expense.title || ''}" required style="width:100%;">
+        <input type="text" id="exp-title" class="form-control" placeholder="เช่น ค่าอินเทอร์เน็ตสาขาเดือน 8, ซื้อหลอดไฟใหม่..." aria-label="เช่น ค่าอินเทอร์เน็ตสาขาเดือน 8, ซื้อหลอดไฟใหม่..." value="${expense.title || ''}" required style="width:100%;">
       </div>
 
       ${isAdminOrHq ? `
@@ -3034,13 +3194,13 @@ function openEditExpenseModal(expenseId) {
           <option value="NEW_CATEGORY" style="color:var(--accent-secondary); font-weight:700;">+ เพิ่มหมวดหมู่ใหม่...</option>
         </select>
         <div id="exp-custom-category-group" style="display:none; margin-top:0.5rem;">
-          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
+          <input type="text" id="exp-custom-category" class="form-control" placeholder="พิมพ์ชื่อหมวดหมู่ใหม่..." aria-label="พิมพ์ชื่อหมวดหมู่ใหม่..." style="width:100%;">
         </div>
       </div>
 
       <div class="form-group" style="margin-bottom:1rem;">
         <label for="exp-amount">จำนวนเงิน (บาท) <span style="color:#ef4444;">*</span></label>
-        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" value="${expense.amount || ''}" required style="width:100%;">
+        <input type="number" id="exp-amount" class="form-control" placeholder="ระบุจำนวนเงินที่จ่าย..." aria-label="ระบุจำนวนเงินที่จ่าย..." min="1" step="any" value="${expense.amount || ''}" required style="width:100%;">
       </div>
 
       <div class="form-group" style="margin-bottom:1rem;">
@@ -3058,7 +3218,7 @@ function openEditExpenseModal(expenseId) {
   const footerHtml = `
     <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button type="submit" form="edit-expense-form" class="btn btn-primary">
-      <i class="fa-solid fa-save"></i> บันทึกการแก้ไข
+      <i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข
     </button>
   `;
 
@@ -3188,7 +3348,7 @@ function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName
     <form id="record-payout-form" onsubmit="event.preventDefault(); submitFinancePayoutReceived('${saleId}');">
       <div class="form-group">
         <label for="fp-received-date" style="color:#d97706; font-weight:700;">
-          <i class="fa-solid fa-calendar-days"></i> ระบุวันที่ ที่รับเงินจากไฟแนนซ์จริง (จำเป็นต้องเลือก)
+          <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> ระบุวันที่ ที่รับเงินจากไฟแนนซ์จริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="fp-received-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700;">
         <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* กดที่ช่องเพื่อแสดงปฏิทินและเลือกวันที่รับเงินจริง</span>
@@ -3203,7 +3363,7 @@ function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-success" onclick="submitFinancePayoutReceived('${saleId}')"><i class="fa-solid fa-check-double"></i> ยืนยันบันทึกรับเงินจากไฟแนนซ์</button>
+    <button class="btn btn-success" onclick="submitFinancePayoutReceived('${saleId}')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันบันทึกรับเงินจากไฟแนนซ์</button>
   `;
 
   openModal(`บันทึกรับเงินจากไฟแนนซ์: ${receiptNumber}`, bodyHtml, footerHtml);
@@ -3244,7 +3404,7 @@ async function submitFinancePayoutReceived(saleId) {
    ========================================================================== */
 async function renderMasterSettingsView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดตัวเลือก Master Data...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดตัวเลือก Master Data...</div>`;
 
   try {
     await loadMasterOptions();
@@ -3253,7 +3413,7 @@ async function renderMasterSettingsView() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem;">
         <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-plus-circle" style="color:var(--accent-primary);"></i> เพิ่มตัวเลือก Master Data ใหม่
+          <i class="fa-solid fa-plus-circle" style="color:var(--accent-primary);" aria-hidden="true"></i> เพิ่มตัวเลือก Master Data ใหม่
         </h3>
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.2rem;">
           เมื่อเพิ่มแล้ว ตัวเลือกจะประกอบเป็น <strong>ชื่อสินค้าแบบเต็ม</strong> ให้ทันที
@@ -3273,7 +3433,7 @@ async function renderMasterSettingsView() {
 
           <div class="form-group" style="margin-bottom:0;">
             <label for="mo-value">ข้อความตัวเลือก (เช่น 256GB, ไทเทเนียมธรรมชาติ)</label>
-            <input type="text" id="mo-value" class="form-control" placeholder="พิมพ์ข้อความตัวเลือก..." required>
+            <input type="text" id="mo-value" class="form-control" placeholder="พิมพ์ข้อความตัวเลือก..." aria-label="พิมพ์ข้อความตัวเลือก..." required>
           </div>
 
           <div class="form-group" id="mo-parent-container" style="margin-bottom:0; display:none;">
@@ -3285,7 +3445,7 @@ async function renderMasterSettingsView() {
           </div>
 
           <button type="submit" class="btn btn-primary" style="height:42px;">
-            <i class="fa-solid fa-plus"></i> เพิ่มตัวเลือก Master
+            <i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มตัวเลือก Master
           </button>
         </form>
       </div>
@@ -3295,7 +3455,7 @@ async function renderMasterSettingsView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
             <h4 style="font-weight:700; font-size:0.95rem; color:#38bdf8;">
-              <i class="fa-solid fa-copyright"></i> ยี่ห้อ (Brand)
+              <i class="fa-solid fa-copyright" aria-hidden="true"></i> ยี่ห้อ (Brand)
             </h4>
             <span class="badge badge-gray">${brands.length} รายการ</span>
           </div>
@@ -3305,8 +3465,8 @@ async function renderMasterSettingsView() {
             ${brands.map(b => `
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${b.value}</strong></span>
-                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${b._id}', '${b.value}')">
-                  <i class="fa-solid fa-trash-can"></i>
+                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${b._id}', '${b.value}')" aria-label="ลบรายการ ${escapeHtml(b.value)}">
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
                 </button>
               </div>
             `).join('')}
@@ -3317,7 +3477,7 @@ async function renderMasterSettingsView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
             <h4 style="font-weight:700; font-size:0.95rem; color:#d97706;">
-              <i class="fa-solid fa-mobile-screen-button"></i> ชื่อรุ่น (Model)
+              <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i> ชื่อรุ่น (Model)
             </h4>
             <span class="badge badge-gray">${models.length} รายการ</span>
           </div>
@@ -3330,8 +3490,8 @@ async function renderMasterSettingsView() {
                   <strong>${m.value}</strong>
                   ${m.parent ? `<br><span style="font-size:0.75rem; color:var(--text-muted);">${m.parent}</span>` : ''}
                 </div>
-                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${m._id}', '${m.value}')">
-                  <i class="fa-solid fa-trash-can"></i>
+                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${m._id}', '${m.value}')" aria-label="ลบรายการ ${escapeHtml(m.value)}">
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
                 </button>
               </div>
             `).join('')}
@@ -3342,7 +3502,7 @@ async function renderMasterSettingsView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
             <h4 style="font-weight:700; font-size:0.95rem; color:#059669;">
-              <i class="fa-solid fa-hard-drive"></i> ความจุ (Capacity)
+              <i class="fa-solid fa-hard-drive" aria-hidden="true"></i> ความจุ (Capacity)
             </h4>
             <span class="badge badge-gray">${capacities.length} รายการ</span>
           </div>
@@ -3352,8 +3512,8 @@ async function renderMasterSettingsView() {
             ${capacities.map(cp => `
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${cp.value}</strong></span>
-                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cp._id}', '${cp.value}')">
-                  <i class="fa-solid fa-trash-can"></i>
+                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cp._id}', '${cp.value}')" aria-label="ลบรายการ ${escapeHtml(cp.value)}">
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
                 </button>
               </div>
             `).join('')}
@@ -3364,7 +3524,7 @@ async function renderMasterSettingsView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
             <h4 style="font-weight:700; font-size:0.95rem; color:#7c3aed;">
-              <i class="fa-solid fa-droplet"></i> สีสินค้า (Color)
+              <i class="fa-solid fa-droplet" aria-hidden="true"></i> สีสินค้า (Color)
             </h4>
             <span class="badge badge-gray">${colors.length} รายการ</span>
           </div>
@@ -3374,8 +3534,8 @@ async function renderMasterSettingsView() {
             ${colors.map(cl => `
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${cl.value}</strong></span>
-                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cl._id}', '${cl.value}')">
-                  <i class="fa-solid fa-trash-can"></i>
+                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${cl._id}', '${cl.value}')" aria-label="ลบรายการ ${escapeHtml(cl.value)}">
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
                 </button>
               </div>
             `).join('')}
@@ -3386,7 +3546,7 @@ async function renderMasterSettingsView() {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
             <h4 style="font-weight:700; font-size:0.95rem; color:#db2777;">
-              <i class="fa-solid fa-tags"></i> หมวดหมู่สินค้า (Category)
+              <i class="fa-solid fa-tags" aria-hidden="true"></i> หมวดหมู่สินค้า (Category)
             </h4>
             <span class="badge badge-gray">${categories.length} รายการ</span>
           </div>
@@ -3396,8 +3556,8 @@ async function renderMasterSettingsView() {
             ${categories.map(c => `
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.85rem;">
                 <span><strong>${c.value}</strong></span>
-                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${c._id}', '${c.value}')">
-                  <i class="fa-solid fa-trash-can"></i>
+                <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="deleteMasterOptionItem('${c._id}', '${c.value}')" aria-label="ลบรายการ ${escapeHtml(c.value)}">
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
                 </button>
               </div>
             `).join('')}
@@ -3471,23 +3631,23 @@ async function renderHqAuditView() {
       </div>
       <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
         <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เลือกวันที่:</label>
-        <input type="date" id="hq-audit-date-picker" class="form-control" style="width:auto;" value="${todayStr}">
-        <button class="btn btn-primary btn-sm" id="load-hq-audit-btn"><i class="fa-solid fa-rotate"></i> รีเฟรช</button>
-        <button class="btn btn-secondary btn-sm" id="toggle-hq-summary-btn" onclick="toggleHqAuditSummaryTable()"><i class="fa-solid fa-eye"></i> แสดงตารางสรุปสาขา</button>
-        <button class="btn btn-success btn-sm" onclick="exportBranchAuditToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+        <input type="date" id="hq-audit-date-picker" aria-label="เลือกวันที่ตรวจสอบสต็อก" class="form-control" style="width:auto;" value="${todayStr}">
+        <button class="btn btn-primary btn-sm" id="load-hq-audit-btn"><i class="fa-solid fa-rotate" aria-hidden="true"></i> รีเฟรช</button>
+        <button class="btn btn-secondary btn-sm" id="toggle-hq-summary-btn" onclick="toggleHqAuditSummaryTable()"><i class="fa-solid fa-eye" aria-hidden="true"></i> แสดงตารางสรุปสาขา</button>
+        <button class="btn btn-success btn-sm" onclick="exportBranchAuditToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
       </div>
     </div>
 
     <!-- Filters Toolbar -->
     <div class="card" style="margin-bottom: 1.5rem; display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap; padding: 0.8rem 1.2rem;">
       <div style="display:flex; align-items:center; gap:0.5rem;">
-        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-store"></i> กรองสาขา:</label>
+        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-store" aria-hidden="true"></i> กรองสาขา:</label>
         <select id="hq-audit-branch-filter" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem; height:auto; min-height:auto;" onchange="filterHqAuditGrid()">
           <option value="all">-- ทุกสาขา --</option>
         </select>
       </div>
       <div style="display:flex; align-items:center; gap:0.5rem;">
-        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-circle-check"></i> กรองสถานะ:</label>
+        <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> กรองสถานะ:</label>
         <select id="hq-audit-status-filter" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem; height:auto; min-height:auto;" onchange="filterHqAuditGrid()">
           <option value="all">-- ทุกสถานะ --</option>
           <option value="Verified">ตรวจสอบแล้ว (Verified)</option>
@@ -3504,20 +3664,20 @@ async function renderHqAuditView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>สาขา</th>
-              <th>สถานะการตรวจ</th>
-              <th style="text-align:center;">จำนวนสินค้า</th>
-              <th style="text-align:center;">จำนวนนับจริง</th>
-              <th style="text-align:center;">ยอดที่ขาด/เกิน</th>
-              <th>ผู้ส่งรายงาน</th>
-              <th>ผู้อนุมัติ (ส่วนกลาง)</th>
-              <th style="text-align:center;">การจัดการ</th>
+              <th scope="col">สาขา</th>
+              <th scope="col">สถานะการตรวจ</th>
+              <th scope="col" style="text-align:center;">จำนวนสินค้า</th>
+              <th scope="col" style="text-align:center;">จำนวนนับจริง</th>
+              <th scope="col" style="text-align:center;">ยอดที่ขาด/เกิน</th>
+              <th scope="col">ผู้ส่งรายงาน</th>
+              <th scope="col">ผู้อนุมัติ (ส่วนกลาง)</th>
+              <th scope="col" style="text-align:center;">การจัดการ</th>
             </tr>
           </thead>
           <tbody id="hq-audit-grid-container">
             <tr>
               <td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">
-                <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; margin-right:0.4rem;"></i> กำลังโหลดข้อมูล...
+                <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; margin-right:0.4rem;" aria-hidden="true"></i> กำลังโหลดข้อมูล...
               </td>
             </tr>
           </tbody>
@@ -3528,7 +3688,7 @@ async function renderHqAuditView() {
     <!-- Inline Detailed Inspection Table Container -->
     <div id="hq-audit-detail-container">
       <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; color: var(--text-muted);">
-        <i class="fa-solid fa-hand-pointer" style="font-size: 2.5rem; margin-bottom: 0.8rem; display: block; color: var(--accent-gold);"></i>
+        <i class="fa-solid fa-hand-pointer" style="font-size: 2.5rem; margin-bottom: 0.8rem; display: block; color: var(--accent-gold);" aria-hidden="true"></i>
         <h4 style="font-weight:700; color:var(--text-main); margin-bottom:0.4rem;">เลือกสาขาเพื่อดูตารางรายละเอียดสต็อก</h4>
         <p style="font-size:0.88rem;">กรุณากดปุ่ม <strong>"ตรวจสอบ"</strong> ในตารางด้านบน เพื่อแสดงตารางรายละเอียดรายเครื่องที่นี่</p>
       </div>
@@ -3656,7 +3816,7 @@ function filterHqAuditGrid() {
         </td>
         <td>
           <span class="badge ${badgeClass}" style="font-size:0.8rem; font-weight:700;">
-            <i class="fa-solid ${iconClass}"></i> ${b.status}
+            <i class="fa-solid ${iconClass}" aria-hidden="true"></i> ${b.status}
           </span>
         </td>
         <td style="text-align:center;"><strong>${b.totalExpected}</strong></td>
@@ -3668,7 +3828,7 @@ function filterHqAuditGrid() {
         <td><span style="font-size:0.85rem;">${b.hqVerifiedBy || '-'}</span></td>
         <td style="text-align:center; white-space:nowrap;">
           <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm" style="font-weight:700; padding:0.25rem 0.6rem;" onclick="inspectBranchAudit('${b.branch.id}')">
-            <i class="fa-solid ${isSelected ? 'fa-eye' : 'fa-magnifying-glass'}"></i> ${isSelected ? 'แสดงอยู่' : 'ตรวจสอบ'}
+            <i class="fa-solid ${isSelected ? 'fa-eye' : 'fa-magnifying-glass'}" aria-hidden="true"></i> ${isSelected ? 'แสดงอยู่' : 'ตรวจสอบ'}
           </button>
         </td>
       </tr>
@@ -3833,7 +3993,7 @@ function renderHqAuditDetails() {
         <div>
           <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
             <h3 style="font-size:1.2rem; font-weight:700; color:var(--text-main); margin:0;">
-              <i class="fa-solid fa-clipboard-list" style="color:var(--accent-gold); margin-right:0.4rem;"></i>
+              <i class="fa-solid fa-clipboard-list" style="color:var(--accent-gold); margin-right:0.4rem;" aria-hidden="true"></i>
               รายละเอียดสต็อกรายเครื่อง (${branchFilter === 'all' ? 'ทุกสาขา' : activeBranches[0] ? activeBranches[0].branch.name : '-'})
             </h3>
           </div>
@@ -3844,15 +4004,15 @@ function renderHqAuditDetails() {
           </div>
           <div style="display:flex; gap:1.2rem; margin-top:0.6rem; font-size:0.82rem; color:var(--text-muted); flex-wrap:wrap; padding-top:0.4rem; border-top:1px dashed var(--border-color);">
             <div>สแกนส่งตรวจทั้งหมด: <strong style="color:var(--text-main);">${totalToVerify}</strong> เครื่อง</div>
-            <div><i class="fa-solid fa-circle-check" style="color:#059669;"></i> ผ่าน: <strong style="color:#059669;">${totalPassed}</strong> เครื่อง</div>
-            <div><i class="fa-solid fa-circle-xmark" style="color:#e11d48;"></i> ไม่ผ่าน: <strong style="color:#e11d48;">${totalFailed}</strong> เครื่อง</div>
-            <div><i class="fa-solid fa-rotate-left" style="color:#d97706;"></i> ให้ส่งตรวจใหม่: <strong style="color:#d97706;">${totalResubmit}</strong> เครื่อง</div>
-            <div><i class="fa-solid fa-clock" style="color:#64748b;"></i> ยังไม่ได้ตรวจ: <strong style="color:var(--text-main);">${totalPendingVerify}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-circle-check" style="color:#059669;" aria-hidden="true"></i> ผ่าน: <strong style="color:#059669;">${totalPassed}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-circle-xmark" style="color:#e11d48;" aria-hidden="true"></i> ไม่ผ่าน: <strong style="color:#e11d48;">${totalFailed}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-rotate-left" style="color:#d97706;" aria-hidden="true"></i> ให้ส่งตรวจใหม่: <strong style="color:#d97706;">${totalResubmit}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-clock" style="color:#64748b;" aria-hidden="true"></i> ยังไม่ได้ตรวจ: <strong style="color:var(--text-main);">${totalPendingVerify}</strong> เครื่อง</div>
           </div>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem;">
-          <input type="text" id="audit-table-search-input" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." style="width:240px; font-size:0.82rem; background:#ffffff;" onkeyup="filterAuditDetailTable(this.value)">
+          <input type="text" id="audit-table-search-input" class="form-control form-control-sm" placeholder="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." aria-label="🔍 ค้นหาชื่อสินค้า หรือ IMEI..." style="width:240px; font-size:0.82rem; background:#ffffff;" onkeyup="filterAuditDetailTable(this.value)">
         </div>
       </div>
 
@@ -3860,10 +4020,10 @@ function renderHqAuditDetails() {
         <table class="data-table" id="hq-audit-detail-table">
           <thead>
             <tr>
-              <th>สาขา</th>
-              <th>ชื่อสินค้า</th>
-              <th>หมายเลข IMEI</th>
-              <th>ผลการตรวจสอบรูปถ่าย & ลงความเห็น</th>
+              <th scope="col">สาขา</th>
+              <th scope="col">ชื่อสินค้า</th>
+              <th scope="col">หมายเลข IMEI</th>
+              <th scope="col">ผลการตรวจสอบรูปถ่าย & ลงความเห็น</th>
             </tr>
           </thead>
           <tbody>
@@ -3881,7 +4041,7 @@ function renderHqAuditDetails() {
                   </td>
                   <td>
                     <strong style="color:var(--accent-primary);">${row.productName}</strong>
-                    ${row.hasIssue ? `<div style="font-size:0.75rem; color:#d97706; font-weight:700; margin-top:0.2rem;"><i class="fa-solid fa-comment-dots"></i> หมายเหตุ: ${row.issueRemark} <span style="color:var(--text-muted); font-weight:normal; margin-left:0.3rem;">(แจ้งโดย: ${row.reportedByName || 'พนักงานสาขา'})</span></div>` : ''}
+                    ${row.hasIssue ? `<div style="font-size:0.75rem; color:#d97706; font-weight:700; margin-top:0.2rem;"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> หมายเหตุ: ${row.issueRemark} <span style="color:var(--text-muted); font-weight:normal; margin-left:0.3rem;">(แจ้งโดย: ${row.reportedByName || 'พนักงานสาขา'})</span></div>` : ''}
                   </td>
                   <td style="font-size:0.9rem;">
                     ${row.isScanned && imei !== '-' ? `
@@ -3890,7 +4050,7 @@ function renderHqAuditDetails() {
                     ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
                       <span style="font-family:monospace; font-weight:700; color:#e11d48; font-size:0.92rem;">${imei}</span>
                       ${row.hasIssue ? `
-                        <span class="badge badge-yellow" style="background:#f59e0b; color:#fff; font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา</span>
+                        <span class="badge badge-yellow" style="background:#f59e0b; color:#fff; font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา</span>
                       ` : `
                         <span style="color:#e11d48; font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
                       `}
@@ -3900,14 +4060,14 @@ function renderHqAuditDetails() {
                     ${(row.isScanned || row.hasIssue) && imei !== '-' ? `
                       <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
                         <div>
-                          ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check"></i> ผ่าน</span>' :
-                            isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark"></i> ไม่ผ่าน</span>' :
-                            isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left"></i> ให้ส่งตรวจใหม่</span>' :
+                          ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ผ่าน</span>' :
+                            isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ไม่ผ่าน</span>' :
+                            isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ส่งตรวจใหม่</span>' :
                             '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
                         </div>
 
                         <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
-                          <i class="fa-solid fa-magnifying-glass"></i> ตรวจสอบรูป & ลงความเห็น
+                          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ตรวจสอบรูป & ลงความเห็น
                         </button>
                       </div>
                     ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
@@ -3929,11 +4089,11 @@ function toggleHqAuditSummaryTable() {
     const isHidden = card.style.display === 'none';
     if (isHidden) {
       card.style.display = 'block';
-      btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> ซ่อนตารางสรุปสาขา';
+      btn.innerHTML = '<i class="fa-solid fa-eye-slash" aria-hidden="true"></i> ซ่อนตารางสรุปสาขา';
       btn.className = 'btn btn-secondary btn-sm';
     } else {
       card.style.display = 'none';
-      btn.innerHTML = '<i class="fa-solid fa-eye"></i> แสดงตารางสรุปสาขา';
+      btn.innerHTML = '<i class="fa-solid fa-eye" aria-hidden="true"></i> แสดงตารางสรุปสาขา';
       btn.className = 'btn btn-primary btn-sm';
     }
   }
@@ -4047,7 +4207,7 @@ function openImeiInspectionModal(imei, branchId) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem; text-align:center;">
       <div style="font-weight:800; font-size:1.15rem; color:var(--accent-primary); margin-bottom:0.2rem;">
-        <i class="fa-solid fa-barcode"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#d97706; font-family:monospace;">${imei}</span>
+        <i class="fa-solid fa-barcode" aria-hidden="true"></i> หมายเลข IMEI / ซีเรียล: <span style="color:#d97706; font-family:monospace;">${imei}</span>
       </div>
       <div style="font-size:0.88rem; color:var(--text-main);">
         สินค้า: <strong>${productName || 'สินค้าในสต็อก'}</strong> (IMEI: ${imei})
@@ -4056,11 +4216,11 @@ function openImeiInspectionModal(imei, branchId) {
 
     ${hasIssue ? `
       <div style="background:rgba(217,119,6,0.08); border:1.5px solid #d97706; padding:0.9rem; border-radius:8px; margin-bottom:1.2rem; display:flex; gap:0.6rem; align-items:flex-start; text-align:left; font-family:'Sarabun';">
-        <div style="font-size:1.4rem; color:#d97706; margin-top:0.15rem;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div style="font-size:1.4rem; color:#d97706; margin-top:0.15rem;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
         <div>
           <strong style="color:#d97706; font-size:0.92rem; display:block;">แจ้งปัญหาจากพนักงานหน้าร้าน:</strong>
           <span style="font-size:0.88rem; color:var(--text-main); line-height:1.5; margin-top:0.2rem; display:block;">${issueRemark || 'ไม่ได้ระบุหมายเหตุ'}</span>
-          <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:0.4rem; font-weight:700;"><i class="fa-solid fa-user"></i> ผู้แจ้ง: ${reportedByName || 'พนักงานสาขา'}</span>
+          <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:0.4rem; font-weight:700;"><i class="fa-solid fa-user" aria-hidden="true"></i> ผู้แจ้ง: ${reportedByName || 'พนักงานสาขา'}</span>
         </div>
       </div>
     ` : ''}
@@ -4072,7 +4232,7 @@ function openImeiInspectionModal(imei, branchId) {
           <div style="position:relative; display:inline-block; cursor:pointer;" onclick="window.open('${targetDriveUrl.replace(/'/g, "\\'")}', '_blank')" title="แตะเพื่อเปิดดูลิงก์รูปภาพเต็มใน Google Drive (แท็บใหม่)">
             <img src="${imgUrl}" style="max-height:360px; max-width:100%; border-radius:8px; border:2px solid var(--accent-gold); box-shadow:0 6px 20px rgba(0,0,0,0.15); transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onerror="this.onerror=null; ${fileId ? `this.src='https://drive.google.com/thumbnail?id=${fileId}&sz=w1000';` : `document.getElementById('no-img-text-${imei}').style.display='block';`}">
             <div style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.85); color:#fbbf24; padding:0.3rem 0.7rem; border-radius:6px; font-size:0.78rem; border:1px solid rgba(251,191,36,0.6); pointer-events:none; font-weight:700;">
-              <i class="fa-solid fa-up-right-from-square"></i> แตะเพื่อเปิดลิงก์รูปภาพ
+              <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> แตะเพื่อเปิดลิงก์รูปภาพ
             </div>
           </div>
           <div id="no-img-text-${imei}" style="display:none; color:var(--text-muted); padding:1.5rem; font-style:italic;">
@@ -4093,13 +4253,13 @@ function openImeiInspectionModal(imei, branchId) {
 
     <div class="grid-3col" style="gap:0.8rem;">
       <button class="btn btn-warning" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700; color:#000;" onclick="setItemDecision('${imei}', 'resubmit')">
-        <i class="fa-solid fa-rotate-left"></i>  ให้ตรวจสอบใหม่
+        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>  ให้ตรวจสอบใหม่
       </button>
       <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'failed')">
-        <i class="fa-solid fa-circle-xmark"></i> ข้อมูลไม่ผ่าน
+        <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ข้อมูลไม่ผ่าน
       </button>
       <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
-        <i class="fa-solid fa-circle-check"></i> ยืนยันว่าถูกต้อง
+        <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันว่าถูกต้อง
       </button>
     </div>
   `;
@@ -4172,7 +4332,7 @@ async function setItemDecision(imei, decision) {
    ========================================================================== */
 async function renderBranchAuditView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังดึงรายการสินค้าคงคลังสาขา...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังดึงรายการสินค้าคงคลังสาขา...</div>`;
 
   try {
     await loadMasterOptions();
@@ -4195,7 +4355,7 @@ async function renderBranchAuditView() {
       const branches = state.masterOptions.branches || [];
       branchSelectorHtml = `
         <div style="display:flex; align-items:center; gap:0.5rem;">
-          <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted); white-space:nowrap;"><i class="fa-solid fa-store"></i> สาขา:</label>
+          <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted); white-space:nowrap;"><i class="fa-solid fa-store" aria-hidden="true"></i> สาขา:</label>
           <select id="branch-audit-selector" class="form-select" style="width:auto; font-weight:700; color:var(--accent-primary); background:#ffffff; border:1.5px solid var(--border-color);" onchange="changeBranchAuditSelector()">
             <option value="all" ${selectedBranchId === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
             ${branches.map(b => `<option value="${b._id}" ${selectedBranchId === b._id ? 'selected' : ''}>${b.name}</option>`).join('')}
@@ -4219,16 +4379,16 @@ async function renderBranchAuditView() {
         <div style="margin-top: 1.2rem; background: rgba(99,102,241,0.06); border:1px solid var(--border-glow); padding:1rem; border-radius:var(--radius-md); display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
           ${selectedBranchId === 'all' ? `
             <div style="font-size:0.9rem; font-weight:700; color:#d97706; display:flex; align-items:center; gap:0.5rem; width:100%;">
-              <i class="fa-solid fa-circle-info" style="font-size:1.1rem;"></i> 
+              <i class="fa-solid fa-circle-info" style="font-size:1.1rem;" aria-hidden="true"></i> 
               <span>กำลังเปิดดูสต็อกทุกสาขารวมกัน (โหมดอ่านอย่างเดียว) หากต้องการตรวจนับ/สแกนสินค้า กรุณาเลือกสาขาที่เจาะจงด้านบน</span>
             </div>
           ` : `
             <div style="flex:1; min-width:260px;">
               <label style="font-size:0.78rem; font-weight:700; color:var(--accent-secondary);">ช่องสแกนบาร์โค้ดรวดเร็ว (สแกน IMEI/ซีเรียลที่นี่)</label>
               <div style="display:flex; gap:0.5rem; margin-top:0.3rem;">
-                <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล..." style="margin:0;" autofocus>
+                <input type="text" id="barcode-scanner-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล..." aria-label="สแกน หรือ พิมพ์หมายเลข IMEI/ซีเรียล..." style="margin:0;" autofocus>
                 <button class="btn btn-primary" id="btn-submit-scan-imei" style="padding:0 1.2rem; font-weight:700; font-size:0.85rem; white-space:nowrap; display:flex; align-items:center; gap:0.4rem;">
-                  <i class="fa-solid fa-barcode"></i> ตรวจนับ
+                  <i class="fa-solid fa-barcode" aria-hidden="true"></i> ตรวจนับ
                 </button>
               </div>
             </div>
@@ -4240,13 +4400,13 @@ async function renderBranchAuditView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>ชื่อสินค้า</th>
-              ${selectedBranchId === 'all' ? '<th>สาขา</th>' : ''}
-              <th>หมายเลข IMEI</th>
-              <th>จำนวนสินค้า</th>
-              <th>จำนวนนับได้จริง</th>
-              <th>ยอดที่ขาด/เกิน</th>
-              <th style="text-align:center;">รูปภาพที่แนบ</th>
+              <th scope="col">ชื่อสินค้า</th>
+              ${selectedBranchId === 'all' ? '<th scope="col">สาขา</th>' : ''}
+              <th scope="col">หมายเลข IMEI</th>
+              <th scope="col">จำนวนสินค้า</th>
+              <th scope="col">จำนวนนับได้จริง</th>
+              <th scope="col">ยอดที่ขาด/เกิน</th>
+              <th scope="col" style="text-align:center;">รูปภาพที่แนบ</th>
             </tr>
           </thead>
           <tbody id="branch-audit-table-body">
@@ -4257,8 +4417,8 @@ async function renderBranchAuditView() {
               const diff = actual - item.expectedCount;
               const isScanned = item.isScanned || actual > 0;
               const photoBtn = item.photoUrl ? `
-                <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
-                  <i class="fa-solid fa-image"></i>
+                <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')" aria-label="ดูรูปภาพหลักฐาน">
+                  <i class="fa-solid fa-image" aria-hidden="true"></i>
                 </button>
               ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
 
@@ -4266,7 +4426,7 @@ async function renderBranchAuditView() {
                 <tr id="audit-row-${idx}">
                   <td>
                     <strong style="color:var(--accent-primary);">${item.productName}</strong>
-                    ${item.hasIssue ? `<div style="font-size:0.75rem; color:#ef4444; font-weight:700; margin-top:0.25rem;"><i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา: ${item.issueRemark}</div>` : ''}
+                    ${item.hasIssue ? `<div style="font-size:0.75rem; color:#ef4444; font-weight:700; margin-top:0.25rem;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา: ${item.issueRemark}</div>` : ''}
                   </td>
                   ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${item.branchName || '-'}</span></td>` : ''}
                   <td>
@@ -4274,11 +4434,11 @@ async function renderBranchAuditView() {
                     ${(!isScanned && selectedBranchId !== 'all') ? `
                       ${item.hasIssue ? `
                         <button class="btn btn-secondary btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700;" onclick="openReportIssueModal('${item.imei}', ${idx})">
-                          <i class="fa-solid fa-pen"></i> แก้ไขหมายเหตุ
+                          <i class="fa-solid fa-pen" aria-hidden="true"></i> แก้ไขหมายเหตุ
                         </button>
                       ` : `
                         <button class="btn btn-warning btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700; background:#d97706; border:none; color:#fff;" onclick="openReportIssueModal('${item.imei}', ${idx})">
-                          <i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหา
+                          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา
                         </button>
                       `}
                     ` : ''}
@@ -4379,8 +4539,8 @@ function updateRowVariance(idx) {
   const photoCell = document.getElementById(`photo-cell-${idx}`);
   if (photoCell) {
     photoCell.innerHTML = item.photoUrl ? `
-      <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')">
-        <i class="fa-solid fa-image"></i> ดูรูปภาพ
+      <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')" aria-label="ดูรูปภาพหลักฐาน">
+        <i class="fa-solid fa-image" aria-hidden="true"></i> ดูรูปภาพ
       </button>
     ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
   }
@@ -4394,7 +4554,7 @@ function openReportIssueModal(imei, idx) {
   const bodyHtml = `
     <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem;">
       <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-triangle-exclamation"></i> แจ้งปัญหาไม่สามารถตรวจนับเครื่องได้
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหาไม่สามารถตรวจนับเครื่องได้
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
         สินค้า: ${item ? item.productName : 'สินค้าคงคลัง'}
@@ -4417,7 +4577,7 @@ function openReportIssueModal(imei, idx) {
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button class="btn btn-warning" onclick="submitReportIssue('${imei}', ${idx})" style="background:#d97706; border:none; color:#fff; font-weight:700;">
-      <i class="fa-solid fa-paper-plane"></i> ยืนยันแจ้งปัญหา
+      <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ยืนยันแจ้งปัญหา
     </button>
   `;
 
@@ -4525,7 +4685,7 @@ function openUploadImeiImageModal(serial, matchedIdx) {
   const bodyHtml = `
     <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); padding:1rem; border-radius:6px; margin-bottom:1.2rem;">
       <div style="font-weight:800; font-size:1.1rem; color:var(--accent-primary); margin-bottom:0.3rem;">
-        <i class="fa-solid fa-barcode"></i> IMEI : <span style="color:#d97706;">${serial}</span>
+        <i class="fa-solid fa-barcode" aria-hidden="true"></i> IMEI : <span style="color:#d97706;">${serial}</span>
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:var(--text-main);">
         สินค้า: ${item ? item.productName : 'สินค้าในสต็อก'} (IMEI: ${serial})
@@ -4545,7 +4705,7 @@ function openUploadImeiImageModal(serial, matchedIdx) {
                onmouseover="this.style.borderColor='#6366f1'; this.style.background='rgba(99,102,241,0.08)'; this.style.boxShadow='0 0 20px rgba(99,102,241,0.25)';"
                onmouseout="this.style.borderColor='rgba(99,102,241,0.4)'; this.style.background='rgba(99,102,241,0.03)'; this.style.boxShadow='none';">
           <div style="width:54px; height:54px; border-radius:50%; background:linear-gradient(135deg, #6366f1, #06b6d4); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 4px 15px rgba(99,102,241,0.4);">
-            <i class="fa-solid fa-camera" style="font-size:1.5rem;"></i>
+            <i class="fa-solid fa-camera" style="font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:1rem; font-weight:800; color:var(--text-main); margin-top:0.2rem;">เปิดกล้องถ่ายภาพ / เลือกรูปภาพ</div>
           <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">แตะเพื่อแนบรูปถ่ายตัวเครื่องหรือป้าย IMEI</div>
@@ -4644,7 +4804,7 @@ async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
   const btn = document.getElementById('btn-upload-drive-confirm');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังบีบอัดรูปภาพ...`;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> กำลังบีบอัดรูปภาพ...`;
   }
 
   const rawFile = fileInput.files[0];
@@ -4659,7 +4819,7 @@ async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
   }
 
   if (btn) {
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังอัปโหลดลง Google Drive...`;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> กำลังอัปโหลดลง Google Drive...`;
   }
 
   const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
@@ -4717,7 +4877,7 @@ async function submitImeiPhotoAndConfirm(serial, matchedIdx) {
     showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = `<i class="fa-brands fa-google-drive"></i> อัปโหลดลง Google Drive & ยืนยัน`;
+      btn.innerHTML = `<i class="fa-brands fa-google-drive" aria-hidden="true"></i> อัปโหลดลง Google Drive & ยืนยัน`;
     }
   }
 }
@@ -4784,7 +4944,7 @@ async function submitBranchAuditFormSilent() {
    ========================================================================== */
 async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScroll = false) {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการสั่งซื้อสินค้าลงสาขาและแดชบอร์ดฝ่ายจัดซื้อ...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายการสั่งซื้อสินค้าลงสาขาและแดชบอร์ดฝ่ายจัดซื้อ...</div>`;
 
   try {
     await loadMasterOptions();
@@ -4824,13 +4984,13 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
             <div>
               <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-                <i class="fa-solid fa-store" style="color:var(--accent-gold);"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ
+                <i class="fa-solid fa-store" style="color:var(--accent-gold);" aria-hidden="true"></i> ข้อมูลสรุปรายสาขาสำหรับฝ่ายจัดซื้อ
               </h3>
               <p style="font-size:0.8rem; color:var(--text-muted);">วงเงินคงเหลือ, สต็อกพร้อมขายในสาขา, รายการสั่งซื้อค้างส่ง และปุ่มทางด่วนสั่งซื้อ</p>
             </div>
             ${selectedBranchId ? `
               <button class="btn btn-secondary btn-sm" onclick="renderBranchPurchaseOrdersView(null)">
-                <i class="fa-solid fa-rotate-left"></i> แสดงทุกสาขา
+                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> แสดงทุกสาขา
               </button>
             ` : ''}
           </div>
@@ -4859,7 +5019,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                         <span style="font-size:0.78rem; color:var(--text-muted); font-family:monospace;">รหัสสาขา: ${b.code || '-'}</span>
                       </div>
                       <span class="badge badge-${bRem > 0 ? 'green' : 'red'}" style="font-size:0.75rem;">
-                        <i class="fa-solid fa-${bRem > 0 ? 'circle-check' : 'ban'}"></i> ${bRem > 0 ? 'พร้อมสั่งซื้อ' : 'วงเงินเต็ม'}
+                        <i class="fa-solid fa-${bRem > 0 ? 'circle-check' : 'ban'}" aria-hidden="true"></i> ${bRem > 0 ? 'พร้อมสั่งซื้อ' : 'วงเงินเต็ม'}
                       </span>
                     </div>
 
@@ -4923,10 +5083,10 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                   <!-- Quick Action Buttons -->
                   <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
                     <button class="btn btn-primary btn-sm" style="flex:1; font-size:0.8rem; font-weight:700;" onclick="openCreatePurchaseOrderModal('${b._id}')">
-                      <i class="fa-solid fa-cart-plus"></i> + สั่งซื้อลงสาขานี้
+                      <i class="fa-solid fa-cart-plus" aria-hidden="true"></i> + สั่งซื้อลงสาขานี้
                     </button>
                     <button class="btn btn-secondary btn-sm" style="font-size:0.8rem; font-weight:700;" onclick="renderBranchPurchaseOrdersView('${b._id}', true)">
-                      <i class="fa-solid fa-list-check"></i> ดูใบสั่งซื้อ
+                      <i class="fa-solid fa-list-check" aria-hidden="true"></i> ดูใบสั่งซื้อ
                     </button>
                   </div>
                 </div>
@@ -4940,23 +5100,23 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
       <div id="po-list-section" class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-cart-flatbed" style="color:var(--accent-primary);"></i> รายการใบสั่งซื้อสินค้าลงสาขา (${displayedOrders.length} รายการ)
+            <i class="fa-solid fa-cart-flatbed" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการใบสั่งซื้อสินค้าลงสาขา (${displayedOrders.length} รายการ)
           </h3>
           <p style="font-size:0.82rem; color:var(--text-muted);">ประวัติและสถานะใบสั่งซื้อสินค้าลงสาขาแบบละเอียด</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="openCreatePurchaseOrderModal(${selectedBranchId ? `'${selectedBranchId}'` : ''})"><i class="fa-solid fa-plus"></i> สั่งซื้อสินค้าลงสาขาใหม่</button>
+          <button class="btn btn-primary" onclick="openCreatePurchaseOrderModal(${selectedBranchId ? `'${selectedBranchId}'` : ''})"><i class="fa-solid fa-plus" aria-hidden="true"></i> สั่งซื้อสินค้าลงสาขาใหม่</button>
           
           <div style="display:flex; align-items:center; gap:0.3rem;">
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
-            <input type="date" id="po-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
+            <input type="date" id="po-start-date" aria-label="วันที่เริ่มต้น" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
           </div>
           <div style="display:flex; align-items:center; gap:0.3rem;">
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
-            <input type="date" id="po-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
+            <input type="date" id="po-end-date" aria-label="วันที่สิ้นสุด" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterPoTable()">
           </div>
-          <input type="text" id="po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สินค้า, ผู้สั่ง..." style="width:190px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterPoTable()">
+          <input type="text" id="po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สินค้า, ผู้สั่ง..." aria-label="ค้นหาเลขที่สั่งซื้อ, สินค้า, ผู้สั่ง..." style="width:190px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterPoTable()">
 
           ${branches.length > 0 ? `
             <div style="display:flex; align-items:center; gap:0.4rem;">
@@ -4975,13 +5135,13 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
         <table class="data-table">
           <thead>
             <tr>
-              <th>เลขที่ใบสั่งซื้อ / วันเวลา</th>
-              <th>สาขา</th>
-              <th>รายการสินค้าสั่งซื้อ</th>
-              <th>จำนวนรวม</th>
-              <th>มูลค่ารวม (บาท)</th>
-              <th>ผู้สั่งซื้อ</th>
-              <th style="text-align:center;">สถานะ & ดำเนินการ</th>
+              <th scope="col">เลขที่ใบสั่งซื้อ / วันเวลา</th>
+              <th scope="col">สาขา</th>
+              <th scope="col">รายการสินค้าสั่งซื้อ</th>
+              <th scope="col">จำนวนรวม</th>
+              <th scope="col">มูลค่ารวม (บาท)</th>
+              <th scope="col">ผู้สั่งซื้อ</th>
+              <th scope="col" style="text-align:center;">สถานะ & ดำเนินการ</th>
             </tr>
           </thead>
           <tbody>
@@ -4994,11 +5154,11 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
               const isoDate = dateObj.toISOString().split('T')[0];
               const itemsNamesStr = itemsList.map(it => it.productName).join(' ');
 
-              let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> รับเข้าสต็อกแล้ว</span>';
+              let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> รับเข้าสต็อกแล้ว</span>';
               if (isPending) {
-                statusBadge = '<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอสาขาเติม IMEI</span>';
+                statusBadge = '<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอสาขาเติม IMEI</span>';
               } else if (order.status === 'cancelled') {
-                statusBadge = '<span class="badge badge-red"><i class="fa-solid fa-ban"></i> ยกเลิก</span>';
+                statusBadge = '<span class="badge badge-red"><i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิก</span>';
               }
 
               return `
@@ -5019,25 +5179,25 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                     ${isPending ? `
                       <div style="display:flex; flex-direction:column; gap:0.3rem; margin-top:0.4rem; align-items:center;">
                         <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; width:100%; font-weight:700;" onclick="openFillImeiAndReceiveModal('${order._id}')">
-                          <i class="fa-solid fa-barcode"></i> สแกน IMEI รับสินค้าเข้าสต็อกสาขา
+                          <i class="fa-solid fa-barcode" aria-hidden="true"></i> สแกน IMEI รับสินค้าเข้าสต็อกสาขา
                         </button>
                         <div style="display:flex; gap:0.3rem; width:100%;">
                           <button class="btn btn-warning btn-sm" style="padding:0.25rem 0.4rem; font-size:0.75rem; flex:1; font-weight:700;" onclick="openEditPurchaseOrderModal('${order._id}')">
-                            <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                           </button>
                           <button class="btn btn-danger btn-sm" style="padding:0.25rem 0.4rem; font-size:0.75rem; flex:1; font-weight:700;" onclick="cancelPurchaseOrderAction('${order._id}')">
-                            <i class="fa-solid fa-ban"></i> ยกเลิก
+                            <i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิก
                           </button>
                         </div>
                         ${isHqOrAdmin ? `
                           <button class="btn btn-sm" style="padding:0.25rem 0.4rem; font-size:0.73rem; width:100%; font-weight:700; background:#0891b2; color:#fff; border:none; margin-top:0.2rem;" onclick="markPurchaseOrderAsReceived('${order._id}', '${order.orderNumber}')">
-                            <i class="fa-solid fa-circle-check"></i> ปิดใบสั่งซื้อ (รับเข้าสต็อกแล้ว)
+                            <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ปิดใบสั่งซื้อ (รับเข้าสต็อกแล้ว)
                           </button>
                         ` : ''}
                       </div>
                     ` : ''}
                     <button class="btn btn-secondary btn-sm" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-top:0.3rem; font-weight:700; width:100%;" onclick="printPurchaseOrderDoc('${order._id}')">
-                      <i class="fa-solid fa-print"></i> พิมพ์ใบสั่งซื้อ
+                      <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบสั่งซื้อ
                     </button>
                   </td>
                 </tr>
@@ -5090,7 +5250,7 @@ function openCreatePurchaseOrderModal(preselectedBranchId = null) {
     <form id="create-po-form" onsubmit="event.preventDefault(); submitCreatePurchaseOrder();">
       <div class="form-group" style="margin-bottom:1.2rem; background:rgba(0,0,0,0.025); border:1px solid var(--border-color); padding:1rem; border-radius:8px;">
         <label for="po-branch" style="font-weight:700; color:var(--text-main); font-size:0.95rem;">
-          <i class="fa-solid fa-store" style="color:var(--accent-primary);"></i> เลือกสาขาที่สั่งซื้อสินค้าลง <span style="color:#ef4444;">*</span>
+          <i class="fa-solid fa-store" style="color:var(--accent-primary);" aria-hidden="true"></i> เลือกสาขาที่สั่งซื้อสินค้าลง <span style="color:#ef4444;">*</span>
         </label>
         <select id="po-branch" class="form-select" style="margin-top:0.4rem; font-weight:700; background:#ffffff;" onchange="updatePoBranchCreditPreview(this.value)" required>
           ${branches.map(b => `<option value="${b._id}" ${preselectedBranchId && String(b._id) === String(preselectedBranchId) ? 'selected' : ''}>${b.name} (วงเงินคงเหลือ: ฿${Math.max(0, (b.creditLimit || 0) - (b.usedCredit || 0)).toLocaleString()})</option>`).join('')}
@@ -5099,9 +5259,9 @@ function openCreatePurchaseOrderModal(preselectedBranchId = null) {
       </div>
 
       <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:var(--accent-primary); display:flex; justify-content:space-between; align-items:center;">
-        <span><i class="fa-solid fa-boxes-packing"></i> ระบุรายการสินค้าที่สั่งซื้อลงสาขา</span>
+        <span><i class="fa-solid fa-boxes-packing" aria-hidden="true"></i> ระบุรายการสินค้าที่สั่งซื้อลงสาขา</span>
         <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
-          <i class="fa-solid fa-plus"></i> + เพิ่มรายการสินค้า
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> + เพิ่มรายการสินค้า
         </button>
       </div>
 
@@ -5124,7 +5284,7 @@ function openCreatePurchaseOrderModal(preselectedBranchId = null) {
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button class="btn btn-primary" id="po-submit-btn" onclick="submitCreatePurchaseOrder()" style="padding:0.65rem 1.5rem; font-weight:700;">
-      <i class="fa-solid fa-check-double"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา
+      <i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา
     </button>
   `;
 
@@ -5197,7 +5357,7 @@ function renderPoItemRowsUI() {
           </div>
           ${(window.poItemsState || []).length > 1 ? `
             <button type="button" class="btn btn-danger btn-sm" onclick="removePoItemRow(${idx})" style="padding:0.2rem 0.6rem; font-size:0.75rem;">
-              <i class="fa-solid fa-trash"></i> ลบรายการนี้
+              <i class="fa-solid fa-trash" aria-hidden="true"></i> ลบรายการนี้
             </button>
           ` : ''}
         </div>
@@ -5238,11 +5398,11 @@ function renderPoItemRowsUI() {
         <div class="grid-3col" style="gap:0.6rem; background:rgba(0,0,0,0.025); padding:0.65rem; border-radius:6px; align-items:center; border:1px solid var(--border-color);">
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">จำนวน (เครื่อง) <span style="color:#ef4444;">*</span></label>
-            <input type="number" class="form-control po-qty-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:var(--accent-primary); background:#ffffff;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
+            <input type="number" class="form-control po-qty-input" aria-label="จำนวนที่สั่งซื้อ (เครื่อง)" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:var(--accent-primary); background:#ffffff;" min="1" value="${item.quantity}" oninput="onPoNumericInput(${idx})">
           </div>
           <div>
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ราคาสั่งซื้อ/ชิ้น (บาท) <span style="color:#ef4444;">*</span></label>
-            <input type="number" class="form-control po-price-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#059669; background:#ffffff;" min="0" placeholder="ระบุราคาสั่งซื้อ" value="${item.unitPrice || ''}" oninput="onPoNumericInput(${idx})">
+            <input type="number" class="form-control po-price-input" data-idx="${idx}" style="font-size:0.88rem; font-weight:700; color:#059669; background:#ffffff;" min="0" placeholder="ระบุราคาสั่งซื้อ" aria-label="ระบุราคาสั่งซื้อ" value="${item.unitPrice || ''}" oninput="onPoNumericInput(${idx})">
           </div>
           <div style="text-align:right;">
             <div style="font-size:0.72rem; color:var(--text-muted);">รวมรายการนี้</div>
@@ -5301,14 +5461,14 @@ function calculatePoTotal() {
       if (totalEl) totalEl.style.color = '#ef4444';
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ยอดซื้อเกินวงเงินสาขา (เกิน ฿${(total - rem).toLocaleString()})`;
+        submitBtn.innerHTML = `<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ยอดซื้อเกินวงเงินสาขา (เกิน ฿${(total - rem).toLocaleString()})`;
         submitBtn.className = 'btn btn-danger';
       }
     } else {
       if (totalEl) totalEl.style.color = '#34d399';
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา`;
+        submitBtn.innerHTML = `<i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันบันทึกสั่งซื้อ & หักวงเงินสาขา`;
         submitBtn.className = 'btn btn-primary';
       }
     }
@@ -5371,7 +5531,7 @@ async function submitCreatePurchaseOrder() {
 }
 
 async function openEditPurchaseOrderModal(orderId) {
-  openModal('กำลังโหลดรายละเอียดใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลดรายละเอียดใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest(`/purchase-orders/${orderId}`);
@@ -5412,9 +5572,9 @@ async function openEditPurchaseOrderModal(orderId) {
         </div>
 
         <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:#38bdf8; display:flex; justify-content:space-between; align-items:center;">
-          <span><i class="fa-solid fa-boxes-packing"></i> รายการสินค้าที่ต้องการสั่งซื้อ (ระบุสเปกและราคา)</span>
+          <span><i class="fa-solid fa-boxes-packing" aria-hidden="true"></i> รายการสินค้าที่ต้องการสั่งซื้อ (ระบุสเปกและราคา)</span>
           <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
-            <i class="fa-solid fa-plus"></i> + เพิ่มรายการสินค้า
+            <i class="fa-solid fa-plus" aria-hidden="true"></i> + เพิ่มรายการสินค้า
           </button>
         </div>
 
@@ -5437,7 +5597,7 @@ async function openEditPurchaseOrderModal(orderId) {
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
       <button class="btn btn-primary" id="po-submit-btn" onclick="submitEditPurchaseOrder('${order._id}')" style="padding:0.65rem 1.5rem; font-weight:700;">
-        <i class="fa-solid fa-save"></i> บันทึกการแก้ไขใบสั่งซื้อ
+        <i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไขใบสั่งซื้อ
       </button>
     `;
 
@@ -5515,7 +5675,7 @@ async function cancelPurchaseOrderAction(orderId) {
 }
 
 async function openFillImeiAndReceiveModal(orderId) {
-  openModal('📱 สแกนเติม IMEI สินค้าจากใบสั่งซื้อ', `<div style="padding:2rem; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายละเอียดใบสั่งซื้อ...</div>`);
+  openModal('📱 สแกนเติม IMEI สินค้าจากใบสั่งซื้อ', `<div style="padding:2rem; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายละเอียดใบสั่งซื้อ...</div>`);
 
   try {
     const res = await apiRequest(`/purchase-orders/${orderId}`);
@@ -5552,7 +5712,7 @@ async function openFillImeiAndReceiveModal(orderId) {
         bodyHtml += `
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <span style="font-size:0.78rem; color:var(--text-muted); width:70px;">เครื่องที่ ${i + 1}:</span>
-            <input type="text" class="form-control po-imei-input" data-item-idx="${itemIdx}" data-sub-idx="${i}" placeholder="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" required style="font-family:monospace; font-size:0.85rem; font-weight:700;" onkeydown="handlePoImeiInputKeyDown(event, this)">
+            <input type="text" class="form-control po-imei-input" data-item-idx="${itemIdx}" data-sub-idx="${i}" placeholder="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" aria-label="สแกนหมายเลข IMEI 15 หลัก เครื่องที่ ${i + 1}" required style="font-family:monospace; font-size:0.85rem; font-weight:700;" onkeydown="handlePoImeiInputKeyDown(event, this)">
           </div>
         `;
       }
@@ -5564,7 +5724,7 @@ async function openFillImeiAndReceiveModal(orderId) {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-success" onclick="submitFillImeiAndReceive('${order._id}')"><i class="fa-solid fa-check"></i> ยืนยันเติม IMEI & รับเข้าสต็อกสาขา</button>
+      <button class="btn btn-success" onclick="submitFillImeiAndReceive('${order._id}')"><i class="fa-solid fa-check" aria-hidden="true"></i> ยืนยันเติม IMEI & รับเข้าสต็อกสาขา</button>
     `;
 
     openModal(`📱 สแกนเติม IMEI สินค้า: ${order.orderNumber}`, bodyHtml, footerHtml);
@@ -5698,7 +5858,7 @@ async function markPurchaseOrderAsReceived(orderId, orderNumber) {
 }
 
 async function printPurchaseOrderDoc(orderId) {
-  openModal('กำลังโหลดเอกสารใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลดเอกสารใบสั่งซื้อ...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest(`/purchase-orders/${orderId}`);
@@ -5749,7 +5909,7 @@ async function printPurchaseOrderDoc(orderId) {
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
             <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
               <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#0284c7;">
-                <i class="fa-solid fa-building"></i> ผู้สั่งซื้อ (สำนักงานใหญ่)
+                <i class="fa-solid fa-building" aria-hidden="true"></i> ผู้สั่งซื้อ (สำนักงานใหญ่)
               </div>
               <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
                 <tr><td style="width:75px; color:#555;">ผู้สั่งซื้อ:</td><td><strong>${order.orderedByName || '-'}</strong></td></tr>
@@ -5760,7 +5920,7 @@ async function printPurchaseOrderDoc(orderId) {
 
             <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
               <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#16a34a;">
-                <i class="fa-solid fa-store"></i> สาขาปลายทาง (ผู้รับสินค้า)
+                <i class="fa-solid fa-store" aria-hidden="true"></i> สาขาปลายทาง (ผู้รับสินค้า)
               </div>
               <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
                 <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${branch.name || order.branchName || '-'}</strong></td></tr>
@@ -5775,11 +5935,11 @@ async function printPurchaseOrderDoc(orderId) {
           <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
             <thead>
               <tr style="background:#e5e7eb; color:#000; border-top:1px solid #000; border-bottom:1px solid #000;">
-                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:45px;">ลำดับ</th>
-                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
-                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:65px;">จำนวน</th>
-                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">ราคา/ชิ้น (฿)</th>
-                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">รวม (฿)</th>
+                <th scope="col" style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:45px;">ลำดับ</th>
+                <th scope="col" style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
+                <th scope="col" style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:65px;">จำนวน</th>
+                <th scope="col" style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">ราคา/ชิ้น (฿)</th>
+                <th scope="col" style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:110px;">รวม (฿)</th>
               </tr>
             </thead>
             <tbody>
@@ -5841,7 +6001,7 @@ async function printPurchaseOrderDoc(orderId) {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบสั่งซื้อสินค้า</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบสั่งซื้อสินค้า</button>
     `;
 
     openModal(`เอกสาร: ${order.orderNumber}`, bodyHtml, footerHtml);
@@ -5855,7 +6015,7 @@ async function printPurchaseOrderDoc(orderId) {
    ========================================================================== */
 async function renderGoodsReceiptView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลรับสินค้าเข้าสต็อก...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดข้อมูลรับสินค้าเข้าสต็อก...</div>`;
 
   try {
     await loadMasterOptions();
@@ -5940,7 +6100,7 @@ async function renderGoodsReceiptView() {
             </td>
             <td style="text-align:center;">
               <button class="btn btn-success btn-sm" style="white-space:nowrap; font-size:0.8rem; padding:0.35rem 0.85rem; font-weight:700;" onclick="openFillImeiAndReceiveModal('${order._id}')">
-                <i class="fa-solid fa-barcode"></i> สแกนเติม IMEI & รับเข้าสต็อก
+                <i class="fa-solid fa-barcode" aria-hidden="true"></i> สแกนเติม IMEI & รับเข้าสต็อก
               </button>
             </td>
           </tr>
@@ -5951,7 +6111,7 @@ async function renderGoodsReceiptView() {
         <div class="card gr-pending-po-card" style="width: 100%; margin:0 auto 1.5rem auto;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; flex-wrap:wrap; gap:0.5rem;">
             <div style="display:flex; align-items:center; gap:0.6rem;">
-              <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;"></i>
+              <i class="fa-solid fa-bell" style="color:#fbbf24; font-size:1.1rem;" aria-hidden="true"></i>
               <h4 style="font-size:1.05rem; font-weight:800; color:#fbbf24; margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
               <span id="gr-pending-po-count-badge" class="badge badge-yellow" style="font-size:0.82rem;">${pendingPoOrders.length} ใบ</span>
             </div>
@@ -5968,13 +6128,13 @@ async function renderGoodsReceiptView() {
               ` : ''}
               <div style="display:flex; align-items:center; gap:0.3rem;">
                 <label style="font-size:0.75rem; color:var(--text-muted);">เริ่มวันที่:</label>
-                <input type="date" id="gr-po-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
+                <input aria-label="ใบสั่งซื้อ เริ่มวันที่" type="date" id="gr-po-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
               </div>
               <div style="display:flex; align-items:center; gap:0.3rem;">
                 <label style="font-size:0.75rem; color:var(--text-muted);">ถึงวันที่:</label>
-                <input type="date" id="gr-po-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
+                <input aria-label="ใบสั่งซื้อ ถึงวันที่" type="date" id="gr-po-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrPendingPoTable()">
               </div>
-              <input type="text" id="gr-po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สาขา..." style="width:180px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrPendingPoTable()">
+              <input type="text" id="gr-po-search-input" class="form-control" placeholder="ค้นหาเลขที่สั่งซื้อ, สาขา..." aria-label="ค้นหาเลขที่สั่งซื้อ, สาขา..." style="width:180px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrPendingPoTable()">
             </div>
           </div>
           <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:0.8rem;">
@@ -5984,11 +6144,11 @@ async function renderGoodsReceiptView() {
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>เลขที่ใบสั่งซื้อ</th>
-                  <th>สาขา</th>
-                  <th>รายการสินค้า</th>
-                  <th style="text-align:center;">จำนวน</th>
-                  <th style="text-align:center;">ดำเนินการ</th>
+                  <th scope="col">เลขที่ใบสั่งซื้อ</th>
+                  <th scope="col">สาขา</th>
+                  <th scope="col">รายการสินค้า</th>
+                  <th scope="col" style="text-align:center;">จำนวน</th>
+                  <th scope="col" style="text-align:center;">ดำเนินการ</th>
                 </tr>
               </thead>
               <tbody>${poRows}</tbody>
@@ -6006,16 +6166,16 @@ async function renderGoodsReceiptView() {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.8rem; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.8rem;">
           <div>
             <h4 style="font-size:1.1rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติรายการรับสินค้าเข้าสต็อก
+              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);" aria-hidden="true"></i> ประวัติรายการรับสินค้าเข้าสต็อก
             </h4>
             <p style="font-size:0.82rem; color:var(--text-muted); margin-top:0.2rem;">
               รายการที่ขึ้นสถานะ <span class="badge badge-yellow" style="font-size:0.7rem;">🟡 รอตั้งราคา / ยืนยัน</span> สามารถกดแก้ไขข้อมูล/IMEI ได้ ก่อนที่ฝ่ายจัดซื้อจะยืนยันเข้าสต็อกจริง
             </p>
           </div>
           <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <button id="toggle-gr-form-btn" class="btn btn-warning btn-sm" onclick="toggleGrManualForm()" style="font-weight:700;"><i class="fa-solid fa-plus"></i> เพิ่มสินค้านอกใบสั่งซื้อ</button>
-            <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-            <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate"></i> รีเฟรชประวัติ</button>
+            <button id="toggle-gr-form-btn" class="btn btn-warning btn-sm" onclick="toggleGrManualForm()" style="font-weight:700;"><i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มสินค้านอกใบสั่งซื้อ</button>
+            <button class="btn btn-success btn-sm" onclick="exportGoodsReceiptHistoryToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+            <button class="btn btn-secondary btn-sm" onclick="renderGoodsReceiptView()"><i class="fa-solid fa-rotate" aria-hidden="true"></i> รีเฟรชประวัติ</button>
           </div>
         </div>
         
@@ -6032,25 +6192,25 @@ async function renderGoodsReceiptView() {
           ` : ''}
           <div style="display:flex; align-items:center; gap:0.3rem;">
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
-            <input type="date" id="gr-hist-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
+            <input type="date" id="gr-hist-start-date" aria-label="วันที่เริ่มต้น" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
           </div>
           <div style="display:flex; align-items:center; gap:0.3rem;">
             <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
-            <input type="date" id="gr-hist-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
+            <input type="date" id="gr-hist-end-date" aria-label="วันที่สิ้นสุด" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterGrReceiptHistoryTable()">
           </div>
-          <input type="text" id="gr-hist-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สาขา, สินค้า, IMEI..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrReceiptHistoryTable()">
+          <input type="text" id="gr-hist-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สาขา, สินค้า, IMEI..." aria-label="ค้นหาเลขที่ใบรับ, สาขา, สินค้า, IMEI..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterGrReceiptHistoryTable()">
         </div>
 
         <div class="table-container">
           <table class="data-table">
             <thead>
               <tr>
-                <th>เลขที่ใบรับ / วันเวลา</th>
-                <th>สาขา & ผู้รับสินค้า</th>
-                <th>รายละเอียดสินค้า</th>
-                <th>หมายเลข IMEI</th>
-                <th>สถานะการรับเข้า</th>
-                <th style="text-align:center;">จัดการ</th>
+                <th scope="col">เลขที่ใบรับ / วันเวลา</th>
+                <th scope="col">สาขา & ผู้รับสินค้า</th>
+                <th scope="col">รายละเอียดสินค้า</th>
+                <th scope="col">หมายเลข IMEI</th>
+                <th scope="col">สถานะการรับเข้า</th>
+                <th scope="col" style="text-align:center;">จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -6082,18 +6242,18 @@ async function renderGoodsReceiptView() {
                       <span style="font-family:monospace; font-weight:700; color:#d97706;">${(r.imeiSerials && r.imeiSerials[0]) || '-'}</span>
                     </td>
                     <td>
-                      ${isPending ? '<span class="badge badge-gr-pending"><i class="fa-solid fa-clock"></i> รอตั้งราคา / ยืนยัน</span>' :
-                        isConfirmed ? '<span class="badge badge-gr-confirmed"><i class="fa-solid fa-check-double"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
-                        '<span class="badge badge-red"><i class="fa-solid fa-xmark"></i> ถูกปฏิเสธ</span>'}
+                      ${isPending ? '<span class="badge badge-gr-pending"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคา / ยืนยัน</span>' :
+                        isConfirmed ? '<span class="badge badge-gr-confirmed"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
+                        '<span class="badge badge-red"><i class="fa-solid fa-xmark" aria-hidden="true"></i> ถูกปฏิเสธ</span>'}
                     </td>
                     <td style="text-align:center;">
                       ${isPending ? `
                         <button class="btn btn-sm btn-warning" onclick="openEditGoodsReceiptModal('${r._id}')" style="font-size:0.75rem; padding:0.35rem 0.75rem;">
-                          <i class="fa-solid fa-pen-to-square"></i> แก้ไขรายการ
+                          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไขรายการ
                         </button>
                       ` : `
                         <span style="font-size:0.78rem; color:var(--text-muted); font-style:italic;">
-                          <i class="fa-solid fa-lock"></i> ยืนยันแล้ว (ล็อก)
+                          <i class="fa-solid fa-lock" aria-hidden="true"></i> ยืนยันแล้ว (ล็อก)
                         </span>
                       `}
                     </td>
@@ -6109,7 +6269,7 @@ async function renderGoodsReceiptView() {
         <!-- Entry Card -->
         <div class="card gr-manual-form-card" style="max-width: 950px; margin: 0 auto 1.5rem auto;">
           <h3 style="font-size:1.2rem; font-weight:700; margin-bottom: 0.5rem; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (คละรุ่น / คละความจุ / คละสี)
+            <i class="fa-solid fa-truck-ramp-box" style="color:var(--accent-primary);" aria-hidden="true"></i> แบบฟอร์ม รับสินค้าเข้าสต็อก (คละรุ่น / คละความจุ / คละสี)
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 1.5rem;">
             เลือกรุ่น สเปกสินค้า และกรอกหมายเลข IMEI แล้วกดปุ่ม <strong>"+ เพิ่มเข้ารายการคละ"</strong> เพื่อคละสินค้าต่างรุ่น/สีในรอบเดียวกันได้ไม่จำกัด
@@ -6125,7 +6285,7 @@ async function renderGoodsReceiptView() {
           <!-- Add Item Box -->
           <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem;">
             <div style="font-weight:700; color:#38bdf8; font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-plus-circle"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
+              <i class="fa-solid fa-plus-circle" aria-hidden="true"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
             </div>
 
             <div class="grid-2col" style="gap:1rem;">
@@ -6182,9 +6342,9 @@ async function renderGoodsReceiptView() {
             <div class="form-group" style="margin-bottom:0.8rem;">
               <label for="gr-single-imei">หมายเลขซีเรียล / IMEI <span style="color:#ef4444;">*</span></label>
               <div style="display:flex; gap:0.8rem;">
-                <input type="text" id="gr-single-imei" class="form-control gr-imei-input-box" placeholder="📥 สแกนบาร์โค้ด หรือพิมพ์หมายเลข IMEI 15 หลัก แล้วกด Enter..." onkeypress="if(event.key==='Enter'){ event.preventDefault(); addStagedGoodsReceiptItem(); }">
+                <input type="text" id="gr-single-imei" class="form-control gr-imei-input-box" placeholder="📥 สแกนบาร์โค้ด หรือพิมพ์หมายเลข IMEI 15 หลัก แล้วกด Enter..." aria-label="📥 สแกนบาร์โค้ด หรือพิมพ์หมายเลข IMEI 15 หลัก แล้วกด Enter..." onkeypress="if(event.key==='Enter'){ event.preventDefault(); addStagedGoodsReceiptItem(); }">
                 <button type="button" class="btn btn-warning" onclick="addStagedGoodsReceiptItem()" style="white-space:nowrap; font-weight:700; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
-                  <i class="fa-solid fa-cart-plus"></i> + เพิ่มเข้ารายการคละ
+                  <i class="fa-solid fa-cart-plus" aria-hidden="true"></i> + เพิ่มเข้ารายการคละ
                 </button>
               </div>
             </div>
@@ -6194,12 +6354,12 @@ async function renderGoodsReceiptView() {
           <div style="margin-bottom:1.5rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
               <div style="font-weight:700; color:var(--text-main); font-size:1rem; display:flex; align-items:center; gap:0.4rem;">
-                <i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
+                <i class="fa-solid fa-list-check" style="color:var(--accent-gold);" aria-hidden="true"></i> ตารางรายการสินค้าคละที่เตรียมรับเข้า
                 <span id="staged-count-badge" class="badge badge-gold" style="font-size:0.8rem;">${(window.stagedGoodsReceiptItems || []).length} เครื่อง</span>
               </div>
               ${(window.stagedGoodsReceiptItems || []).length > 0 ? `
                 <button type="button" class="btn btn-sm btn-danger" onclick="clearAllStagedGoodsReceiptItems()">
-                  <i class="fa-solid fa-trash-can"></i> ล้างรายการทั้งหมด
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i> ล้างรายการทั้งหมด
                 </button>
               ` : ''}
             </div>
@@ -6208,11 +6368,11 @@ async function renderGoodsReceiptView() {
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th style="width:40px; text-align:center;">#</th>
-                    <th>รายละเอียดสินค้า</th>
-                    <th>หมวดหมู่</th>
-                    <th>หมายเลข IMEI / ซีเรียล</th>
-                    <th style="text-align:center; width:80px;">จัดการ</th>
+                    <th scope="col" style="width:40px; text-align:center;">#</th>
+                    <th scope="col">รายละเอียดสินค้า</th>
+                    <th scope="col">หมวดหมู่</th>
+                    <th scope="col">หมายเลข IMEI / ซีเรียล</th>
+                    <th scope="col" style="text-align:center; width:80px;">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody id="staged-items-tbody">
@@ -6225,7 +6385,7 @@ async function renderGoodsReceiptView() {
           <div style="display:flex; justify-content:flex-end; gap:0.8rem;">
             <button type="button" class="btn btn-secondary" onclick="toggleGrManualForm()">ยกเลิก</button>
             <button type="button" id="submit-batch-gr-btn" class="btn btn-primary" onclick="submitBatchGoodsReceipt()" style="padding:0.65rem 1.4rem; font-size:0.95rem; font-weight:700;" ${(window.stagedGoodsReceiptItems || []).length === 0 ? 'disabled' : ''}>
-              <i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${(window.stagedGoodsReceiptItems || []).length} รายการ)
+              <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${(window.stagedGoodsReceiptItems || []).length} รายการ)
             </button>
           </div>
         </div>
@@ -6378,11 +6538,11 @@ function openEditGoodsReceiptModal(receiptId) {
 
   const footerHtml = `
     <button type="button" class="btn btn-danger" onclick="deleteGoodsReceiptItem('${receipt._id}')" style="margin-right:auto;">
-      <i class="fa-solid fa-trash"></i> ยกเลิกรายการนี้
+      <i class="fa-solid fa-trash" aria-hidden="true"></i> ยกเลิกรายการนี้
     </button>
     <button type="button" class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
     <button type="button" class="btn btn-primary" onclick="submitEditGoodsReceipt('${receipt._id}')">
-      <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+      <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> บันทึกการแก้ไข
     </button>
   `;
 
@@ -6441,10 +6601,10 @@ function toggleGrManualForm() {
     if (formContainer.style.display === 'none') {
       formContainer.style.display = 'block';
       formContainer.scrollIntoView({ behavior: 'smooth' });
-      if (btn) btn.innerHTML = '<i class="fa-solid fa-minus"></i> ซ่อนแบบฟอร์มแมนนวล';
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-minus" aria-hidden="true"></i> ซ่อนแบบฟอร์มแมนนวล';
     } else {
       formContainer.style.display = 'none';
-      if (btn) btn.innerHTML = '<i class="fa-solid fa-plus"></i> คีย์รับเข้าแมนนวล (คละรุ่น)';
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i> คีย์รับเข้าแมนนวล (คละรุ่น)';
     }
   }
 }
@@ -6473,7 +6633,7 @@ function renderStagedItemsTable() {
   if (countBadge) countBadge.innerText = `${items.length} เครื่อง`;
   if (submitBtn) {
     submitBtn.disabled = items.length === 0;
-    submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${items.length} รายการ)`;
+    submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane" aria-hidden="true"></i> บันทึกรับสินค้าเข้าสต็อกทั้งหมด (${items.length} รายการ)`;
   }
 
   if (!tbody) return;
@@ -6494,10 +6654,10 @@ function renderStagedItemsTable() {
       <td><span style="font-family:monospace; font-weight:700; color:#fbbf24; font-size:0.95rem;">${it.imei}</span></td>
       <td style="text-align:center; white-space:nowrap;">
         <button type="button" class="btn btn-sm btn-warning" onclick="openEditStagedItemModal(${idx})" style="padding:0.25rem 0.5rem; font-size:0.75rem; margin-right:0.3rem;">
-          <i class="fa-solid fa-pen"></i> แก้ไข
+          <i class="fa-solid fa-pen" aria-hidden="true"></i> แก้ไข
         </button>
         <button type="button" class="btn btn-sm btn-danger" onclick="removeStagedGoodsReceiptItem(${idx})" style="padding:0.25rem 0.5rem; font-size:0.75rem;">
-          <i class="fa-solid fa-xmark"></i> ลบ
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i> ลบ
         </button>
       </td>
     </tr>
@@ -6569,7 +6729,7 @@ function openEditStagedItemModal(idx) {
   const footerHtml = `
     <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button type="button" class="btn btn-primary" onclick="submitEditStagedItem(${idx})">
-      <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+      <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> บันทึกการแก้ไข
     </button>
   `;
 
@@ -6702,7 +6862,7 @@ function submitBatchGoodsReceipt() {
   const bodyHtml = `
     <div style="margin-bottom:1rem; background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.25); padding:0.8rem 1rem; border-radius:6px;">
       <div style="font-weight:700; color:#d97706; font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)
       </div>
       <div style="font-size:0.85rem; color:var(--text-muted);">
         สาขาที่รับเข้า: <strong style="color:var(--text-main);">${branchName}</strong> | จำนวนสินค้ารวม: <strong style="color:var(--accent-primary);">${items.length} เครื่อง</strong>
@@ -6715,10 +6875,10 @@ function submitBatchGoodsReceipt() {
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width:40px; text-align:center;">#</th>
-            <th>ชื่อสินค้า</th>
-            <th>หมวดหมู่</th>
-            <th>หมายเลข IMEI / ซีเรียล</th>
+            <th scope="col" style="width:40px; text-align:center;">#</th>
+            <th scope="col">ชื่อสินค้า</th>
+            <th scope="col">หมวดหมู่</th>
+            <th scope="col">หมายเลข IMEI / ซีเรียล</th>
           </tr>
         </thead>
         <tbody>
@@ -6740,10 +6900,10 @@ function submitBatchGoodsReceipt() {
 
   const footerHtml = `
     <button type="button" class="btn btn-secondary" onclick="closeModal()">
-      <i class="fa-solid fa-arrow-left"></i> ยกเลิก / กลับไปแก้ไข
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> ยกเลิก / กลับไปแก้ไข
     </button>
     <button type="button" class="btn btn-primary" onclick="confirmSubmitBatchGoodsReceipt('${branchId}')" style="font-weight:700; background:#059669; border-color:#059669;">
-      <i class="fa-solid fa-check-double"></i> ยืนยันบันทึกเข้าสต็อกจริง (${items.length} รายการ)
+      <i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันบันทึกเข้าสต็อกจริง (${items.length} รายการ)
     </button>
   `;
 
@@ -6798,7 +6958,7 @@ function recalculateGrAutoFields() {
    ========================================================================== */
 async function renderReceiptVerificationView(filterStatus = 'all') {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการรับสินค้าเข้าสต็อก...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายการรับสินค้าเข้าสต็อก...</div>`;
 
   try {
     const res = await apiRequest(`/stock/receipts`);
@@ -6822,15 +6982,15 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
           ${isHqOrPurchasing && pendingCount > 0 ? `
             <button class="btn btn-warning btn-sm" onclick="openBatchConfirmReceiptModal()">
-              <i class="fa-solid fa-layer-group"></i> กำหนดราคาแบบเลือกกลุ่ม (${pendingCount} รายการรอ)
+              <i class="fa-solid fa-layer-group" aria-hidden="true"></i> กำหนดราคาแบบเลือกกลุ่ม (${pendingCount} รายการรอ)
             </button>
           ` : ''}
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value=''; filterRcptVerifyTable();">รายการทั้งหมด</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value='pending_pricing'; filterRcptVerifyTable();">
-            <i class="fa-solid fa-clock"></i> รอตั้งราคา (${pendingCount})
+            <i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคา (${pendingCount})
           </button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rcpt-verify-status-filter').value='confirmed'; filterRcptVerifyTable();">
-            <i class="fa-solid fa-check-double"></i> ยืนยันแล้ว
+            <i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันแล้ว
           </button>
         </div>
       </div>
@@ -6855,27 +7015,27 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
         </div>
         <div style="display:flex; align-items:center; gap:0.3rem;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
-          <input type="date" id="rcpt-verify-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
+          <input aria-label="ตรวจรับสินค้า เริ่มวันที่" type="date" id="rcpt-verify-start-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
         </div>
         <div style="display:flex; align-items:center; gap:0.3rem;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
-          <input type="date" id="rcpt-verify-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
+          <input aria-label="ตรวจรับสินค้า ถึงวันที่" type="date" id="rcpt-verify-end-date" class="form-control" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem;" onchange="filterRcptVerifyTable()">
         </div>
-        <input type="text" id="rcpt-verify-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สินค้า, IMEI, ผู้รับ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterRcptVerifyTable()">
+        <input type="text" id="rcpt-verify-search-input" class="form-control" placeholder="ค้นหาเลขที่ใบรับ, สินค้า, IMEI, ผู้รับ..." aria-label="ค้นหาเลขที่ใบรับ, สินค้า, IMEI, ผู้รับ..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterRcptVerifyTable()">
       </div>
 
       <div class="table-container">
         <table class="data-table">
           <thead>
             <tr>
-              ${isHqOrPurchasing ? `<th style="width:40px; text-align:center;"><input type="checkbox" id="rcpt-select-all" onchange="toggleSelectAllReceipts(this.checked)"></th>` : ''}
-              <th>เลขที่ใบรับ / วันเวลา</th>
-              <th>สาขา & ผู้รับสินค้า</th>
-              <th>รายละเอียดสินค้า</th>
-              <th>หมายเลข IMEI</th>
-              <th>ราคาทุน (บาท)</th>
-              <th>ราคาขาย (บาท)</th>
-              <th style="text-align:center;">สถานะ & การยืนยัน</th>
+              ${isHqOrPurchasing ? `<th scope="col" style="width:40px; text-align:center;"><input aria-label="เลือกรายการรับสินค้าทั้งหมด" type="checkbox" id="rcpt-select-all" onchange="toggleSelectAllReceipts(this.checked)"></th>` : ''}
+              <th scope="col">เลขที่ใบรับ / วันเวลา</th>
+              <th scope="col">สาขา & ผู้รับสินค้า</th>
+              <th scope="col">รายละเอียดสินค้า</th>
+              <th scope="col">หมายเลข IMEI</th>
+              <th scope="col">ราคาทุน (บาท)</th>
+              <th scope="col">ราคาขาย (บาท)</th>
+              <th scope="col" style="text-align:center;">สถานะ & การยืนยัน</th>
             </tr>
           </thead>
           <tbody>
@@ -6892,7 +7052,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                 <tr class="rcpt-verify-row" data-search="${searchStr}" data-date="${isoDate}" data-branch-id="${branchId}" data-status="${r.status}">
                   ${isHqOrPurchasing ? `
                     <td style="text-align:center;">
-                      ${isPending ? `<input type="checkbox" class="rcpt-checkbox" value="${r._id}">` : ''}
+                      ${isPending ? `<input type="checkbox" class="rcpt-checkbox" aria-label="เลือกรายการรับสินค้านี้" value="${r._id}">` : ''}
                     </td>
                   ` : ''}
                   <td>
@@ -6915,26 +7075,26 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                   <td>${r.selling_price ? '<strong style="color:#34d399;">฿' + r.selling_price.toLocaleString() + '</strong>' : '<span style="color:#fbbf24;">ยังไม่ได้ตั้ง</span>'}</td>
                   <td style="text-align:center;">
                     ${isPending ? `
-                      <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock"></i> รอตั้งราคา</span><br>
+                      <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคา</span><br>
                       ${isHqOrPurchasing ? `
                         <button class="btn btn-success btn-sm" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem; margin-right:0.25rem;" onclick="openConfirmReceiptModal('${r._id}', '${r.receiptNumber}', '${(p.name || '').replace(/'/g, "\\'")}', ${r.purchase_price || 0}, ${r.selling_price || 0})">
-                          <i class="fa-solid fa-check"></i> ใส่ราคา
+                          <i class="fa-solid fa-check" aria-hidden="true"></i> ใส่ราคา
                         </button>
                       ` : ''}
                       <button class="btn btn-info btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem; margin-top:0.3rem;" onclick="viewGoodsReceiptDetails('${r._id}')">
-                        <i class="fa-solid fa-circle-info"></i> รายละเอียด
+                        <i class="fa-solid fa-circle-info" aria-hidden="true"></i> รายละเอียด
                       </button>
                     ` : `
-                      <span class="badge badge-green" style="margin-bottom:0.3rem;"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span><br>
+                      <span class="badge badge-green" style="margin-bottom:0.3rem;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันเข้าสต็อกแล้ว</span><br>
                       <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">
                         อนุมัติโดย: ${r.confirmedBy ? r.confirmedBy.fullName || r.confirmedBy.username : '-'}
                       </span>
                       <div style="display:flex; justify-content:center; gap:0.25rem; flex-wrap:wrap; margin-top:0.3rem;">
                         <button class="btn btn-secondary btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="printGoodsReceiptSlip('${r._id}')">
-                          <i class="fa-solid fa-print"></i> พิมพ์ใบนำเข้า
+                          <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบนำเข้า
                         </button>
                         <button class="btn btn-info btn-sm no-print" style="padding:0.25rem 0.6rem; font-size:0.78rem;" onclick="viewGoodsReceiptDetails('${r._id}')">
-                          <i class="fa-solid fa-circle-info"></i> รายละเอียด
+                          <i class="fa-solid fa-circle-info" aria-hidden="true"></i> รายละเอียด
                         </button>
                       </div>
                     `}
@@ -7058,11 +7218,11 @@ function openBatchConfirmReceiptModal() {
         <div class="grid-2col" style="gap:1rem;">
           <div class="form-group" style="margin-bottom:0;">
             <label style="font-size:0.78rem; color:var(--text-muted);">ราคาทุน (บาท)</label>
-            <input type="number" id="crb-pprice-${safeKey}" class="form-control" min="0" value="${pPriceVal}" placeholder="0" required ${gIdx === 0 ? 'autofocus' : ''}>
+            <input type="number" id="crb-pprice-${safeKey}" class="form-control" min="0" value="${pPriceVal}" placeholder="0" aria-label="ราคาทุน (บาท)" required ${gIdx === 0 ? 'autofocus' : ''}>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label style="font-size:0.78rem; color:var(--text-muted);">ราคาขาย (บาท)</label>
-            <input type="number" id="crb-sprice-${safeKey}" class="form-control" min="0" value="${sPriceVal}" placeholder="0" required>
+            <input type="number" id="crb-sprice-${safeKey}" class="form-control" min="0" value="${sPriceVal}" placeholder="0" aria-label="ราคาขาย (บาท)" required>
           </div>
         </div>
       </div>
@@ -7079,7 +7239,7 @@ function openBatchConfirmReceiptModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-success" onclick="submitBatchConfirmReceipt()"><i class="fa-solid fa-check-double"></i> ยืนยันตั้งราคาทั้งหมด ${groups.length} กลุ่ม</button>
+    <button class="btn btn-success" onclick="submitBatchConfirmReceipt()"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันตั้งราคาทั้งหมด ${groups.length} กลุ่ม</button>
   `;
 
   openModal(`อนุมัติและตั้งราคาแบบเลือกกลุ่ม (${groups.length} กลุ่ม)`, bodyHtml, footerHtml);
@@ -7200,7 +7360,7 @@ async function openConfirmReceiptModal(receiptId, receiptNumber, productName, pu
       ${pendingPos.length > 0 ? `
         <div class="form-group" style="margin-bottom:1.2rem;">
           <label for="cr-po-select" style="font-weight:700; color:var(--accent-gold); display:block; margin-bottom:0.3rem;">
-            <i class="fa-solid fa-link"></i> เชื่อมโยงใบสั่งซื้อค้างส่ง (Optional)
+            <i class="fa-solid fa-link" aria-hidden="true"></i> เชื่อมโยงใบสั่งซื้อค้างส่ง (Optional)
           </label>
           <select id="cr-po-select" class="form-select" onchange="handleModalPoChange('${receiptId}')">
             ${poOptionsHtml}
@@ -7231,7 +7391,7 @@ async function openConfirmReceiptModal(receiptId, receiptNumber, productName, pu
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-success" onclick="submitConfirmReceipt('${receiptId}')"><i class="fa-solid fa-check-double"></i> ยืนยันรายการเข้าสต็อก</button>
+    <button class="btn btn-success" onclick="submitConfirmReceipt('${receiptId}')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันรายการเข้าสต็อก</button>
   `;
 
   openModal(`ตรวจสอบ & ตั้งราคาสินค้า: ${receiptNumber}`, bodyHtml, footerHtml);
@@ -7530,7 +7690,7 @@ async function printGoodsReceiptSlip(receiptId) {
                   <div class="info-row"><span class="info-label">เลขที่ใบสั่งซื้อ (PO Number):</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:#0f172a;">${order.orderNumber}</span></div>
                   <div class="info-row"><span class="info-label">วันที่ส่งคำสั่งสั่งซื้อ:</span> <span class="info-value">${orderedDate}</span></div>
                   <div class="info-row"><span class="info-label">วันที่ตรวจอนุมัติเข้าสต็อก:</span> <span class="info-value">${receivedDate}</span></div>
-                  <div class="info-row"><span class="info-label">สถานะคลังสินค้า:</span> <span class="info-value" style="color:#16a34a; font-weight:800;"><i class="fa-solid fa-circle-check"></i> นำเข้าสต็อกเรียบร้อยแล้ว</span></div>
+                  <div class="info-row"><span class="info-label">สถานะคลังสินค้า:</span> <span class="info-value" style="color:#16a34a; font-weight:800;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> นำเข้าสต็อกเรียบร้อยแล้ว</span></div>
                 </div>
               </div>
 
@@ -7538,12 +7698,12 @@ async function printGoodsReceiptSlip(receiptId) {
               <table class="product-table">
                 <thead>
                   <tr>
-                    <th style="width: 40px; text-align: center;">ลำดับ</th>
-                    <th>สินค้า</th>
-                    <th style="width: 80px; text-align: center;">จำนวน</th>
-                    <th>หมายเลข IMEI</th>
-                    <th style="width: 110px; text-align: right;">ราคาต่อหน่วย</th>
-                    <th style="width: 110px; text-align: right;">ราคารวม</th>
+                    <th scope="col" style="width: 40px; text-align: center;">ลำดับ</th>
+                    <th scope="col">สินค้า</th>
+                    <th scope="col" style="width: 80px; text-align: center;">จำนวน</th>
+                    <th scope="col">หมายเลข IMEI</th>
+                    <th scope="col" style="width: 110px; text-align: right;">ราคาต่อหน่วย</th>
+                    <th scope="col" style="width: 110px; text-align: right;">ราคารวม</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -7748,12 +7908,12 @@ async function printGoodsReceiptSlip(receiptId) {
         <table class="product-table">
           <thead>
             <tr>
-              <th style="width: 50px; text-align: center;">ลำดับ</th>
-              <th>รายละเอียดสเปกอุปกรณ์ (Item Details)</th>
-              <th style="width: 80px; text-align: center;">จำนวน</th>
-              <th>หมายเลข IMEI ของเครื่องที่นำเข้า</th>
-              <th style="width: 110px; text-align: right;">ราคาทุน</th>
-              <th style="width: 110px; text-align: right;">ราคาขาย</th>
+              <th scope="col" style="width: 50px; text-align: center;">ลำดับ</th>
+              <th scope="col">รายละเอียดสเปกอุปกรณ์ (Item Details)</th>
+              <th scope="col" style="width: 80px; text-align: center;">จำนวน</th>
+              <th scope="col">หมายเลข IMEI ของเครื่องที่นำเข้า</th>
+              <th scope="col" style="width: 110px; text-align: right;">ราคาทุน</th>
+              <th scope="col" style="width: 110px; text-align: right;">ราคาขาย</th>
             </tr>
           </thead>
           <tbody>
@@ -7824,7 +7984,7 @@ async function printGoodsReceiptSlip(receiptId) {
    ========================================================================== */
 async function renderTransfersView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการโอนย้ายสินค้า...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายการโอนย้ายสินค้า...</div>`;
 
   try {
     const res = await apiRequest('/stock/transfers');
@@ -7837,8 +7997,8 @@ async function renderTransfersView() {
           <p style="font-size:0.85rem; color:var(--text-muted);">ส่งคำขอโอนย้ายสินค้า และพิมพ์เอกสาร "ใบโอนย้ายสินค้าระหว่างสาขา"</p>
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
-          <button class="btn btn-success btn-sm" onclick="exportTransfersHistoryToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-          <button class="btn btn-primary btn-sm" id="create-transfer-btn"><i class="fa-solid fa-plus"></i> สร้างคำขอโอนย้ายใหม่</button>
+          <button class="btn btn-success btn-sm" onclick="exportTransfersHistoryToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+          <button class="btn btn-primary btn-sm" id="create-transfer-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> สร้างคำขอโอนย้ายใหม่</button>
         </div>
       </div>
 
@@ -7846,13 +8006,13 @@ async function renderTransfersView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>เลขที่ใบโอนย้าย</th>
-              <th>สาขาต้นทาง</th>
-              <th>สาขาปลายทาง</th>
-              <th>จำนวนสินค้ารวม</th>
-              <th>สถานะ</th>
-              <th>วันที่สร้าง</th>
-              <th>การจัดการ</th>
+              <th scope="col">เลขที่ใบโอนย้าย</th>
+              <th scope="col">สาขาต้นทาง</th>
+              <th scope="col">สาขาปลายทาง</th>
+              <th scope="col">จำนวนสินค้ารวม</th>
+              <th scope="col">สถานะ</th>
+              <th scope="col">วันที่สร้าง</th>
+              <th scope="col">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
@@ -7880,19 +8040,19 @@ async function renderTransfersView() {
                   <td>${new Date(t.createdAt).toLocaleDateString('th-TH')}</td>
                   <td>
                     <button class="btn btn-secondary btn-sm" onclick="printTransferDoc('${t._id}')">
-                      <i class="fa-solid fa-print"></i> พิมพ์เอกสาร
+                      <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์เอกสาร
                     </button>
                     ${t.status === 'in_transit' && (isAdmin || isToBranch) ? `
                       <button class="btn btn-success btn-sm" onclick="updateTransferState('${t._id}', 'completed')">
-                        <i class="fa-solid fa-check"></i> ยืนยันรับสินค้า
+                        <i class="fa-solid fa-check" aria-hidden="true"></i> ยืนยันรับสินค้า
                       </button>
                       <button class="btn btn-danger btn-sm" onclick="updateTransferState('${t._id}', 'rejected')">
-                        <i class="fa-solid fa-ban"></i> ปฏิเสธรับสินค้า
+                        <i class="fa-solid fa-ban" aria-hidden="true"></i> ปฏิเสธรับสินค้า
                       </button>
                     ` : ''}
                     ${t.status === 'in_transit' && (isAdmin || isFromBranch) ? `
                       <button class="btn btn-danger btn-sm" onclick="updateTransferState('${t._id}', 'rejected')">
-                        <i class="fa-solid fa-xmark"></i> ยกเลิกส่ง
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i> ยกเลิกส่ง
                       </button>
                     ` : ''}
                   </td>
@@ -7931,7 +8091,7 @@ async function openCreateTransferModal() {
 
       <div class="form-group">
         <label for="tr-imei">หมายเลข IMEI สินค้าที่ต้องการโอน</label>
-        <input type="text" id="tr-imei" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI 15 หลัก" required>
+        <input type="text" id="tr-imei" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI 15 หลัก" aria-label="สแกน หรือ พิมพ์หมายเลข IMEI 15 หลัก" required>
       </div>
 
       <div class="form-group">
@@ -7948,7 +8108,7 @@ async function openCreateTransferModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitTransferRequest()"><i class="fa-solid fa-paper-plane"></i> ยืนยันสร้างเอกสารโอนย้าย</button>
+    <button class="btn btn-primary" onclick="submitTransferRequest()"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ยืนยันสร้างเอกสารโอนย้าย</button>
   `;
 
   openModal('สร้างเอกสารโอนย้ายสินค้าระหว่างสาขาใหม่', bodyHtml, footerHtml);
@@ -7998,7 +8158,7 @@ async function updateTransferState(id, status) {
 }
 
 async function printTransferDoc(transferId) {
-  openModal('กำลังโหลดเอกสารใบโอนย้าย...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลดเอกสารใบโอนย้าย...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest(`/stock/transfers/${transferId}/document`);
@@ -8037,7 +8197,7 @@ async function printTransferDoc(transferId) {
           <div class="grid-2col" style="gap:1.5rem; margin-bottom:1.5rem;">
             <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
               <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#0284c7;">
-                <i class="fa-solid fa-arrow-up-from-bracket"></i> สาขาต้นทาง (ผู้จัดส่ง)
+                <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> สาขาต้นทาง (ผู้จัดส่ง)
               </div>
               <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
                 <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${doc.fromBranch ? doc.fromBranch.name : 'ไม่ระบุ'} (${doc.fromBranch ? doc.fromBranch.code : '-'})</strong></td></tr>
@@ -8049,7 +8209,7 @@ async function printTransferDoc(transferId) {
             
             <div style="border:1px solid #ccc; padding:0.9rem; border-radius:6px; background:#fafafa;">
               <div style="font-weight:800; font-size:0.9rem; border-bottom:1px solid #eee; padding-bottom:0.3rem; margin-bottom:0.5rem; color:#16a34a;">
-                <i class="fa-solid fa-arrow-down-to-bracket"></i> สาขาปลายทาง (ผู้รับ)
+                <i class="fa-solid fa-arrow-down-to-bracket" aria-hidden="true"></i> สาขาปลายทาง (ผู้รับ)
               </div>
               <table style="width:100%; font-size:0.82rem; border-collapse:collapse; line-height:1.5; color:#000;">
                 <tr><td style="width:75px; color:#555;">สาขา:</td><td><strong>${doc.toBranch ? doc.toBranch.name : 'ไม่ระบุ'} (${doc.toBranch ? doc.toBranch.code : '-'})</strong></td></tr>
@@ -8064,10 +8224,10 @@ async function printTransferDoc(transferId) {
           <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
             <thead>
               <tr style="background:#e5e7eb; color:#000; border-top:1px solid #000; border-bottom:1px solid #000;">
-                <th style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:50px;">ลำดับ</th>
-                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
-                <th style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">หมายเลข IMEI / ซีเรียล</th>
-                <th style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:80px;">จำนวน (ชิ้น)</th>
+                <th scope="col" style="padding:10px 8px; text-align:center; border-bottom:1px solid #000; width:50px;">ลำดับ</th>
+                <th scope="col" style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">รายการสินค้า</th>
+                <th scope="col" style="padding:10px 8px; text-align:left; border-bottom:1px solid #000;">หมายเลข IMEI / ซีเรียล</th>
+                <th scope="col" style="padding:10px 8px; text-align:right; border-bottom:1px solid #000; width:80px;">จำนวน (ชิ้น)</th>
               </tr>
             </thead>
             <tbody>
@@ -8120,7 +8280,7 @@ async function printTransferDoc(transferId) {
 
   const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์ใบโอนย้ายสินค้า</button>
+      <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบโอนย้ายสินค้า</button>
     `;
 
     openModal(`เอกสาร: ${doc.transferNumber}`, bodyHtml, footerHtml);
@@ -8134,7 +8294,7 @@ async function printTransferDoc(transferId) {
    ========================================================================== */
 async function renderProductMasterView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดข้อมูลหลักสินค้า...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดข้อมูลหลักสินค้า...</div>`;
 
   try {
     const res = await apiRequest('/products');
@@ -8149,9 +8309,9 @@ async function renderProductMasterView() {
           <p style="font-size:0.85rem; color:var(--text-muted);">ระบบประกอบ <strong>ชื่อสินค้าแบบเต็ม</strong> ให้อัตโนมัติจากตัวเลือก Master Data (การระบุ IMEI จะสแกนรับเข้าเมื่อมีสินค้าจริง)</p>
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem;">
-          <button class="btn btn-success btn-sm" onclick="exportProductsMasterToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+          <button class="btn btn-success btn-sm" onclick="exportProductsMasterToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
           ${canAddProduct ? `
-            <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus"></i> เพิ่ม Master Product ใหม่</button>
+            <button class="btn btn-primary btn-sm" id="create-product-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่ม Master Product ใหม่</button>
           ` : ''}
         </div>
       </div>
@@ -8160,14 +8320,14 @@ async function renderProductMasterView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width:60px; text-align:center;">ไอคอน</th>
-              <th>ชื่อสินค้าแบบเต็ม (อัตโนมัติ)</th>
-              <th>ยี่ห้อ / ชื่อรุ่น</th>
-              <th>ความจุ / สีสินค้า</th>
-              <th>หมวดหมู่</th>
-              <th>ราคาทุน</th>
-              <th>ราคาขาย</th>
-              ${canAddProduct ? `<th style="text-align:center;">การจัดการ</th>` : ''}
+              <th scope="col" style="width:60px; text-align:center;">ไอคอน</th>
+              <th scope="col">ชื่อสินค้าแบบเต็ม (อัตโนมัติ)</th>
+              <th scope="col">ยี่ห้อ / ชื่อรุ่น</th>
+              <th scope="col">ความจุ / สีสินค้า</th>
+              <th scope="col">หมวดหมู่</th>
+              <th scope="col">ราคาทุน</th>
+              <th scope="col">ราคาขาย</th>
+              ${canAddProduct ? `<th scope="col" style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
@@ -8175,7 +8335,7 @@ async function renderProductMasterView() {
             ${products.map(p => `
               <tr class="product-master-row">
                 <td style="text-align:center; font-size:1.4rem; color:var(--accent-primary);">
-                  <i class="fa-solid fa-mobile-screen-button"></i>
+                  <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>
                 </td>
                 <td><strong>${p.name}</strong></td>
                 <td><span class="badge badge-gray">${p.brand}</span> ${p.model}</td>
@@ -8186,7 +8346,7 @@ async function renderProductMasterView() {
                 ${canAddProduct ? `
                   <td style="text-align:center;">
                     <button class="btn btn-secondary btn-sm" onclick="openEditProductModal('${p._id}')">
-                      <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                      <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                     </button>
                   </td>
                 ` : ''}
@@ -8267,7 +8427,7 @@ function openCreateProductModal() {
 
       <div class="form-group">
         <label for="prod-name">ชื่อสินค้าแบบเต็ม (ประกอบให้อัตโนมัติ)</label>
-        <input type="text" id="prod-name" class="form-control" value="${initialName}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required readonly>
+        <input type="text" id="prod-name" class="form-control" value="${initialName}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." aria-label="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required readonly>
         <span style="font-size:0.75rem; color:var(--text-muted);">ระบบประกอบชื่อสินค้าแบบเต็มให้อัตโนมัติจากตัวเลือกด้านบน</span>
       </div>
 
@@ -8286,14 +8446,14 @@ function openCreateProductModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitCreateProduct()"><i class="fa-solid fa-plus"></i> บันทึก Master Product</button>
+    <button class="btn btn-primary" onclick="submitCreateProduct()"><i class="fa-solid fa-plus" aria-hidden="true"></i> บันทึก Master Product</button>
   `;
 
   openModal('เพิ่มข้อมูลหลักสินค้า Master Product ใหม่ (สร้างชื่อสินค้าอัตโนมัติ)', bodyHtml, footerHtml);
 }
 
 async function openEditProductModal(productId) {
-  openModal('กำลังโหลดข้อมูลสินค้า...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลดข้อมูลสินค้า...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest(`/products/${productId}`);
@@ -8354,7 +8514,7 @@ async function openEditProductModal(productId) {
 
         <div class="form-group">
           <label for="prod-name">ชื่อสินค้าแบบเต็ม (ประกอบให้อัตโนมัติ)</label>
-          <input type="text" id="prod-name" class="form-control" value="${product.name}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required>
+          <input type="text" id="prod-name" class="form-control" value="${product.name}" style="font-weight:700; color:#34d399; background:rgba(0,0,0,0.3);" placeholder="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." aria-label="ระบบสร้างจาก ยี่ห้อ + ชื่อรุ่น + ความจุ + สี..." required>
         </div>
 
         <div class="grid-2col" style="gap:1rem;">
@@ -8372,7 +8532,7 @@ async function openEditProductModal(productId) {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="submitEditProduct('${product._id}')"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข Master Product</button>
+      <button class="btn btn-primary" onclick="submitEditProduct('${product._id}')"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข Master Product</button>
     `;
 
     openModal(`แก้ไขข้อมูลหลักสินค้า: ${product.name}`, bodyHtml, footerHtml);
@@ -8484,7 +8644,7 @@ async function submitCreateProduct() {
    ========================================================================== */
 async function renderBranchManagementView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายการสาขา...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายการสาขา...</div>`;
 
   try {
     const res = await apiRequest('/branches');
@@ -8499,7 +8659,7 @@ async function renderBranchManagementView() {
           <p style="font-size:0.85rem; color:var(--text-muted);">รายการสาขาทั้งหมดในระบบ และการเปิด/ปิดใช้งานสาขา</p>
         </div>
         ${isAdmin ? `
-          <button class="btn btn-primary btn-sm" id="add-new-branch-btn"><i class="fa-solid fa-plus"></i> เพิ่มสาขาใหม่</button>
+          <button class="btn btn-primary btn-sm" id="add-new-branch-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มสาขาใหม่</button>
         ` : ''}
       </div>
 
@@ -8507,11 +8667,11 @@ async function renderBranchManagementView() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัสสาขา</th>
-              <th>ชื่อสาขา</th>
-              <th>ที่ตั้ง / เบอร์ติดต่อ</th>
-              <th>สถานะ</th>
-              ${isAdmin ? `<th>การจัดการ</th>` : ''}
+              <th scope="col">รหัสสาขา</th>
+              <th scope="col">ชื่อสาขา</th>
+              <th scope="col">ที่ตั้ง / เบอร์ติดต่อ</th>
+              <th scope="col">สถานะ</th>
+              ${isAdmin ? `<th scope="col">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
@@ -8529,7 +8689,7 @@ async function renderBranchManagementView() {
                 ${isAdmin ? `
                   <td>
                     <button class="btn btn-secondary btn-sm" onclick="openEditBranchModal('${b._id}', '${b.name}', '${b.address}', '${b.phone}', ${b.isActive})">
-                      <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                      <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                     </button>
                   </td>
                 ` : ''}
@@ -8553,12 +8713,12 @@ function openAddBranchModal() {
     <form id="new-branch-form">
       <div class="form-group">
         <label for="mb-code">รหัสสาขา (Branch Code)</label>
-        <input type="text" id="mb-code" class="form-control" placeholder="เช่น BR-N006" required>
+        <input type="text" id="mb-code" class="form-control" placeholder="เช่น BR-N006" aria-label="เช่น BR-N006" required>
       </div>
 
       <div class="form-group">
         <label for="mb-name">ชื่อสาขา (Branch Name)</label>
-        <input type="text" id="mb-name" class="form-control" placeholder="เช่น สาขาภาคตะวันออกเฉียงเหนือ (ขอนแก่น)" required>
+        <input type="text" id="mb-name" class="form-control" placeholder="เช่น สาขาภาคตะวันออกเฉียงเหนือ (ขอนแก่น)" aria-label="เช่น สาขาภาคตะวันออกเฉียงเหนือ (ขอนแก่น)" required>
       </div>
 
       <div class="form-group">
@@ -8568,14 +8728,14 @@ function openAddBranchModal() {
 
       <div class="form-group">
         <label for="mb-phone">เบอร์โทรศัพท์ติดต่อ (Contact Phone)</label>
-        <input type="text" id="mb-phone" class="form-control" placeholder="เช่น 043-111-222">
+        <input type="text" id="mb-phone" class="form-control" placeholder="เช่น 043-111-222" aria-label="เช่น 043-111-222">
       </div>
     </form>
   `;
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitAddBranch()"><i class="fa-solid fa-check"></i> บันทึกเพิ่มสาขาใหม่</button>
+    <button class="btn btn-primary" onclick="submitAddBranch()"><i class="fa-solid fa-check" aria-hidden="true"></i> บันทึกเพิ่มสาขาใหม่</button>
   `;
 
   openModal('เพิ่มสาขาใหม่ (Add New Branch)', bodyHtml, footerHtml);
@@ -8640,7 +8800,7 @@ function openEditBranchModal(id, name, address, phone, isActive) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitEditBranch('${id}')"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
+    <button class="btn btn-primary" onclick="submitEditBranch('${id}')"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข</button>
   `;
 
   openModal('แก้ไขข้อมูลสาขา', bodyHtml, footerHtml);
@@ -8675,7 +8835,7 @@ async function submitEditBranch(id) {
    ========================================================================== */
 async function renderEmployeeManagementView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดรายชื่อพนักงาน...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายชื่อพนักงาน...</div>`;
 
   try {
     const [usersRes, branchRes, rolesRes] = await Promise.all([
@@ -8695,12 +8855,12 @@ async function renderEmployeeManagementView() {
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.15rem; font-weight:800; display:flex; align-items:center; gap:0.5rem; color:var(--text-main);">
-            <i class="fa-solid fa-users-gear" style="color:var(--accent-primary);"></i> จัดการพนักงาน (${users.length} คน)
+            <i class="fa-solid fa-users-gear" style="color:var(--accent-primary);" aria-hidden="true"></i> จัดการพนักงาน (${users.length} คน)
           </h3>
           <p style="font-size:0.82rem; color:var(--text-muted);">รายชื่อพนักงาน กำหนดตำแหน่งสิทธิ์การมองเห็นเมนู และเลือกสาขาประจำ</p>
         </div>
         ${isAdmin ? `
-          <button class="btn btn-primary" id="add-new-emp-btn" style="font-weight:700;"><i class="fa-solid fa-user-plus"></i> + เพิ่มพนักงานใหม่</button>
+          <button class="btn btn-primary" id="add-new-emp-btn" style="font-weight:700;"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> + เพิ่มพนักงานใหม่</button>
         ` : ''}
       </div>
 
@@ -8721,19 +8881,19 @@ async function renderEmployeeManagementView() {
             ${roles.map(r => `<option value="${r.code}">${r.name}</option>`).join('')}
           </select>
         </div>
-        <input type="text" id="emp-search-input" class="form-control" placeholder="ค้นหาชื่อ, รหัสพนักงาน, อีเมล..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterEmployeeTable()">
+        <input type="text" id="emp-search-input" class="form-control" placeholder="ค้นหาชื่อ, รหัสพนักงาน, อีเมล..." aria-label="ค้นหาชื่อ, รหัสพนักงาน, อีเมล..." style="width:240px; font-size:0.78rem; padding:0.2rem 0.4rem;" onkeyup="filterEmployeeTable()">
       </div>
 
       <div class="table-container">
         <table class="data-table">
           <thead>
             <tr>
-              <th>รหัสพนักงาน</th>
-              <th>ชื่อ-นามสกุล / อีเมล</th>
-              <th>ตำแหน่งงาน (Role)</th>
-              <th>สาขาประจำ</th>
-              <th>สถานะ</th>
-              ${isAdmin ? `<th style="text-align:center;">การจัดการ</th>` : ''}
+              <th scope="col">รหัสพนักงาน</th>
+              <th scope="col">ชื่อ-นามสกุล / อีเมล</th>
+              <th scope="col">ตำแหน่งงาน (Role)</th>
+              <th scope="col">สาขาประจำ</th>
+              <th scope="col">สถานะ</th>
+              ${isAdmin ? `<th scope="col" style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
@@ -8750,7 +8910,7 @@ async function renderEmployeeManagementView() {
                   </td>
                   <td>
                     <span class="badge badge-purple" style="font-size:0.8rem; font-weight:700;">
-                      <i class="fa-solid fa-user-shield"></i> ${formatRoleName(u.role, roles)}
+                      <i class="fa-solid fa-user-shield" aria-hidden="true"></i> ${formatRoleName(u.role, roles)}
                     </span>
                   </td>
                   <td><strong>${u.branch ? u.branch.name : 'ส่วนกลาง (สำนักงานใหญ่)'}</strong></td>
@@ -8762,7 +8922,7 @@ async function renderEmployeeManagementView() {
                   ${isAdmin ? `
                     <td style="text-align:center;">
                       <button class="btn btn-warning btn-sm" style="font-weight:700; font-size:0.78rem; padding:0.25rem 0.6rem;" onclick="openEditEmpModal('${u._id}', '${u.fullName || u.username}', '${u.role}', '${u.branch ? u.branch._id : ''}', ${u.isActive})">
-                        <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+                        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
                       </button>
                     </td>
                   ` : ''}
@@ -8841,22 +9001,22 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
       <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="me-empid" style="font-weight:700;">รหัสพนักงาน (Emp ID)</label>
-          <input type="text" id="me-empid" class="form-control" placeholder="เช่น EMP-0010">
+          <input type="text" id="me-empid" class="form-control" placeholder="เช่น EMP-0010" aria-label="เช่น EMP-0010">
         </div>
         <div class="form-group">
           <label for="me-fullname" style="font-weight:700;">ชื่อ-นามสกุล (Full Name) <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="me-fullname" class="form-control" placeholder="เช่น นายประเสริฐ สินค้าดี" required style="font-weight:700;">
+          <input type="text" id="me-fullname" class="form-control" placeholder="เช่น นายประเสริฐ สินค้าดี" aria-label="เช่น นายประเสริฐ สินค้าดี" required style="font-weight:700;">
         </div>
       </div>
 
       <div class="grid-2col" style="gap:1rem;">
         <div class="form-group">
           <label for="me-username" style="font-weight:700;">ชื่อผู้ใช้งาน (Username สำหรับล็อกอิน) <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="me-username" class="form-control" placeholder="เช่น prasert.s" required style="font-weight:700;">
+          <input type="text" id="me-username" class="form-control" placeholder="เช่น prasert.s" aria-label="เช่น prasert.s" required style="font-weight:700;">
         </div>
         <div class="form-group">
           <label for="me-email" style="font-weight:700;">อีเมล (Email) <span style="color:#ef4444;">*</span></label>
-          <input type="email" id="me-email" class="form-control" placeholder="prasert@pos.com" required style="font-weight:700;">
+          <input type="email" id="me-email" class="form-control" placeholder="prasert@pos.com" aria-label="prasert@pos.com" required style="font-weight:700;">
         </div>
       </div>
 
@@ -8867,7 +9027,7 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
 
       <div class="form-group">
         <label for="me-role" style="font-weight:700; color:var(--accent-primary);">
-          <i class="fa-solid fa-user-shield"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
+          <i class="fa-solid fa-user-shield" aria-hidden="true"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
         </label>
         <select id="me-role" class="form-select" required style="font-weight:700; border:1px solid var(--accent-primary);">
           ${roleOptions.map(r => `<option value="${r.code}">${r.name}</option>`).join('')}
@@ -8886,7 +9046,7 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitAddEmp()" style="font-weight:700;"><i class="fa-solid fa-user-check"></i> ยืนยันเพิ่มพนักงานใหม่</button>
+    <button class="btn btn-primary" onclick="submitAddEmp()" style="font-weight:700;"><i class="fa-solid fa-user-check" aria-hidden="true"></i> ยืนยันเพิ่มพนักงานใหม่</button>
   `;
 
   openModal('➕ เพิ่มพนักงานใหม่ (Add New Employee)', bodyHtml, footerHtml);
@@ -8966,7 +9126,7 @@ async function openEditEmpModal(id, fullName, role, branchId, isActive) {
 
       <div class="form-group">
         <label for="ee-role" style="font-weight:700; color:var(--accent-primary);">
-          <i class="fa-solid fa-user-shield"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
+          <i class="fa-solid fa-user-shield" aria-hidden="true"></i> เลือกตำแหน่งงาน (อ้างอิงจากระบบจัดการสิทธิ์และตำแหน่ง) <span style="color:#ef4444;">*</span>
         </label>
         <select id="ee-role" class="form-select" required style="font-weight:700; border:1px solid var(--accent-primary);">
           ${roleOptions.map(r => `<option value="${r.code}" ${role === r.code ? 'selected' : ''}>${r.name}</option>`).join('')}
@@ -8991,14 +9151,14 @@ async function openEditEmpModal(id, fullName, role, branchId, isActive) {
 
       <div class="form-group">
         <label for="ee-password" style="font-weight:700;">เปลี่ยนรหัสผ่านใหม่ (ระบุเฉพาะเมื่อต้องการเปลี่ยน)</label>
-        <input type="password" id="ee-password" class="form-control" placeholder="ปล่อยว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน">
+        <input type="password" id="ee-password" class="form-control" placeholder="ปล่อยว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน" aria-label="ปล่อยว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน">
       </div>
     </form>
   `;
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitEditEmp('${id}')" style="font-weight:700;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
+    <button class="btn btn-primary" onclick="submitEditEmp('${id}')" style="font-weight:700;"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข</button>
   `;
 
   openModal('✏️ แก้ไขข้อมูลพนักงาน', bodyHtml, footerHtml);
@@ -9044,14 +9204,21 @@ async function submitEditEmp(id) {
 /* ==========================================================================
    GLOBAL EXCEL EXPORT SYSTEM (SHEETJS / XLSX.JS)
    ========================================================================== */
-function exportToExcel(dataArray, fileName, sheetName = 'Sheet1') {
+async function exportToExcel(dataArray, fileName, sheetName = 'Sheet1') {
   if (!dataArray || dataArray.length === 0) {
     showToast('ไม่พบข้อมูลสำหรับส่งออกไฟล์ Excel', 'warning');
     return;
   }
+
+  // SheetJS is fetched on first use rather than on every page load.
   if (!window.XLSX) {
-    showToast('กำลังโหลดโมดูล Export Excel กรุณาลองใหม่อีกครั้ง', 'error');
-    return;
+    try {
+      showToast('กำลังเตรียมไฟล์ Excel...');
+      await loadXlsx();
+    } catch (err) {
+      showToast('ไม่สามารถโหลดโมดูล Export Excel ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'error');
+      return;
+    }
   }
 
   try {
@@ -9270,7 +9437,7 @@ function openPrintFinanceReportModal() {
     <!-- Print Settings Bar (Hidden in Print) -->
     <div class="no-print" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; background:#f8f9fa; border:1px solid #ddd; padding:12px; border-radius:6px; margin-bottom:1.5rem; color:#000; font-family:'Sarabun';">
       <div style="font-weight:700; font-size:0.9rem; color:#000;">
-        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
+        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;" aria-hidden="true"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
       </div>
       
       <div style="display:flex; align-items:center; gap:0.4rem;">
@@ -9282,17 +9449,17 @@ function openPrintFinanceReportModal() {
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
-        <input type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
+        <input aria-label="ช่วงพิมพ์รายงาน เริ่มวันที่" type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
       </div>
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">ถึงวันที่:</label>
-        <input type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
+        <input aria-label="ช่วงพิมพ์รายงาน ถึงวันที่" type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
       </div>
       
       <div style="margin-left:auto; display:flex; gap:0.5rem;">
         <button class="btn btn-success btn-sm" onclick="exportFinanceReportToExcel()" style="font-size:0.8rem; font-weight:700; height:auto; padding:0.35rem 0.8rem; border:none; display:flex; align-items:center; gap:0.3rem;">
-          <i class="fa-solid fa-file-excel"></i> Export Excel
+          <i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel
         </button>
       </div>
     </div>
@@ -9319,7 +9486,7 @@ function openPrintFinanceReportModal() {
     <!-- Preview Container (Target for updatePrintFinanceReportPreview) -->
     <div id="printable-finance-report-container">
       <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;" aria-hidden="true"></i>
         <div>กำลังเตรียมข้อมูลรายงาน...</div>
       </div>
     </div>
@@ -9327,8 +9494,8 @@ function openPrintFinanceReportModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-    <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
+    <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> เริ่มสั่งพิมพ์รายงาน</button>
   `;
 
   openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
@@ -9347,7 +9514,7 @@ async function updatePrintFinanceReportPreview() {
   if (previewArea) {
     previewArea.innerHTML = `
       <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;" aria-hidden="true"></i>
         <div>กำลังดึงข้อมูลรายงานใหม่ตามเงื่อนไขที่เลือก...</div>
       </div>
     `;
@@ -9532,21 +9699,21 @@ async function updatePrintFinanceReportPreview() {
             <table style="width:100%; border-collapse:collapse; border:1px solid #111; font-family:'Sarabun';">
               <thead>
                 <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1px solid #111;">
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
                 </tr>
               </thead>
               <tbody>
@@ -9629,13 +9796,13 @@ async function updatePrintFinanceReportPreview() {
             <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-family:'Sarabun';">
               <thead>
                 <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1.5px solid #000;">
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
                 </tr>
               </thead>
               <tbody>
@@ -9685,7 +9852,7 @@ function openPrintFinanceReportModal() {
     <!-- Print Settings Bar (Hidden in Print) -->
     <div class="no-print" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; background:#f8f9fa; border:1px solid #ddd; padding:12px; border-radius:6px; margin-bottom:1.5rem; color:#000; font-family:'Sarabun';">
       <div style="font-weight:700; font-size:0.9rem; color:#000;">
-        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
+        <i class="fa-solid fa-sliders" style="margin-right:0.3rem;" aria-hidden="true"></i> ปรับเงื่อนไขรายงานก่อนพิมพ์:
       </div>
       
       <div style="display:flex; align-items:center; gap:0.4rem;">
@@ -9697,12 +9864,12 @@ function openPrintFinanceReportModal() {
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">เริ่มวันที่:</label>
-        <input type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
+        <input aria-label="ช่วงพิมพ์รายงาน เริ่มวันที่" type="date" id="print-start-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedStartDate}" onchange="updatePrintFinanceReportPreview()">
       </div>
 
       <div style="display:flex; align-items:center; gap:0.4rem;">
         <label style="font-size:0.8rem; font-weight:600; color:#000;">ถึงวันที่:</label>
-        <input type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
+        <input aria-label="ช่วงพิมพ์รายงาน ถึงวันที่" type="date" id="print-end-date" class="form-control" style="padding:0.2rem 0.4rem; font-size:0.8rem; width:auto; border:1px solid #ccc; color:#000; background:#fff; height:auto; min-height:auto;" value="${selectedEndDate}" onchange="updatePrintFinanceReportPreview()">
       </div>
     </div>
 
@@ -9728,7 +9895,7 @@ function openPrintFinanceReportModal() {
     <!-- Preview Container (Target for updatePrintFinanceReportPreview) -->
     <div id="printable-finance-report-container">
       <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;" aria-hidden="true"></i>
         <div>กำลังเตรียมข้อมูลรายงาน...</div>
       </div>
     </div>
@@ -9736,8 +9903,8 @@ function openPrintFinanceReportModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
-        <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
-<button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> เริ่มสั่งพิมพ์รายงาน</button>
+        <button class="btn btn-success" onclick="exportFinanceReportToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+<button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> เริ่มสั่งพิมพ์รายงาน</button>
   `;
 
   openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
@@ -9756,7 +9923,7 @@ async function updatePrintFinanceReportPreview() {
   if (previewArea) {
     previewArea.innerHTML = `
       <div style="text-align:center; padding:3rem; color:#000; font-family:'Sarabun';">
-        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;"></i>
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem;" aria-hidden="true"></i>
         <div>กำลังดึงข้อมูลรายงานใหม่ตามเงื่อนไขที่เลือก...</div>
       </div>
     `;
@@ -9941,21 +10108,21 @@ async function updatePrintFinanceReportPreview() {
             <table style="width:100%; border-collapse:collapse; border:1px solid #111; font-family:'Sarabun';">
               <thead>
                 <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1px solid #111;">
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
-                  <th style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เลขที่</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">วันที่</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:8%;">เอกสาร</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:9%;">ลูกค้า</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:7%;">โทร</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:8%;">วิธีการชำระ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:10%;">รหัสสินค้า/บริการ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:left; font-size:0.7rem; width:12%;">ชื่อสินค้า/บริการ</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:center; font-size:0.7rem; width:4%;">จำนวน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ราคา</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:4%;">ส่วนลด</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">รวมเงิน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:5%;">ต้นทุน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">กำไร/ขาดทุน</th>
+                  <th scope="col" style="padding:4px 6px; border:1px solid #111; text-align:right; font-size:0.7rem; width:6%;">สุทธิ</th>
                 </tr>
               </thead>
               <tbody>
@@ -10038,13 +10205,13 @@ async function updatePrintFinanceReportPreview() {
             <table style="width:100%; border-collapse:collapse; border:1px solid #000; font-family:'Sarabun';">
               <thead>
                 <tr style="background:#fff; color:#000; font-weight:700; border-bottom:1.5px solid #000;">
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
-                  <th style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">เลขที่รายจ่าย / วันที่</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">ชื่อรายการ</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:15%;">สาขา</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:center; font-size:0.8rem; width:15%;">หมวดหมู่</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:right; font-size:0.8rem; width:12%;">จำนวนเงิน</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:13%;">ผู้บันทึก</th>
+                  <th scope="col" style="padding:10px; border:1px solid #000; text-align:left; font-size:0.8rem; width:20%;">หมายเหตุ</th>
                 </tr>
               </thead>
               <tbody>
@@ -10100,7 +10267,43 @@ function exportTransfersHistoryToExcel() {
 // Global Initialization
 document.addEventListener('DOMContentLoaded', () => {
   initAppSession();
+  initSidebarKeyboard();
 });
+
+// The sidebar is a CSS-only checkbox drawer, and <label> is not in the tab
+// order. This makes the label behave like the button it already looks like,
+// without changing the CSS that drives the drawer.
+function initSidebarKeyboard() {
+  const toggleBtn = document.getElementById('sidebar-toggle-btn');
+  const checkbox = document.getElementById('sidebar-toggle');
+  if (!toggleBtn || !checkbox) return;
+
+  const syncExpanded = () => {
+    toggleBtn.setAttribute('aria-expanded', checkbox.checked ? 'true' : 'false');
+    toggleBtn.setAttribute('aria-label', checkbox.checked ? 'ปิดเมนูหลัก' : 'เปิดเมนูหลัก');
+  };
+
+  toggleBtn.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    e.preventDefault();
+    checkbox.checked = !checkbox.checked;
+    syncExpanded();
+  });
+
+  // Clicking the label flips the checkbox natively; just keep ARIA in step.
+  checkbox.addEventListener('change', syncExpanded);
+
+  // Escape closes the drawer when it is open on small screens.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && checkbox.checked && !isModalOpen()) {
+      checkbox.checked = false;
+      syncExpanded();
+      toggleBtn.focus();
+    }
+  });
+
+  syncExpanded();
+}
 
 
 // Global Navigation Click Delegation
@@ -10123,7 +10326,7 @@ async function renderRolesPermissionsView() {
   const container = document.getElementById('content-container');
   container.innerHTML = `
     <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-      <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;"></i>
+      <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;" aria-hidden="true"></i>
       <br><span style="font-size:1.05rem; font-weight:600; color:var(--text-main);">กำลังโหลดข้อมูลตำแหน่งและสิทธิ์การใช้งาน...</span>
     </div>
   `;
@@ -10142,7 +10345,7 @@ async function renderRolesPermissionsView() {
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
         <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
           <div style="width:48px; height:48px; border-radius:10px; background:rgba(8,145,178,0.1); color:#0891b2; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
-            <i class="fa-solid fa-user-shield"></i>
+            <i class="fa-solid fa-user-shield" aria-hidden="true"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งทั้งหมด</span>
@@ -10152,7 +10355,7 @@ async function renderRolesPermissionsView() {
 
         <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
           <div style="width:48px; height:48px; border-radius:10px; background:rgba(124,58,237,0.1); color:#7c3aed; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
-            <i class="fa-solid fa-lock"></i>
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งหลักของระบบ</span>
@@ -10162,7 +10365,7 @@ async function renderRolesPermissionsView() {
 
         <div class="card" style="background:#ffffff; border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
           <div style="width:48px; height:48px; border-radius:10px; background:rgba(16,185,129,0.1); color:#059669; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
-            <i class="fa-solid fa-user-gear"></i>
+            <i class="fa-solid fa-user-gear" aria-hidden="true"></i>
           </div>
           <div>
             <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block;">ตำแหน่งกำหนดขึ้นเอง</span>
@@ -10175,7 +10378,7 @@ async function renderRolesPermissionsView() {
       <div class="card" style="margin-bottom:1.5rem; background:#ffffff; border:1px solid var(--border-color); border-radius:12px; padding:1.2rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.2rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.6rem; margin:0 0 0.2rem 0;">
-            <i class="fa-solid fa-sliders" style="color:var(--accent-gold);"></i> จัดการสิทธิ์การมองเห็นเมนู
+            <i class="fa-solid fa-sliders" style="color:var(--accent-gold);" aria-hidden="true"></i> จัดการสิทธิ์การมองเห็นเมนู
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
             ติ๊กเลือกเปิดหรือปิดเมนูที่คุณต้องการให้แต่ละตำแหน่งมองเห็น เมนูที่ถูกปิดจะถูกซ่อนจากพนักงานในตำแหน่งนั้นทันที
@@ -10184,7 +10387,7 @@ async function renderRolesPermissionsView() {
 
         <div>
           <button class="btn btn-primary" onclick="openCreateRoleModal()" style="font-weight:700; padding:0.6rem 1.2rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.5rem; box-shadow:0 4px 12px rgba(79,70,229,0.25);">
-            <i class="fa-solid fa-plus-circle" style="font-size:1rem;"></i> + สร้างตำแหน่งใหม่
+            <i class="fa-solid fa-plus-circle" style="font-size:1rem;" aria-hidden="true"></i> + สร้างตำแหน่งใหม่
           </button>
         </div>
       </div>
@@ -10212,11 +10415,11 @@ async function renderRolesPermissionsView() {
 
                   ${r.isSystemDefault ? `
                     <span style="font-size:0.75rem; font-weight:700; background:rgba(124,58,237,0.08); color:#7c3aed; border:1px solid rgba(124,58,237,0.25); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
-                      <i class="fa-solid fa-lock" style="font-size:0.7rem;"></i> หลักของระบบ
+                      <i class="fa-solid fa-lock" style="font-size:0.7rem;" aria-hidden="true"></i> หลักของระบบ
                     </span>
                   ` : `
                     <span style="font-size:0.75rem; font-weight:700; background:rgba(16,185,129,0.08); color:#059669; border:1px solid rgba(16,185,129,0.25); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
-                      <i class="fa-solid fa-user-gear" style="font-size:0.7rem;"></i> กำหนดขึ้นเอง
+                      <i class="fa-solid fa-user-gear" style="font-size:0.7rem;" aria-hidden="true"></i> กำหนดขึ้นเอง
                     </span>
                   `}
                 </div>
@@ -10229,7 +10432,7 @@ async function renderRolesPermissionsView() {
                 <div style="background:rgba(0,0,0,0.02); border:1px solid var(--border-color); padding:1rem; border-radius:10px; margin-bottom:1.2rem;">
                   <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; margin-bottom:0.6rem; font-weight:700;">
                     <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                      <i class="fa-solid fa-eye" style="color:var(--accent-primary);"></i> สิทธิ์การเห็นเมนู:
+                      <i class="fa-solid fa-eye" style="color:var(--accent-primary);" aria-hidden="true"></i> สิทธิ์การเห็นเมนู:
                     </span>
                     <span style="color:${pct === 100 ? '#059669' : (pct > 0 ? 'var(--accent-primary)' : '#e11d48')};">
                       ${allowedCount} จาก ${totalMenus} เมนู (${pct}%)
@@ -10247,7 +10450,7 @@ async function renderRolesPermissionsView() {
                       const isPermitted = (r.allowedMenus || []).includes(m.key);
                       return `
                         <span style="font-size:0.74rem; font-weight:600; padding:0.22rem 0.55rem; border-radius:6px; display:inline-flex; align-items:center; gap:0.35rem; ${isPermitted ? 'background:rgba(16,185,129,0.08); color:#059669; border:1px solid rgba(16,185,129,0.25);' : 'background:rgba(0,0,0,0.02); color:var(--text-dim); border:1px solid var(--border-color); text-decoration:line-through;'}">
-                          <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:#059669;' : 'color:var(--text-dim);'}"></i> ${m.name}
+                          <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:#059669;' : 'color:var(--text-dim);'}" aria-hidden="true"></i> ${m.name}
                         </span>
                       `;
                     }).join('')}
@@ -10258,11 +10461,11 @@ async function renderRolesPermissionsView() {
               <!-- Action Buttons -->
               <div style="display:flex; gap:0.6rem; margin-top:0.4rem;">
                 <button class="btn btn-warning" style="flex:1; font-weight:700; font-size:0.85rem; padding:0.55rem 0.8rem; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;" onclick="openEditRoleModal('${r._id}')">
-                  <i class="fa-solid fa-pen-to-square"></i> กำหนดสิทธิ์เมนู
+                  <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> กำหนดสิทธิ์เมนู
                 </button>
                 ${!r.isSystemDefault ? `
-                  <button class="btn btn-danger" style="font-weight:700; font-size:0.85rem; padding:0.55rem 0.9rem; border-radius:8px;" onclick="deleteRoleAction('${r._id}')" title="ลบตำแหน่งนี้">
-                    <i class="fa-solid fa-trash"></i>
+                  <button class="btn btn-danger" style="font-weight:700; font-size:0.85rem; padding:0.55rem 0.9rem; border-radius:8px;" onclick="deleteRoleAction('${r._id}')" title="ลบตำแหน่งนี้" aria-label="ลบตำแหน่งนี้">
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i>
                   </button>
                 ` : ''}
               </div>
@@ -10277,7 +10480,7 @@ async function renderRolesPermissionsView() {
 }
 
 async function openCreateRoleModal() {
-  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest('/roles');
@@ -10287,23 +10490,23 @@ async function openCreateRoleModal() {
       <form id="create-role-form" onsubmit="event.preventDefault(); submitCreateRole();">
         <div class="form-group" style="margin-bottom:1.1rem;">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
+          <input type="text" id="role-name" class="form-control" placeholder="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" aria-label="เช่น ผู้จัดการสาขา, พนักงานฝ่ายขาย, ฝ่ายจัดซื้อ" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div class="form-group" style="margin-bottom:1.2rem;">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
+          <input type="text" id="role-desc" class="form-control" placeholder="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" aria-label="ระบุขอบเขตความรับผิดชอบของตำแหน่งนี้" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); border-radius:10px; padding:1rem; margin-bottom:1rem;">
           <div style="font-weight:800; color:var(--accent-primary); font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check" aria-hidden="true"></i> เลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
             <div style="display:flex; gap:0.4rem;">
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
-                <i class="fa-solid fa-check-double"></i> เลือกทั้งหมด
+                <i class="fa-solid fa-check-double" aria-hidden="true"></i> เลือกทั้งหมด
               </button>
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(false)">
-                <i class="fa-solid fa-ban"></i> ล้างทั้งหมด
+                <i class="fa-solid fa-ban" aria-hidden="true"></i> ล้างทั้งหมด
               </button>
             </div>
           </div>
@@ -10313,7 +10516,7 @@ async function openCreateRoleModal() {
               <label style="display:flex; align-items:center; gap:0.6rem; background:#ffffff; padding:0.6rem 0.8rem; border-radius:8px; border:1px solid var(--border-color); cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--text-main); transition:all 0.15s ease;">
                 <input type="checkbox" class="role-menu-checkbox" value="${m.key}" checked style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
                 <span style="display:flex; align-items:center; gap:0.4rem;">
-                  <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
+                  <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;" aria-hidden="true"></i> ${m.name}
                 </span>
               </label>
             `).join('')}
@@ -10324,7 +10527,7 @@ async function openCreateRoleModal() {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:600; padding:0.55rem 1.2rem; border-radius:8px;">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="submitCreateRole()" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save"></i> บันทึกตำแหน่งใหม่</button>
+      <button class="btn btn-primary" onclick="submitCreateRole()" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกตำแหน่งใหม่</button>
     `;
 
     openModal('➕ สร้างตำแหน่งงานใหม่ และกำหนดสิทธิ์เมนู', bodyHtml, footerHtml);
@@ -10360,7 +10563,7 @@ async function submitCreateRole() {
 }
 
 async function openEditRoleModal(roleId) {
-  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>');
+  openModal('กำลังโหลด...', '<div style="padding:2rem; text-align:center;"><i class="fa-solid fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>');
 
   try {
     const res = await apiRequest('/roles');
@@ -10380,23 +10583,23 @@ async function openEditRoleModal(roleId) {
       <form id="edit-role-form" onsubmit="event.preventDefault(); submitEditRole('${role._id}');">
         <div class="form-group" style="margin-bottom:1.1rem;">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อตำแหน่งงาน <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
+          <input aria-label="ชื่อตำแหน่งงาน" type="text" id="edit-role-name" class="form-control" value="${role.name}" required style="font-weight:700; padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div class="form-group" style="margin-bottom:1.2rem;">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">คำอธิบายตำแหน่ง</label>
-          <input type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
+          <input aria-label="คำอธิบายตำแหน่งงาน" type="text" id="edit-role-desc" class="form-control" value="${role.description || ''}" style="padding:0.65rem 0.9rem; border-radius:8px; background:#ffffff;">
         </div>
 
         <div style="background:rgba(0,0,0,0.03); border:1px solid var(--border-color); border-radius:10px; padding:1rem; margin-bottom:1rem;">
           <div style="font-weight:800; color:var(--accent-primary); font-size:0.92rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
+            <span style="display:flex; align-items:center; gap:0.4rem;"><i class="fa-solid fa-list-check" aria-hidden="true"></i> ติ๊กเลือกเมนูที่อนุญาตให้ตำแหน่งนี้มองเห็น</span>
             <div style="display:flex; gap:0.4rem;">
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(true)">
-                <i class="fa-solid fa-check-double"></i> เลือกทั้งหมด
+                <i class="fa-solid fa-check-double" aria-hidden="true"></i> เลือกทั้งหมด
               </button>
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:700;" onclick="toggleAllMenuCheckboxes(false)">
-                <i class="fa-solid fa-ban"></i> ล้างทั้งหมด
+                <i class="fa-solid fa-ban" aria-hidden="true"></i> ล้างทั้งหมด
               </button>
             </div>
           </div>
@@ -10408,7 +10611,7 @@ async function openEditRoleModal(roleId) {
                 <label style="display:flex; align-items:center; gap:0.6rem; background:#ffffff; padding:0.6rem 0.8rem; border-radius:8px; border:1px solid var(--border-color); cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--text-main); transition:all 0.15s ease;">
                   <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
                   <span style="display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;"></i> ${m.name}
+                    <i class="fa-solid ${m.icon}" style="color:var(--accent-primary); font-size:0.9rem;" aria-hidden="true"></i> ${m.name}
                   </span>
                 </label>
               `;
@@ -10420,7 +10623,7 @@ async function openEditRoleModal(roleId) {
 
     const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:600; padding:0.55rem 1.2rem; border-radius:8px;">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="submitEditRole('${role._id}')" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save"></i> บันทึกการแก้ไขสิทธิ์</button>
+      <button class="btn btn-primary" onclick="submitEditRole('${role._id}')" style="font-weight:700; padding:0.55rem 1.4rem; border-radius:8px;"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไขสิทธิ์</button>
     `;
 
     openModal(`✏️ กำหนดสิทธิ์ตำแหน่ง: ${role.name}`, bodyHtml, footerHtml);
@@ -10508,31 +10711,31 @@ async function openEditStockModal(stockId) {
       <div class="grid-2col" style="gap:1rem; text-align:left;">
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมายเลข IMEI</label>
-          <input type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="หมายเลข IMEI" type="text" id="es-imei" class="form-control" value="${imei}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ชื่อสินค้า</label>
-          <input type="text" id="es-name" class="form-control" value="${productName}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ชื่อสินค้า" type="text" id="es-name" class="form-control" value="${productName}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ยี่ห้อ (Brand)</label>
-          <input type="text" id="es-brand" class="form-control" value="${brand}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ยี่ห้อ" type="text" id="es-brand" class="form-control" value="${brand}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">รุ่น (Model)</label>
-          <input type="text" id="es-model" class="form-control" value="${model}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ชื่อรุ่น" type="text" id="es-model" class="form-control" value="${model}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ความจุ (Capacity)</label>
-          <input type="text" id="es-capacity" class="form-control" value="${capacity}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ความจุ" type="text" id="es-capacity" class="form-control" value="${capacity}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">สี (Color)</label>
-          <input type="text" id="es-color" class="form-control" value="${color}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="สีสินค้า" type="text" id="es-color" class="form-control" value="${color}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมวดหมู่</label>
-          <input type="text" id="es-category" class="form-control" value="${category}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="หมวดหมู่สินค้า" type="text" id="es-category" class="form-control" value="${category}" style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">สถานะสต็อก</label>
@@ -10546,11 +10749,11 @@ async function openEditStockModal(stockId) {
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ราคาทุน</label>
-          <input type="number" id="es-purchase-price" class="form-control" min="0" value="${purchasePrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ราคาทุน (บาท)" type="number" id="es-purchase-price" class="form-control" min="0" value="${purchasePrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
         <div class="form-group">
           <label style="font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">ราคาขาย</label>
-          <input type="number" id="es-selling-price" class="form-control" min="0" value="${sellingPrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
+          <input aria-label="ราคาขาย (บาท)" type="number" id="es-selling-price" class="form-control" min="0" value="${sellingPrice}" required style="padding:0.5rem; border-radius:6px; background:#ffffff;">
         </div>
       </div>
     </form>
@@ -10558,7 +10761,7 @@ async function openEditStockModal(stockId) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitEditStock('${stock._id}')"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
+    <button class="btn btn-primary" onclick="submitEditStock('${stock._id}')"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข</button>
   `;
 
   openModal('✏️ แก้ไขข้อมูลสินค้าในสต็อกสาขา', bodyHtml, footerHtml);
@@ -10617,7 +10820,7 @@ function openSingleReleaseStockModal(imei, productName) {
   const bodyHtml = `
     <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
       <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการจ่ายออกสินค้าค้างสต็อก
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ยืนยันการจ่ายออกสินค้าค้างสต็อก
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
         สินค้า: ${productName}
@@ -10635,7 +10838,7 @@ function openSingleReleaseStockModal(imei, productName) {
         <label for="release-remark-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
           ระบุเหตุผล / หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span>
         </label>
-        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง, เครื่องชำรุดเคลมเปลี่ยนเครื่อง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
+        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง, เครื่องชำรุดเคลมเปลี่ยนเครื่อง" aria-label="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง, เครื่องชำรุดเคลมเปลี่ยนเครื่อง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
       </div>
     </form>
   `;
@@ -10643,7 +10846,7 @@ function openSingleReleaseStockModal(imei, productName) {
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button class="btn btn-warning" onclick="submitReleaseStock(['${imei}'])" style="background:#d97706; border:none; color:#fff; font-weight:700;">
-      <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกสินค้า
+      <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกสินค้า
     </button>
   `;
 
@@ -10659,7 +10862,7 @@ function openBatchReleaseStockModal() {
   const bodyHtml = `
     <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
       <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
-        <i class="fa-solid fa-triangle-exclamation"></i> จ่ายออกสินค้าค้างสต็อกแบบกลุ่ม
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> จ่ายออกสินค้าค้างสต็อกแบบกลุ่ม
       </div>
       <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.5;">
         กรอกหรือวางหมายเลข IMEI ของสินค้าที่ค้างสต็อกและถึงกำหนดจ่ายออก (แยกแต่ละ IMEI ด้วยการขึ้นบรรทัดใหม่ หรือคั่นด้วยเครื่องหมายจุลภาค ,)
@@ -10680,7 +10883,7 @@ function openBatchReleaseStockModal() {
         <label for="release-remark-input" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">
           ระบุเหตุผล / หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span>
         </label>
-        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
+        <input type="text" id="release-remark-input" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง" aria-label="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดส่งคืนคลัง" required style="font-size:0.88rem; margin-top:0.4rem; color:var(--text-main); background:#fff;">
       </div>
     </form>
   `;
@@ -10688,7 +10891,7 @@ function openBatchReleaseStockModal() {
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
     <button class="btn btn-warning" onclick="submitBatchReleaseStock()" style="background:#d97706; border:none; color:#fff; font-weight:700;">
-      <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกทั้งหมด
+      <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกทั้งหมด
     </button>
   `;
 
@@ -10757,7 +10960,7 @@ async function submitReleaseStock(imeis) {
 
 async function renderSystemLogsView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดประวัติระบบ...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดประวัติระบบ...</div>`;
 
   try {
     const res = await apiRequest('/audit/logs');
@@ -10769,7 +10972,7 @@ async function renderSystemLogsView() {
     container.innerHTML = `
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);"></i> ประวัติกิจกรรมระบบ</h3>
+          <h3 style="font-size:1.15rem; font-weight:700;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);" aria-hidden="true"></i> ประวัติกิจกรรมระบบ</h3>
           <p style="font-size:0.83rem; color:var(--text-muted);">ระบบบันทึกความเคลื่อนไหว กิจกรรมการแก้ไข ข้อมูลทางการเงิน และประวัติการจัดส่งเรียลไทม์</p>
         </div>
       </div>
@@ -10798,17 +11001,17 @@ async function renderSystemLogsView() {
 
         <div style="display:flex; flex-direction:column; gap:0.25rem;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">เริ่มวันที่:</label>
-          <input type="date" id="sl-start-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
+          <input aria-label="ประวัติการขาย เริ่มวันที่" type="date" id="sl-start-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
         </div>
 
         <div style="display:flex; flex-direction:column; gap:0.25rem;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ถึงวันที่:</label>
-          <input type="date" id="sl-end-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
+          <input aria-label="ประวัติการขาย ถึงวันที่" type="date" id="sl-end-date" class="form-control" style="font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterSystemLogsTable()">
         </div>
 
         <div style="display:flex; flex-direction:column; gap:0.25rem; grid-column: 1 / -1;">
           <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ค้นหาข้อมูลคำสำคัญ:</label>
-          <input type="text" id="sl-search-input" class="form-control" placeholder="ค้นหาชื่อผู้ดำเนินการ, สิทธิ์, กิจกรรม, รหัสเป้าหมาย หรือรายละเอียดกิจกรรมทั้งหมด..." style="font-size:0.82rem; padding:0.35rem 0.6rem;" onkeyup="filterSystemLogsTable()">
+          <input type="text" id="sl-search-input" class="form-control" placeholder="ค้นหาชื่อผู้ดำเนินการ, สิทธิ์, กิจกรรม, รหัสเป้าหมาย หรือรายละเอียดกิจกรรมทั้งหมด..." aria-label="ค้นหาชื่อผู้ดำเนินการ, สิทธิ์, กิจกรรม, รหัสเป้าหมาย หรือรายละเอียดกิจกรรมทั้งหมด..." style="font-size:0.82rem; padding:0.35rem 0.6rem;" onkeyup="filterSystemLogsTable()">
         </div>
       </div>
 
@@ -10816,11 +11019,11 @@ async function renderSystemLogsView() {
         <table class="data-table" id="sl-table">
           <thead>
             <tr>
-              <th style="width:180px;">วันเวลาที่ทำรายการ</th>
-              <th style="width:150px;">ผู้ดำเนินการ / สิทธิ์</th>
-              <th style="width:180px;">กิจกรรม (Action)</th>
-              <th>เป้าหมาย</th>
-              <th>รายละเอียดกิจกรรม</th>
+              <th scope="col" style="width:180px;">วันเวลาที่ทำรายการ</th>
+              <th scope="col" style="width:150px;">ผู้ดำเนินการ / สิทธิ์</th>
+              <th scope="col" style="width:180px;">กิจกรรม (Action)</th>
+              <th scope="col">เป้าหมาย</th>
+              <th scope="col">รายละเอียดกิจกรรม</th>
             </tr>
           </thead>
           <tbody>
@@ -10878,11 +11081,11 @@ function formatLogDetails(log) {
     html += `<div><strong>สินค้า:</strong> ${d.productName || '-'} (IMEI: <code>${d.imei || '-'}</code>)</div>`;
     if (d.changes && d.changes.new) {
       html += `<div style="margin-top:0.4rem; font-size:0.78rem; background:rgba(0,0,0,0.2); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">`;
-      html += `<div style="font-weight:700; color:var(--accent-gold); margin-bottom:0.2rem;"><i class="fa-solid fa-pen"></i> ฟิลด์ที่แก้ไข:</div>`;
+      html += `<div style="font-weight:700; color:var(--accent-gold); margin-bottom:0.2rem;"><i class="fa-solid fa-pen" aria-hidden="true"></i> ฟิลด์ที่แก้ไข:</div>`;
       for (const field of Object.keys(d.changes.new)) {
         const oldV = d.changes.old ? d.changes.old[field] : '-';
         const newV = d.changes.new[field];
-        html += `<div>• <strong style="color:var(--text-muted);">${field}:</strong> <span style="text-decoration:line-through; color:#ef4444;">${oldV}</span> <i class="fa-solid fa-arrow-right" style="font-size:0.7rem; color:var(--text-muted);"></i> <span style="color:#34d399; font-weight:700;">${newV}</span></div>`;
+        html += `<div>• <strong style="color:var(--text-muted);">${field}:</strong> <span style="text-decoration:line-through; color:#ef4444;">${oldV}</span> <i class="fa-solid fa-arrow-right" style="font-size:0.7rem; color:var(--text-muted);" aria-hidden="true"></i> <span style="color:#34d399; font-weight:700;">${newV}</span></div>`;
       }
       html += `</div>`;
     }
@@ -10964,7 +11167,7 @@ function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
     <form id="record-cost-return-form" onsubmit="event.preventDefault(); submitCostReturn('${saleId}');">
       <div class="form-group" style="text-align:left;">
         <label for="cr-date" style="color:#059669; font-weight:700;">
-          <i class="fa-solid fa-calendar-days"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
+          <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="cr-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700; padding:0.5rem; border-radius:6px;">
         <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาคุณเท่ากับยอดต้นทุนที่โอนคืนจริงนี้ทันที</span>
@@ -10979,7 +11182,7 @@ function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-success" onclick="submitCostReturn('${saleId}')"><i class="fa-solid fa-check-double"></i> ยืนยันบันทึกโอนทุนคืน</button>
+    <button class="btn btn-success" onclick="submitCostReturn('${saleId}')"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันบันทึกโอนทุนคืน</button>
   `;
 
   openModal(`บันทึกโอนเงินทุนคืนบริษัท: ${receiptNumber}`, bodyHtml, footerHtml);
@@ -11027,7 +11230,7 @@ async function submitCostReturn(saleId) {
 
 async function renderSalesHistoryView(selectedBranchId = null, filterStatus = '', startDate = '', endDate = '') {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดประวัติการขายสินค้า...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดประวัติการขายสินค้า...</div>`;
 
   try {
     const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
@@ -11065,7 +11268,7 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
       <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <h3 style="font-size:1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);"></i> ประวัติการขายสินค้า: ${currentBranchName}
+            <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);" aria-hidden="true"></i> ประวัติการขายสินค้า: ${currentBranchName}
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">รายการประวัติบิลขายและใบเสร็จรับเงินทั้งหมด (รวม ${sales.length} รายการ)</p>
         </div>
@@ -11090,18 +11293,18 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
           </div>
           <div style="display:flex; align-items:center; gap:0.4rem;">
             <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">เริ่มวันที่:</label>
-            <input type="date" id="sh-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, this.value, document.getElementById('sh-end-date').value)">
+            <input aria-label="ประวัติการขาย เริ่มวันที่" type="date" id="sh-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, this.value, document.getElementById('sh-end-date').value)">
           </div>
           <div style="display:flex; align-items:center; gap:0.4rem;">
             <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ถึงวันที่:</label>
-            <input type="date" id="sh-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, document.getElementById('sh-start-date').value, this.value)">
+            <input aria-label="ประวัติการขาย ถึงวันที่" type="date" id="sh-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, document.getElementById('sh-start-date').value, this.value)">
           </div>
           ${(startDate || endDate) ? `
             <button class="btn btn-secondary btn-sm" onclick="renderSalesHistoryView('${branchIdParam || ''}', document.getElementById('sh-status-select').value, '', '')" style="font-size:0.82rem; padding:0.25rem 0.5rem; font-weight:700;">
-              <i class="fa-solid fa-rotate-left"></i> ล้างวันที่
+              <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ล้างวันที่
             </button>
           ` : ''}
-          <input type="text" id="sh-search-input" class="form-control" placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, IMEI..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSalesHistoryTable()">
+          <input type="text" id="sh-search-input" class="form-control" placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, IMEI..." aria-label="ค้นหาเลขที่บิล, ชื่อลูกค้า, IMEI..." style="width:200px; font-size:0.82rem; padding:0.25rem 0.5rem;" onkeyup="filterSalesHistoryTable()">
         </div>
       </div>
 
@@ -11110,16 +11313,16 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
         <table class="data-table" id="sh-table">
           <thead>
             <tr>
-              <th style="width:50px; text-align:center;">#</th>
-              <th>เลขที่ใบเสร็จ</th>
-              <th>วันที่ / เวลา</th>
-              ${branchIdParam === 'all' ? '<th>สาขา</th>' : ''}
-              <th>ลูกค้า</th>
-              <th>ยอดเงินสุทธิ</th>
-              <th>ชำระโดย</th>
-              <th>ผู้ขาย</th>
-              <th style="text-align:center;">สถานะ</th>
-              <th style="text-align:center;">ดำเนินการ</th>
+              <th scope="col" style="width:50px; text-align:center;">#</th>
+              <th scope="col">เลขที่ใบเสร็จ</th>
+              <th scope="col">วันที่ / เวลา</th>
+              ${branchIdParam === 'all' ? '<th scope="col">สาขา</th>' : ''}
+              <th scope="col">ลูกค้า</th>
+              <th scope="col">ยอดเงินสุทธิ</th>
+              <th scope="col">ชำระโดย</th>
+              <th scope="col">ผู้ขาย</th>
+              <th scope="col" style="text-align:center;">สถานะ</th>
+              <th scope="col" style="text-align:center;">ดำเนินการ</th>
             </tr>
           </thead>
           <tbody>
@@ -11144,7 +11347,7 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
                   ${branchIdParam === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${branch.name || '-'}</span></td>` : ''}
                   <td>
                     <strong>${customer.name || 'ลูกค้าทั่วไป'}</strong>
-                    ${customer.phone && customer.phone !== '-' ? `<br><span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone"></i> ${customer.phone}</span>` : ''}
+                    ${customer.phone && customer.phone !== '-' ? `<br><span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone" aria-hidden="true"></i> ${customer.phone}</span>` : ''}
                     <div style="margin-top:0.4rem; font-size:0.76rem; border-top:1px dashed var(--border-color); padding-top:0.3rem; line-height:1.4;">
                       ${(sale.items || []).map(item => `
                         <div style="margin-bottom:0.25rem;">
@@ -11164,11 +11367,11 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
                   </td>
                   <td style="text-align:center; white-space:nowrap;">
                     <button class="btn btn-secondary btn-sm" onclick="reprintReceiptVoucher(${idx})">
-                      <i class="fa-solid fa-print"></i> พิมพ์บิล
+                      <i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์บิล
                     </button>
                     ${sale.status === 'completed' && hasVoidPermission ? `
                       <button class="btn btn-danger btn-sm" style="margin-left: 0.35rem;" onclick="voidSaleAction('${sale._id}', '${sale.receiptNumber}')">
-                        <i class="fa-solid fa-ban"></i> ยกเลิกบิล
+                        <i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิกบิล
                       </button>
                     ` : ''}
                   </td>
@@ -11192,7 +11395,7 @@ function voidSaleAction(saleId, receiptNumber) {
 
   const bodyHtml = `
     <div style="text-align:center; padding:0.5rem 0;">
-      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:#d97706; margin-bottom:0.8rem; display:block;"></i>
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:#d97706; margin-bottom:0.8rem; display:block;" aria-hidden="true"></i>
       <h4 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin-bottom:0.6rem;">คุณแน่ใจหรือไม่ที่จะยกเลิกบิลขายนี้?</h4>
       <div style="font-size:1.15rem; font-weight:800; color:var(--accent-primary); font-family:monospace; background:rgba(0,0,0,0.025); border:1px solid var(--border-color); padding:0.5rem; border-radius:6px; margin:0.8rem auto; max-width:320px; letter-spacing:0.5px;">
         ${receiptNumber}
@@ -11209,7 +11412,7 @@ function voidSaleAction(saleId, receiptNumber) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>
-    <button class="btn btn-danger" onclick="submitVoidSale('${saleId}', '${receiptNumber}')"><i class="fa-solid fa-ban"></i> ยืนยันการยกเลิกบิล</button>
+    <button class="btn btn-danger" onclick="submitVoidSale('${saleId}', '${receiptNumber}')"><i class="fa-solid fa-ban" aria-hidden="true"></i> ยืนยันการยกเลิกบิล</button>
   `;
 
   openModal(`ยืนยันการยกเลิกบิลขาย`, bodyHtml, footerHtml);
@@ -11253,7 +11456,7 @@ function reprintReceiptVoucher(index) {
 
 async function renderReleaseStockView(selectedBranchId = null, startDate = '', endDate = '') {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;"></i> กำลังโหลดระบบจ่ายออกสินค้า...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดระบบจ่ายออกสินค้า...</div>`;
 
   try {
     // Ensure master options for branches are loaded
@@ -11294,7 +11497,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1.2rem; margin-bottom:1.5rem; text-align:left;">
         <div class="card" style="display:flex; align-items:center; gap:1rem; padding:1.2rem;">
           <div style="background:rgba(217,119,6,0.1); color:#d97706; padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
-            <i class="fa-solid fa-circle-minus"></i>
+            <i class="fa-solid fa-circle-minus" aria-hidden="true"></i>
           </div>
           <div>
             <div style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">จำนวนที่จ่ายออกสะสม</div>
@@ -11304,7 +11507,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
 
         <div class="card" style="display:flex; align-items:center; gap:1rem; padding:1.2rem;">
           <div style="background:rgba(16,185,129,0.1); color:#10b981; padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
-            <i class="fa-solid fa-hand-holding-dollar"></i>
+            <i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i>
           </div>
           <div>
             <div style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">คืนเครดิตกลับสาขาแล้ว</div>
@@ -11319,21 +11522,21 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
         <div class="card" style="text-align:left; display:flex; flex-direction:column; justify-content:space-between;">
           <div>
             <h3 style="font-size:1.1rem; font-weight:800; color:var(--accent-primary); margin-bottom:0.4rem; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-barcode"></i> จ่ายออกสินค้ารายเครื่อง
+              <i class="fa-solid fa-barcode" aria-hidden="true"></i> จ่ายออกสินค้ารายเครื่อง
             </h3>
             <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.2rem;">สแกนหรือกรอกหมายเลข IMEI เพื่อทำรายการจ่ายออกเดี่ยว</p>
             
             <form id="release-single-dashboard-form" onsubmit="event.preventDefault(); handleDashboardSingleRelease();">
               <div class="form-group" style="margin-bottom:1rem;">
                 <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเลข IMEI <span style="color:#ef4444;">*</span></label>
-                <input type="text" id="db-release-imei" class="form-control" placeholder="พิมพ์หรือยิงสแกน IMEI..." required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+                <input type="text" id="db-release-imei" class="form-control" placeholder="พิมพ์หรือยิงสแกน IMEI..." aria-label="พิมพ์หรือยิงสแกน IMEI..." required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
               </div>
               <div class="form-group" style="margin-bottom:1rem;">
                 <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span></label>
-                <input type="text" id="db-release-single-remark" class="form-control" placeholder="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+                <input type="text" id="db-release-single-remark" class="form-control" placeholder="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" aria-label="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
               </div>
               <button class="btn btn-warning" type="submit" style="width:100%; background:#d97706; border:none; color:#fff; font-weight:700; padding:0.6rem;">
-                <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกเครื่องเดี่ยว
+                <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกเครื่องเดี่ยว
               </button>
             </form>
           </div>
@@ -11342,7 +11545,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
         <!-- Batch Release Form Card -->
         <div class="card" style="text-align:left;">
           <h3 style="font-size:1.1rem; font-weight:800; color:var(--accent-primary); margin-bottom:0.4rem; display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-layer-group"></i> จ่ายออกสินค้าแบบกลุ่ม
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i> จ่ายออกสินค้าแบบกลุ่ม
           </h3>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.2rem;">เพิ่มช่องกรอกหมายเลข IMEI เพื่อทำรายการจ่ายออกแบบล็อต</p>
           
@@ -11351,20 +11554,20 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
               <label style="font-size:0.85rem; font-weight:700; color:var(--text-main); display:block; margin-bottom:0.4rem;">หมายเลข IMEI สินค้า <span style="color:#ef4444;">*</span></label>
               <div id="batch-imei-fields-container" style="display:flex; flex-direction:column; gap:0.5rem; max-height:240px; overflow-y:auto; padding-right:5px; margin-bottom:0.6rem;">
                 <div class="batch-imei-row" style="display:flex; gap:0.5rem; align-items:center;">
-                  <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+                  <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." aria-label="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" aria-label="ลบช่องกรอก IMEI นี้" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </div>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" onclick="addBatchImeiField()" style="font-size:0.8rem; padding:0.35rem 0.7rem; display:inline-flex; align-items:center; gap:0.3rem; font-weight:700; background:#f3f4f6; color:#4b5563; border:1px solid #d1d5db; border-radius:6px; cursor:pointer;">
-                <i class="fa-solid fa-plus"></i> เพิ่มช่อง IMEI
+                <i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มช่อง IMEI
               </button>
             </div>
             <div class="form-group" style="margin-bottom:1rem;">
               <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:#ef4444;">*</span></label>
-              <input type="text" id="db-release-batch-remark" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
+              <input type="text" id="db-release-batch-remark" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" aria-label="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" required style="margin-top:0.4rem; padding:0.55rem; background:#fff;">
             </div>
             <button class="btn btn-warning" type="submit" style="width:100%; background:#d97706; border:none; color:#fff; font-weight:700; padding:0.6rem;">
-              <i class="fa-solid fa-circle-minus"></i> ยืนยันจ่ายออกสินค้าเป็นกลุ่ม
+              <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกสินค้าเป็นกลุ่ม
             </button>
           </form>
         </div>
@@ -11374,7 +11577,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
       <div class="card" style="padding:0; overflow:hidden; text-align:left;">
         <div style="padding:1.2rem; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <div>
-            <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-clock-rotate-left"></i> ประวัติการจ่ายออกและคืนวงเงินเครดิต</h3>
+            <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> ประวัติการจ่ายออกและคืนวงเงินเครดิต</h3>
             <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">รายการสินค้าค้างสต็อกที่ถูกจ่ายออกเพื่อหักลบวงเงินและเคลียร์คลัง</p>
           </div>
           <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -11392,13 +11595,13 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
             <!-- Date Filters -->
             <div style="display:flex; align-items:center; gap:0.4rem;">
               <label style="font-size:0.82rem; font-weight:600; color:var(--text-muted);">ช่วงวันที่:</label>
-              <input type="date" id="release-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
+              <input aria-label="จ่ายออกสินค้า เริ่มวันที่" type="date" id="release-start-date" class="form-control" value="${startDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
               <span style="font-size:0.82rem; color:var(--text-muted);">ถึง</span>
-              <input type="date" id="release-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
+              <input aria-label="จ่ายออกสินค้า ถึงวันที่" type="date" id="release-end-date" class="form-control" value="${endDate}" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="filterReleaseStockHistory()">
             </div>
 
-            <button class="btn btn-secondary btn-sm" onclick="printReleasedStockReport()" style="font-weight:700; font-size:0.8rem; padding:0.35rem 0.7rem;"><i class="fa-solid fa-print"></i> พิมพ์รายงาน</button>
-            <input type="text" id="release-history-search" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า..." style="width:180px; font-size:0.82rem; padding:0.3rem 0.6rem;" onkeyup="filterReleaseHistoryTable()">
+            <button class="btn btn-secondary btn-sm" onclick="printReleasedStockReport()" style="font-weight:700; font-size:0.8rem; padding:0.35rem 0.7rem;"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์รายงาน</button>
+            <input type="text" id="release-history-search" class="form-control" placeholder="ค้นหา IMEI, ชื่อสินค้า..." aria-label="ค้นหา IMEI, ชื่อสินค้า..." style="width:180px; font-size:0.82rem; padding:0.3rem 0.6rem;" onkeyup="filterReleaseHistoryTable()">
           </div>
         </div>
 
@@ -11407,22 +11610,22 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
             <table class="data-table">
               <thead>
                 <tr>
-                  <th style="width:50px; text-align:center;">#</th>
-                  <th>วันที่ทำรายการ</th>
-                  <th>สาขาเดิม</th>
-                  <th>หมายเลข IMEI</th>
-                  <th>รายการสินค้า</th>
-                  <th style="text-align:right;">ทุนที่ได้คืน (เครดิต)</th>
-                  <th>เหตุผล/หมายเหตุ</th>
-                  <th>ผู้ดำเนินการ</th>
-                  ${isAdminOrHq ? `<th class="no-print" style="text-align:center;">การจัดการ</th>` : ''}
+                  <th scope="col" style="width:50px; text-align:center;">#</th>
+                  <th scope="col">วันที่ทำรายการ</th>
+                  <th scope="col">สาขาเดิม</th>
+                  <th scope="col">หมายเลข IMEI</th>
+                  <th scope="col">รายการสินค้า</th>
+                  <th scope="col" style="text-align:right;">ทุนที่ได้คืน (เครดิต)</th>
+                  <th scope="col">เหตุผล/หมายเหตุ</th>
+                  <th scope="col">ผู้ดำเนินการ</th>
+                  ${isAdminOrHq ? `<th scope="col" class="no-print" style="text-align:center;">การจัดการ</th>` : ''}
                 </tr>
               </thead>
               <tbody id="release-history-tbody">
                 ${history.length === 0 ? `
                   <tr>
                     <td colspan="${isAdminOrHq ? 9 : 8}" style="text-align:center; color:var(--text-muted); padding:3rem;">
-                      <i class="fa-solid fa-clipboard-question" style="font-size:2rem; margin-bottom:0.5rem; display:block;"></i> ไม่พบประวัติการจ่ายออกสินค้าที่ตรงกับเงื่อนไขการค้นหา
+                      <i class="fa-solid fa-clipboard-question" style="font-size:2rem; margin-bottom:0.5rem; display:block;" aria-hidden="true"></i> ไม่พบประวัติการจ่ายออกสินค้าที่ตรงกับเงื่อนไขการค้นหา
                     </td>
                   </tr>
                 ` : ''}
@@ -11447,7 +11650,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
                       ${isAdminOrHq ? `
                         <td class="no-print" style="text-align:center;">
                           <button class="btn btn-red btn-sm" onclick="revertReleasedStock('${h.id}', '${h.imei}')" style="background:#ef4444; color:#fff; border:none; padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:4px; cursor:pointer;">
-                            <i class="fa-solid fa-rotate-left"></i> ยกเลิกจ่ายออก
+                            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ยกเลิกจ่ายออก
                           </button>
                         </td>
                       ` : ''}
@@ -11552,7 +11755,7 @@ async function submitReleaseStock(imeis) {
     const previewBodyHtml = `
       <div style="background:rgba(217,119,6,0.06); border:1px solid rgba(217,119,6,0.2); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
         <div style="font-weight:800; font-size:1.05rem; color:#d97706; margin-bottom:0.3rem;">
-          <i class="fa-solid fa-triangle-exclamation"></i> ตรวจสอบข้อมูลสินค้าก่อนยืนยันจ่ายออก
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ตรวจสอบข้อมูลสินค้าก่อนยืนยันจ่ายออก
         </div>
         <div style="font-size:0.83rem; color:var(--text-muted);">
           พบรายการสินค้าพร้อมขายตรงตามระบบจำนวน Host ${items.length} เครื่อง ยอดรวมคืนเครดิต <strong>฿${totalCost.toLocaleString()}</strong>
@@ -11563,10 +11766,10 @@ async function submitReleaseStock(imeis) {
         <table class="data-table" style="font-size:0.82rem; margin:0; width:100%;">
           <thead>
             <tr>
-              <th>หมายเลข IMEI</th>
-              <th>รายการสินค้า</th>
-              <th>สาขาเดิม</th>
-              <th style="text-align:right;">ราคาทุนคืน</th>
+              <th scope="col">หมายเลข IMEI</th>
+              <th scope="col">รายการสินค้า</th>
+              <th scope="col">สาขาเดิม</th>
+              <th scope="col" style="text-align:right;">ราคาทุนคืน</th>
             </tr>
           </thead>
           <tbody>
@@ -11584,7 +11787,7 @@ async function submitReleaseStock(imeis) {
 
       ${missingCount > 0 ? `
         <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); padding:0.8rem; border-radius:8px; margin-bottom:1.2rem; font-size:0.82rem; color:#ef4444; text-align:left; line-height:1.4;">
-          <i class="fa-solid fa-circle-exclamation"></i> <strong>คำเตือน:</strong> ไม่พบข้อมูลสินค้าพร้อมขายในระบบจำนวน ${missingCount} เครื่อง (รายการเหล่านี้จะไม่ถูกดำเนินการจ่ายออก)
+          <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> <strong>คำเตือน:</strong> ไม่พบข้อมูลสินค้าพร้อมขายในระบบจำนวน ${missingCount} เครื่อง (รายการเหล่านี้จะไม่ถูกดำเนินการจ่ายออก)
         </div>
       ` : ''}
 
@@ -11596,7 +11799,7 @@ async function submitReleaseStock(imeis) {
     const previewFooterHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
       <button class="btn btn-warning" id="btn-execute-release" style="background:#d97706; border:none; color:#fff; font-weight:700;">
-        <i class="fa-solid fa-circle-minus"></i> ยืนยันทำรายการจ่ายออก
+        <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันทำรายการจ่ายออก
       </button>
     `;
 
@@ -11627,8 +11830,8 @@ async function submitReleaseStock(imeis) {
           if (dbBatchImeisContainer) {
             dbBatchImeisContainer.innerHTML = `
               <div class="batch-imei-row" style="display:flex; gap:0.5rem; align-items:center;">
-                <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+                <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." aria-label="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" aria-label="ลบช่องกรอก IMEI นี้" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
               </div>
             `;
           }
@@ -11656,8 +11859,8 @@ function addBatchImeiField() {
   div.style.gap = '0.5rem';
   div.style.alignItems = 'center';
   div.innerHTML = `
-    <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
-    <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+    <input type="text" class="form-control db-release-batch-imei-input" placeholder="พิมพ์หรือยิงสแกน IMEI..." aria-label="พิมพ์หรือยิงสแกน IMEI..." required onkeydown="handleBatchImeiKeydown(event, this)" style="padding:0.55rem; background:#fff; font-family:monospace; flex:1;">
+    <button type="button" class="btn btn-secondary btn-sm" onclick="removeBatchImeiField(this)" aria-label="ลบช่องกรอก IMEI นี้" style="padding:0.55rem 0.8rem; background:var(--border-color); border:none; color:var(--text-muted); cursor:pointer;"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
   `;
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
@@ -11803,11 +12006,11 @@ function viewGoodsReceiptDetails(receiptId) {
   // Set status badge
   let statusBadge = '';
   if (receipt.status === 'pending_pricing') {
-    statusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock"></i> รอตั้งราคาคลัง</span>`;
+    statusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคาคลัง</span>`;
   } else if (receipt.status === 'confirmed') {
-    statusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ยืนยันเข้าสต็อกแล้ว</span>`;
+    statusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันเข้าสต็อกแล้ว</span>`;
   } else if (receipt.status === 'rejected') {
-    statusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ถูกปฏิเสธ</span>`;
+    statusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ถูกปฏิเสธ</span>`;
   }
 
   const bodyHtml = `
@@ -11827,7 +12030,7 @@ function viewGoodsReceiptDetails(receiptId) {
       <!-- Product Spec Details -->
       <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
         <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
-          <i class="fa-solid fa-mobile-screen" style="color:var(--accent-gold);"></i> รายละเอียดสินค้า (Product Specs)
+          <i class="fa-solid fa-mobile-screen" style="color:var(--accent-gold);" aria-hidden="true"></i> รายละเอียดสินค้า (Product Specs)
         </div>
         <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
           <div><span style="color:var(--text-muted);">ชื่อรุ่นทางการ:</span> <strong>${p.name || '-'}</strong></div>
@@ -11842,7 +12045,7 @@ function viewGoodsReceiptDetails(receiptId) {
       <!-- IMEI & Pricing Details -->
       <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
         <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
-          <i class="fa-solid fa-barcode" style="color:var(--accent-gold);"></i> ข้อมูลประจำตัวเครื่อง & ราคา
+          <i class="fa-solid fa-barcode" style="color:var(--accent-gold);" aria-hidden="true"></i> ข้อมูลประจำตัวเครื่อง & ราคา
         </div>
         <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
           <div style="grid-column: span 2;">
@@ -11869,7 +12072,7 @@ function viewGoodsReceiptDetails(receiptId) {
       <!-- Tracking & Log info -->
       <div style="border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
         <div style="background:rgba(255,255,255,0.04); padding:0.6rem 1rem; font-weight:700; border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:0.4rem;">
-          <i class="fa-solid fa-user-gear" style="color:var(--accent-gold);"></i> ประวัติการทำรายการ (Audits)
+          <i class="fa-solid fa-user-gear" style="color:var(--accent-gold);" aria-hidden="true"></i> ประวัติการทำรายการ (Audits)
         </div>
         <div style="padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1.5rem;">
           <div><span style="color:var(--text-muted);">คลังปลายทาง:</span> <strong>${branchName}</strong></div>
@@ -11949,10 +12152,10 @@ function openEditSalePricesModal(saleId) {
       <!-- History Container -->
       <div style="margin-top:1.2rem; border-top:1px dashed var(--border-color); padding-top:1rem; text-align:left;">
         <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--text-muted);">
-          <i class="fa-solid fa-clock-rotate-left"></i> ประวัติการแก้ไขราคาย้อนหลัง
+          <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> ประวัติการแก้ไขราคาย้อนหลัง
         </div>
         <div id="sale-edit-history-list" style="max-height:150px; overflow-y:auto; font-size:0.78rem; background:rgba(0,0,0,0.1); border:1px solid var(--border-color); border-radius:6px; padding:0.6rem; color:var(--text-muted);">
-          <i class="fa-solid fa-spinner fa-spin" style="margin-right:0.3rem;"></i> กำลังโหลดประวัติ...
+          <i class="fa-solid fa-spinner fa-spin" style="margin-right:0.3rem;" aria-hidden="true"></i> กำลังโหลดประวัติ...
         </div>
       </div>
     </form>
@@ -11960,7 +12163,7 @@ function openEditSalePricesModal(saleId) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button type="submit" form="edit-sale-prices-form" class="btn btn-warning"><i class="fa-solid fa-save"></i> บันทึกราคาใหม่</button>
+    <button type="submit" form="edit-sale-prices-form" class="btn btn-warning"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกราคาใหม่</button>
   `;
 
   openModal(`แก้ไขราคาขายบิล: ${sale.receiptNumber}`, bodyHtml, footerHtml);

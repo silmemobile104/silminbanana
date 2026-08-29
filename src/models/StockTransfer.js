@@ -60,4 +60,9 @@ const stockTransferSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Transfers are listed from either side of the move, and by status.
+stockTransferSchema.index({ fromBranch: 1, createdAt: -1 });
+stockTransferSchema.index({ toBranch: 1, createdAt: -1 });
+stockTransferSchema.index({ status: 1, createdAt: -1 });
+
 module.exports = mongoose.model('StockTransfer', stockTransferSchema);

@@ -36,4 +36,8 @@ const expenseSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Expenses are filtered by branch and category over an expenseDate range.
+expenseSchema.index({ branch: 1, expenseDate: -1 });
+expenseSchema.index({ category: 1, expenseDate: -1 });
+
 module.exports = mongoose.model('Expense', expenseSchema);

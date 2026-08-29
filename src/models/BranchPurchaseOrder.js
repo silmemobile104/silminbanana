@@ -78,4 +78,8 @@ const branchPurchaseOrderSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Purchase orders are listed per branch and per status, newest-first.
+branchPurchaseOrderSchema.index({ branch: 1, createdAt: -1 });
+branchPurchaseOrderSchema.index({ status: 1, createdAt: -1 });
+
 module.exports = mongoose.model('BranchPurchaseOrder', branchPurchaseOrderSchema);

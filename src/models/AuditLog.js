@@ -30,4 +30,10 @@ const auditLogSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// System log view pages through every entry sorted newest-first, optionally
+// filtered by action. Entity lookups back a record's own history.
+auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ action: 1, createdAt: -1 });
+auditLogSchema.index({ entity: 1, entityId: 1 });
+
 module.exports = mongoose.model('AuditLog', auditLogSchema);

@@ -96,4 +96,9 @@ const saleSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Sales are always queried by branch and/or status over a createdAt range,
+// then sorted newest-first (finance report, sales history, dashboards).
+saleSchema.index({ branch: 1, createdAt: -1 });
+saleSchema.index({ status: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Sale', saleSchema);
