@@ -1,7 +1,7 @@
 const Product = require('../models/Product');
 const Stock = require('../models/Stock');
 const AuditLog = require('../models/AuditLog');
-const { uploadToCloudinary } = require('../config/cloudinary');
+const { uploadImage } = require('../config/cloudinary');
 
 const getAllProducts = async (req, res, next) => {
   try {
@@ -48,8 +48,8 @@ const createProduct = async (req, res, next) => {
 
     let imageUrls = [];
     if (req.file) {
-      const uploadResult = await uploadToCloudinary(req.file.buffer, 'pos_products');
-      imageUrls.push(uploadResult.secure_url);
+      const uploadResult = await uploadImage(req.file.buffer, 'pos_products');
+      imageUrls.push(uploadResult);
     }
 
     let finalVariation = variation || '';

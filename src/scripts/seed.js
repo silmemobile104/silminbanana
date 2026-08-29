@@ -11,7 +11,7 @@ const DailyAudit = require('../models/DailyAudit');
 const AuditLog = require('../models/AuditLog');
 
 const seedData = async () => {
-  const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/silmin_banana_stock';
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/silmin_banana_stock';
   
   try {
     try {
