@@ -1338,6 +1338,15 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
             <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้า${statusLabel} (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
+          ${currentBranch._id !== 'all' && currentBranch.creditLimit ? `
+            <div style="font-size:0.83rem; margin-top:0.35rem; display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap;">
+              <span>วงเงินอนุมัติ: <strong>฿${(currentBranch.creditLimit || 0).toLocaleString()}</strong></span>
+              <span style="color:var(--text-muted);">|</span>
+              <span>ใช้วงเงินไปแล้ว: <strong style="color:#d97706;">฿${(currentBranch.usedCredit || 0).toLocaleString()}</strong></span>
+              <span style="color:var(--text-muted);">|</span>
+              <span>วงเงินคงเหลือ: <strong style="color:#10b981;">฿${Math.max(0, (currentBranch.creditLimit || 0) - (currentBranch.usedCredit || 0)).toLocaleString()}</strong></span>
+            </div>
+          ` : ''}
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
