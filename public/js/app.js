@@ -9102,6 +9102,10 @@ function exportExecutiveReportToExcel() {
 // 2. Export Branch Inventory
 function exportBranchInventoryToExcel() {
   const isAllBranch = document.querySelector('#bi-table th:nth-child(6)') && document.querySelector('#bi-table th:nth-child(6)').innerText.includes('สาขา');
+  let totalCost = 0;
+  let totalPrice = 0;
+  const itemCount = document.querySelectorAll('.bi-row').length;
+
   const rows = Array.from(document.querySelectorAll('.bi-row')).map(tr => {
     const tds = tr.querySelectorAll('td');
     let branchName = '';
@@ -9114,6 +9118,14 @@ function exportBranchInventoryToExcel() {
       priceIdx = 7;
       statusIdx = 8;
     }
+
+    const costRaw = tds[costIdx] ? tds[costIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
+    const priceRaw = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
+    const costNum = parseFloat(costRaw) || 0;
+    const priceNum = parseFloat(priceRaw) || 0;
+    totalCost += costNum;
+    totalPrice += priceNum;
+
     const rowObj = {
       'หมายเลข IMEI': tds[1] ? tds[1].innerText.trim() : '',
       'รายการสินค้า': tds[2] ? tds[2].innerText.trim() : '',
@@ -9123,11 +9135,29 @@ function exportBranchInventoryToExcel() {
     if (isAllBranch) {
       rowObj['สาขา'] = branchName;
     }
-    rowObj['ราคาต้นทุน (บาท)'] = tds[costIdx] ? tds[costIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '';
-    rowObj['ราคาขาย (บาท)'] = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '';
+    rowObj['ราคาต้นทุน (บาท)'] = costNum;
+    rowObj['ราคาขาย (บาท)'] = priceNum;
     rowObj['สถานะสต็อก'] = tds[statusIdx] ? tds[statusIdx].innerText.trim() : '';
     return rowObj;
   });
+
+  // สรุปยอดรวมด้านล่างตาราง Excel
+  if (rows.length > 0) {
+    const summaryRow = {
+      'หมายเลข IMEI': 'ยอดรวมทั้งหมด',
+      'รายการสินค้า': `${itemCount} รายการ`,
+      'ยี่ห้อ / รุ่น': '',
+      'ความจุ / สี': ''
+    };
+    if (isAllBranch) {
+      summaryRow['สาขา'] = '';
+    }
+    summaryRow['ราคาต้นทุน (บาท)'] = totalCost;
+    summaryRow['ราคาขาย (บาท)'] = totalPrice;
+    summaryRow['สถานะสต็อก'] = '';
+    rows.push(summaryRow);
+  }
+
   exportToExcel(rows, 'Branch_Inventory_Stock', 'สินค้าคงคลังสาขา');
 }
 
