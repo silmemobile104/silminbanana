@@ -1384,13 +1384,14 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               <th>ยี่ห้อ / ชื่อรุ่น</th>
               <th>ความจุ / สีสินค้า</th>
               ${currentBranch._id === 'all' ? '<th>สาขา</th>' : ''}
+              <th>ราคาต้นทุน</th>
               <th>ราคาขาย</th>
               <th style="text-align:center;">สถานะสต็อก</th>
               ${canEdit ? `<th style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
-            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 10 : 9) : (canEdit ? 9 : 8)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
               const p = st.product || {};
               const imeiStr = st.imei;
@@ -1398,6 +1399,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               const brandStr = st.brand || p.brand || '-';
               const modelStr = st.model || p.model || '';
               const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
+              const costPriceNum = st.purchase_price !== undefined ? st.purchase_price : (p.purchase_price || 0);
               const priceNum = st.selling_price || p.selling_price || 0;
 
               // Render beautiful localized badges
@@ -1426,6 +1428,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
                   ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
+                  <td><strong style="color:var(--text-main);">฿${costPriceNum.toLocaleString()}</strong></td>
                   <td><strong style="color:#34d399;">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
                     ${badgeHtml}
@@ -9098,17 +9101,32 @@ function exportExecutiveReportToExcel() {
 
 // 2. Export Branch Inventory
 function exportBranchInventoryToExcel() {
+  const isAllBranch = document.querySelector('#bi-table th:nth-child(6)') && document.querySelector('#bi-table th:nth-child(6)').innerText.includes('สาขา');
   const rows = Array.from(document.querySelectorAll('.bi-row')).map(tr => {
     const tds = tr.querySelectorAll('td');
-    return {
-      'รหัส SKU': tds[1] ? tds[1].innerText.trim() : '',
+    let branchName = '';
+    let costIdx = 5;
+    let priceIdx = 6;
+    let statusIdx = 7;
+    if (isAllBranch) {
+      branchName = tds[5] ? tds[5].innerText.trim() : '';
+      costIdx = 6;
+      priceIdx = 7;
+      statusIdx = 8;
+    }
+    const rowObj = {
+      'หมายเลข IMEI': tds[1] ? tds[1].innerText.trim() : '',
       'รายการสินค้า': tds[2] ? tds[2].innerText.trim() : '',
       'ยี่ห้อ / รุ่น': tds[3] ? tds[3].innerText.trim() : '',
-      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : '',
-      'ราคาขาย (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
-      'สถานะสต็อก': tds[6] ? tds[6].innerText.trim() : '',
-      'รายการ IMEI ทั้งหมด': tr.getAttribute('data-search') || ''
+      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : ''
     };
+    if (isAllBranch) {
+      rowObj['สาขา'] = branchName;
+    }
+    rowObj['ราคาต้นทุน (บาท)'] = tds[costIdx] ? tds[costIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '';
+    rowObj['ราคาขาย (บาท)'] = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '';
+    rowObj['สถานะสต็อก'] = tds[statusIdx] ? tds[statusIdx].innerText.trim() : '';
+    return rowObj;
   });
   exportToExcel(rows, 'Branch_Inventory_Stock', 'สินค้าคงคลังสาขา');
 }
