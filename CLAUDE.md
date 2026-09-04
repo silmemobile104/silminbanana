@@ -48,7 +48,10 @@ The workflows, and the models that carry them:
 - **Goods receipt** (`GoodsReceipt`, `stockController`) — staged intake. Items are received, then priced and confirmed in a separate verification step before becoming `Stock`.
 - **Purchase orders** (`BranchPurchaseOrder`, `purchaseOrderController`) — HQ→branch ordering that draws against `Branch.creditLimit` / `usedCredit`.
 - **Transfers** (`StockTransfer`, `transferController`) — inter-branch movement with a printable document.
-- **POS** (`Sale`, `posController`) — sale decrements stock by IMEI, supports cash/transfer and financed sales, plus void-with-approval. Also hosts the executive dashboard and finance/profit aggregations.
+- **POS** (`Sale`, `posController`) — sale decrements stock by IMEI, supports cash/transfer and financed sales, plus void-with-approval. Also hosts the dashboards and finance/profit aggregations:
+  - `GET /pos/executive-dashboard?date=&branchId=` — one day, optionally one branch. Returns today/yesterday revenue and bills, hourly buckets, the 7-day product and branch rollups, low-stock alerts, pending POs, and the activity trail.
+  - `GET /pos/sales-series?range=7d|30d|90d|1y&date=&branchId=` — daily buckets carrying revenue, orders and profit together, plus the equally long window before it. All three metrics ship in one call so the dashboard switches between them without a round trip; every day in the window gets a bucket, including empty ones.
+  - `GET /pos/staff-dashboard?branchId=` — the branch-level equivalent.
 - **`AuditLog`** — cross-cutting activity log. Controllers write to it inline (`{ user, username, userRole, action, entity, entityId, details }`) on mutating operations; follow that pattern for new mutations.
 
 ### Authorization — read this before touching permissions
@@ -57,7 +60,7 @@ The workflows, and the models that carry them:
 
 Permissions are menu keys (`dashboard`, `pos`, `branch-audit`, …). The canonical list is `SYSTEM_MENUS` in `src/controllers/roleController.js`, mirrored by `ALL_SYSTEM_MENUS` in `public/js/app.js`. A `Role` document holds `allowedMenus`; `User.role` is a **string that matches `Role.code`**, not an ObjectId reference.
 
-Adding a menu therefore means touching four places: `SYSTEM_MENUS` (roleController), `ALL_SYSTEM_MENUS` + the `navigateTo` switch + a `render*View` function (app.js), the sidebar markup in `index.html`, and a migration script to grant it to existing admin roles.
+Adding a menu therefore means touching five places: `SYSTEM_MENUS` (roleController), `ALL_SYSTEM_MENUS` + the `navigateTo` switch + a `render*View` function (app.js), the sidebar markup in `index.html` (a flat `<li>` list where `<li class="nav-section">` rows are group labels — `updateSidebarMenuByRole()` hides a label once every item under it is hidden), and a migration script to grant it to existing admin roles.
 
 Branch scoping is done per-controller, not by middleware — controllers read `req.user.branch` (populated by `authenticateToken`) and fall back to a `branchId` query param for HQ users. **HQ status is detected by hardcoded branch code `BR-HQ01` or a name containing `สำนักงานใหญ่`** (see `expenseController.js:13`). That string check is duplicated across several controllers.
 
@@ -67,9 +70,13 @@ One file, one global `state` object (`token`, `user`, `currentView`, `masterOpti
 
 Routing is the `switch` in `navigateTo(viewName)` (`app.js:358`): it sets the page heading/subheading and awaits one `render*View()` function. Each view function fetches its own data and writes a full HTML string into `#content-container` — there is no diffing or component model, so re-rendering a view means calling its render function again. Filter state is passed as render-function arguments (e.g. `renderBranchInventoryView(branchId, status, brand)`), not held in `state`.
 
-Because views build HTML with template-literal interpolation, **any user-supplied string interpolated into markup is an injection risk** — there is currently no `escapeHtml` helper in the codebase.
+Because views build HTML with template-literal interpolation, **any user-supplied string interpolated into markup is an injection risk**. `escapeHtml()` (`app.js:120`) exists for this — use it on every interpolated value that came from the database or a user, and note that most older view code still does not.
 
-Chart.js, SheetJS (XLSX export), and Font Awesome load from CDN in `index.html`. `styles.css` is linked with a `?v=` cache-busting query — bump it when changing CSS.
+Fonts and icons are self-hosted (`public/fonts/`, `public/webfonts/`) and nothing render-blocking comes from a third party. Chart.js and SheetJS are **not** in `index.html`; `loadChartJs()` / `loadXlsx()` fetch them from jsDelivr on first use and cache the promise, so a view that draws a chart must `await loadChartJs()` before touching `window.Chart`.
+
+`public/css/fontawesome.min.css` is a **subset** — only icons found in `app.js`, `index.html` and `SYSTEM_MENUS` have a rule. Using a new `fa-*` class renders an empty box until the subset is rebuilt from the full upstream stylesheet.
+
+Both `styles.css` and `app.js` are linked with `?v=` cache-busting queries — bump both when changing either.
 
 ## Conventions
 
@@ -82,7 +89,11 @@ Chart.js, SheetJS (XLSX export), and Font Awesome load from CDN in `index.html`.
 
 ## Design system
 
-`DESIGN.md` (Thai) specifies the dark theme: `#000000` canvas, `#1d1d1f` elevated surfaces, and `#FFE169` as the **single** accent color — the doc is explicit that a second accent is forbidden. Text on yellow is always `#1d1d1f` (white on `#FFE169` fails contrast at 1.3:1). Consult it before changing anything visual.
+`DESIGN.md` (Thai) is the single source of visual truth: a light console (`#F6F6F7` canvas, white cards) with a dark navigation rail (`#141416`). Colour classifies — category icon plates, status badges, links — it is never decorative, and there are no gradients anywhere. `#FFE169` is the brand fill only (logo, primary button, active rail marker, revenue curve); when the accent has to be *read* it becomes `--primary-ink` (`#7A5A00`). Text on yellow is always `#1d1d1f` — white on `#FFE169` is 1.29:1.
+
+Every colour, size and radius is a token in `public/css/styles.css`. The bottom of the `:root` block maps the ~2,000 legacy token names `app.js` still writes inline (`--text-muted`, `--bg-card`, `--canvas-elevated`, …) onto the current ones — that mapping is what lets one stylesheet re-skin all 20 views, so do not delete it. Bump both `?v=` query strings in `index.html` after changing CSS or JS.
+
+Two traps the doc spells out: a dark card is the `.card-invert` class (which re-points its own tokens) and never hand-written `style="color:white"` — that paints the wrapper while children with their own colour stay unreadable. And the three `document.write()` print templates never load `styles.css`, so `var(--token)` inside them resolves to nothing and `border: 1px solid var(--hairline)` silently drops the whole border; print templates use literal hex only.
 
 ## Gotchas
 

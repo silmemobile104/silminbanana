@@ -425,17 +425,49 @@ const updateFinancePayoutStatus = async (req, res, next) => {
 // Executive Dashboard Analytics
 const getExecutiveDashboard = async (req, res, next) => {
   try {
-    const todayStart = new Date();
+    // ?date=YYYY-MM-DD selects the day being reported on; omitted means today.
+    const todayStart = req.query.date ? new Date(req.query.date + 'T00:00:00') : new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const todayEnd = new Date();
+    const todayEnd = new Date(todayStart);
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [todaySales, allStock, branches] = await Promise.all([
-      Sale.find({ createdAt: { $gte: todayStart, $lte: todayEnd }, status: { $ne: 'voided' } }).populate('branch'),
-      Stock.find({ status: 'in_stock' }).populate('product').populate('branch'),
-      Branch.find({ isActive: true })
-    ]);
+    // ?branchId scopes every figure on the page to one branch.
+    const scopeBranch = (req.query.branchId && req.query.branchId !== 'all') ? req.query.branchId : null;
+
+    const saleWindow = (from, to) => {
+      const q = { createdAt: { $gte: from, $lte: to }, status: { $ne: 'voided' } };
+      if (scopeBranch) q.branch = scopeBranch;
+      return q;
+    };
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayEnd);
+    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+
+    // The week behind the reported day, for the "สัปดาห์นี้" rollups.
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 6);
+
+    const stockQuery = { status: 'in_stock' };
+    if (scopeBranch) stockQuery.branch = scopeBranch;
+
+    const poQuery = { status: 'pending_imei' };
+    if (scopeBranch) poQuery.branch = scopeBranch;
+
+    const BranchPurchaseOrder = require('../models/BranchPurchaseOrder');
+
+    const [todaySales, allStock, branches, yesterdaySales, weekSales, pendingPurchaseOrders, recentLogs] =
+      await Promise.all([
+        Sale.find(saleWindow(todayStart, todayEnd)).populate('branch'),
+        Stock.find(stockQuery).populate('product').populate('branch'),
+        Branch.find({ isActive: true }),
+        Sale.find(saleWindow(yesterdayStart, yesterdayEnd)).select('grandTotal'),
+        Sale.find(saleWindow(weekStart, todayEnd)).populate('branch').select('grandTotal items branch createdAt'),
+        BranchPurchaseOrder.countDocuments(poQuery),
+        AuditLog.find({}).sort({ createdAt: -1 }).limit(6).select('action entity username details createdAt')
+      ]);
 
     // 1. Calculate Today's Sales KPIs
     let todayRevenue = 0;
@@ -550,6 +582,58 @@ const getExecutiveDashboard = async (req, res, next) => {
       time: new Date(s.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
     }));
 
+    // --- The day's shape, and how it compares to the one before -----------
+    let yesterdayRevenue = 0;
+    yesterdaySales.forEach(x => { yesterdayRevenue += x.grandTotal || 0; });
+
+    // Always 24 buckets, so the sparkline never reasons about missing hours.
+    const hourlyRevenue = new Array(24).fill(0);
+    const hourlyOrders = new Array(24).fill(0);
+    todaySales.forEach(x => {
+      const h = new Date(x.createdAt).getHours();
+      hourlyRevenue[h] += x.grandTotal || 0;
+      hourlyOrders[h] += 1;
+    });
+
+    // --- The week behind: products and branches ---------------------------
+    const weekProductMap = {};
+    const weekBranchMap = {};
+    branches.forEach(b => {
+      weekBranchMap[b._id.toString()] = {
+        branchId: b._id,
+        name: b.name,
+        code: b.code,
+        revenue: 0,
+        bills: 0
+      };
+    });
+
+    weekSales.forEach(x => {
+      (x.items || []).forEach(it => {
+        const name = it.productName || it.imei || 'สินค้าไม่ระบุชื่อ';
+        if (!weekProductMap[name]) weekProductMap[name] = { productName: name, quantity: 0, revenue: 0 };
+        weekProductMap[name].quantity += (it.quantity || 1);
+        weekProductMap[name].revenue += (it.totalPrice || 0);
+      });
+      if (x.branch) {
+        const key = (x.branch._id || x.branch).toString();
+        if (weekBranchMap[key]) {
+          weekBranchMap[key].revenue += x.grandTotal || 0;
+          weekBranchMap[key].bills += 1;
+        }
+      }
+    });
+
+    const weekTopProducts = Object.values(weekProductMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    // Scoped to one branch, the other four would be a list of zeroes rather
+    // than a comparison.
+    const weekBranchPerformance = Object.values(weekBranchMap)
+      .filter(x => !scopeBranch || String(x.branchId) === String(scopeBranch))
+      .sort((a, b) => b.revenue - a.revenue);
+
     res.json({
       success: true,
       executiveStats: {
@@ -564,9 +648,98 @@ const getExecutiveDashboard = async (req, res, next) => {
         branchPerformance: Object.values(branchSalesMap),
         topSellingProducts,
         lowStockAlerts: lowStockAlerts.slice(0, 10),
-        recentSales
+        recentSales,
+        // --- added for the executive dashboard composition ---
+        reportDate: todayStart.toISOString().slice(0, 10),
+        branchScope: scopeBranch || 'all',
+        yesterdayRevenue,
+        yesterdayBills: yesterdaySales.length,
+        hourlyRevenue,
+        hourlyOrders,
+        weekTopProducts,
+        weekBranchPerformance,
+        pendingPurchaseOrders,
+        recentActivity: recentLogs
       }
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/*
+ * Daily buckets for the sales-performance chart, plus the same totals for the
+ * window immediately before it so the page can state a real change rather
+ * than an assumed one.
+ */
+const getSalesSeries = async (req, res, next) => {
+  try {
+    const RANGES = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
+    const days = RANGES[req.query.range] || 7;
+
+    const scopeBranch = (req.query.branchId && req.query.branchId !== 'all') ? req.query.branchId : null;
+
+    const end = req.query.date ? new Date(req.query.date + 'T00:00:00') : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    const start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    start.setHours(0, 0, 0, 0);
+
+    // The equally long window immediately before, for the comparison.
+    const prevEnd = new Date(start);
+    prevEnd.setMilliseconds(prevEnd.getMilliseconds() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - (days - 1));
+    prevStart.setHours(0, 0, 0, 0);
+
+    const scoped = (from, to) => {
+      const q = { createdAt: { $gte: from, $lte: to }, status: { $ne: 'voided' } };
+      if (scopeBranch) q.branch = scopeBranch;
+      return q;
+    };
+
+    const [sales, prevSales] = await Promise.all([
+      Sale.find(scoped(start, end)).select('grandTotal totalProfit createdAt'),
+      Sale.find(scoped(prevStart, prevEnd)).select('grandTotal totalProfit')
+    ]);
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    // Every day in the window gets a bucket, including the ones with no sales.
+    const buckets = [];
+    const index = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      const k = key(d);
+      const b = { date: k, revenue: 0, orders: 0, profit: 0 };
+      index[k] = b;
+      buckets.push(b);
+    }
+
+    const totals = { revenue: 0, orders: 0, profit: 0 };
+    sales.forEach(x => {
+      const b = index[key(new Date(x.createdAt))];
+      if (b) {
+        b.revenue += x.grandTotal || 0;
+        b.orders += 1;
+        b.profit += x.totalProfit || 0;
+      }
+      totals.revenue += x.grandTotal || 0;
+      totals.orders += 1;
+      totals.profit += x.totalProfit || 0;
+    });
+
+    const previous = { revenue: 0, orders: 0, profit: 0 };
+    prevSales.forEach(x => {
+      previous.revenue += x.grandTotal || 0;
+      previous.orders += 1;
+      previous.profit += x.totalProfit || 0;
+    });
+
+    res.json({ success: true, range: req.query.range || '7d', days, buckets, totals, previous });
   } catch (err) {
     next(err);
   }
@@ -859,9 +1032,13 @@ const getStaffDashboard = async (req, res, next) => {
       stockQuery.branch = branchId;
     }
 
-    const auditQuery = {
-      auditDate: { $gte: todayStart, $lte: todayEnd }
-    };
+    // auditDate is a YYYY-MM-DD string, not a Date. Filtering it with a Date
+    // range matched nothing, which is why the audit card read "ยังไม่ได้ตรวจ"
+    // even on days a branch had already submitted its count.
+    const pad = (n) => String(n).padStart(2, '0');
+    const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const auditQuery = { auditDate: dayKey(todayStart) };
     if (branchId) {
       auditQuery.branch = branchId;
     }
@@ -881,16 +1058,23 @@ const getStaffDashboard = async (req, res, next) => {
     });
 
     const productCounts = {};
+    const productImages = {};
     stockItems.forEach(st => {
       if (st.product) {
         const key = `${st.product.brand} ${st.product.model} ${st.product.variation || ''}`.trim();
         productCounts[key] = (productCounts[key] || 0) + 1;
+        // First image wins; the rollup is by model, so any unit's photo stands
+        // in for the group.
+        if (!productImages[key] && st.product.images && st.product.images.length) {
+          productImages[key] = st.product.images[0];
+        }
       }
     });
 
     const stockSummary = Object.keys(productCounts).map(name => ({
       productName: name,
-      count: productCounts[name]
+      count: productCounts[name],
+      image: productImages[name] || null
     })).sort((a, b) => b.count - a.count);
 
     // Group calculations by branch for branch cards
@@ -939,6 +1123,68 @@ const getStaffDashboard = async (req, res, next) => {
       totalStockToday: card.totalStockCount + card.todaySalesQty
     }));
 
+    // Revenue by hour of the day. Always 24 buckets so the sparkline never has
+    // to reason about missing hours.
+    const hourlyRevenue = new Array(24).fill(0);
+    todaySales.forEach(s => {
+      hourlyRevenue[new Date(s.createdAt).getHours()] += s.grandTotal || 0;
+    });
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayEnd);
+    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+
+    const yesterdayQuery = {
+      createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd },
+      status: { $ne: 'voided' }
+    };
+    if (branchId) yesterdayQuery.branch = branchId;
+
+    // The seven days before today, for the alternative comparison basis the
+    // dashboard's compare control offers.
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const weekQuery = {
+      createdAt: { $gte: weekStart, $lt: todayStart },
+      status: { $ne: 'voided' }
+    };
+    if (branchId) weekQuery.branch = branchId;
+
+    const transferQuery = { status: { $in: ['pending', 'approved', 'in_transit'] } };
+    if (branchId) transferQuery.toBranch = branchId;
+
+    const receiptQuery = { status: 'pending_pricing' };
+    if (branchId) receiptQuery.branch = branchId;
+
+    const poQuery = { status: 'pending_imei' };
+    if (branchId) poQuery.branch = branchId;
+
+    const StockTransfer = require('../models/StockTransfer');
+    const GoodsReceipt = require('../models/GoodsReceipt');
+    const BranchPurchaseOrder = require('../models/BranchPurchaseOrder');
+
+    const [yesterdaySales, weekSales, transfersWaiting, receiptsWaiting, ordersWaiting, recentLogs] =
+      await Promise.all([
+        Sale.find(yesterdayQuery).select('grandTotal'),
+        Sale.find(weekQuery).select('grandTotal'),
+        StockTransfer.countDocuments(transferQuery),
+        GoodsReceipt.countDocuments(receiptQuery),
+        BranchPurchaseOrder.countDocuments(poQuery),
+        AuditLog.find({}).sort({ createdAt: -1 }).limit(6).select('action entity username createdAt')
+      ]);
+
+    let yesterdayRevenue = 0;
+    yesterdaySales.forEach(s => { yesterdayRevenue += s.grandTotal || 0; });
+
+    let weekRevenue = 0;
+    weekSales.forEach(s => { weekRevenue += s.grandTotal || 0; });
+    const last7AvgRevenue = weekRevenue / 7;
+
+    // A model down to its last two units is worth surfacing before it hits zero.
+    const LOW_STOCK_THRESHOLD = 2;
+    const lowStockCount = stockSummary.filter(x => x.count <= LOW_STOCK_THRESHOLD).length;
+
     res.json({
       success: true,
       stats: {
@@ -950,7 +1196,22 @@ const getStaffDashboard = async (req, res, next) => {
         auditStatus: todayAudits.length > 0 ? todayAudits[0].status : 'pending',
         recentSales: todaySales.slice(0, 5),
         stockSummary: stockSummary.slice(0, 8),
-        branchCards
+        branchCards,
+        // --- added for the dashboard composition ---
+        hourlyRevenue,
+        yesterdayRevenue,
+        yesterdaySalesCount: yesterdaySales.length,
+        last7AvgRevenue,
+        lowStockCount,
+        pendingAuditBranches: activeBranches.length - todayAudits.length,
+        actionItems: {
+          audit: Math.max(activeBranches.length - todayAudits.length, 0),
+          transfers: transfersWaiting,
+          receipts: receiptsWaiting,
+          purchaseOrders: ordersWaiting
+        },
+        recentActivity: recentLogs,
+        serverTime: new Date()
       }
     });
   } catch (err) {
@@ -1078,6 +1339,7 @@ module.exports = {
   getFinanceProfitReport,
   updateFinancePayoutStatus,
   getExecutiveDashboard,
+  getSalesSeries,
   getExecutiveReportRange,
   voidSale,
   getStaffDashboard,

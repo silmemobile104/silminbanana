@@ -43,7 +43,7 @@ function getUserAllowedMenus(userRole) {
 // Role Name Resolver Helper (Code -> Name)
 function formatRoleName(roleKey, rolesList = []) {
   if (!roleKey) return '-';
-  
+
   const cache = (rolesList && rolesList.length > 0) ? rolesList : (window.masterRolesCache || []);
   const found = cache.find(r => r.code === roleKey || String(r._id) === String(roleKey));
   if (found && found.name) {
@@ -203,6 +203,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, isFormData = fa
       throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
     }
     const result = await res.json();
+    markSynced();
     if (!res.ok) {
       if (result.message && (result.message.includes('เซสชันหมดอายุ') || result.message.includes('หมดอายุ') || result.message.includes('jwt expired') || result.message.includes('token'))) {
         logout();
@@ -318,14 +319,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 function showCustomConfirm(title, message, onConfirm, onCancel = null, type = 'confirm') {
-  let iconHtml = '<i class="fa-solid fa-circle-question" style="color:var(--primary);" aria-hidden="true"></i>';
+  let iconHtml = '<i class="fa-solid fa-circle-question" style="color:var(--accent-ink);" aria-hidden="true"></i>';
   let confirmBtnStyle = 'background:var(--primary); border:none;';
-  
+
   if (type === 'warning' || type === 'danger') {
     iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--ink);" aria-hidden="true"></i>';
     confirmBtnStyle = 'background:var(--ink); border:none;';
   }
-  
+
   const bodyHtml = `
     <div style="padding:1.5rem 1rem; color:var(--text-main); font-family:'Sarabun'; text-align:center;">
       <div style="font-size:3.5rem; margin-bottom:1.2rem;">
@@ -338,12 +339,12 @@ function showCustomConfirm(title, message, onConfirm, onCancel = null, type = 'c
     <button class="btn btn-secondary" onclick="closeModal(); if(window.onCustomConfirmCancel) window.onCustomConfirmCancel();" style="font-weight:700; padding:0.55rem 1.4rem; font-size:0.85rem;">ยกเลิก</button>
     <button class="btn btn-primary" id="custom-confirm-btn" onclick="closeModal(); if(window.onCustomConfirmApprove) window.onCustomConfirmApprove();" style="padding:0.55rem 1.6rem; font-weight:700; font-size:0.85rem; ${confirmBtnStyle}">ตกลง</button>
   `;
-  
+
   window.onCustomConfirmApprove = onConfirm;
   window.onCustomConfirmCancel = onCancel;
-  
+
   openModal(title, bodyHtml, footerHtml);
-  
+
   const modalCard = document.querySelector('#app-modal .modal-card');
   if (modalCard) {
     modalCard.style.maxWidth = '480px';
@@ -398,8 +399,8 @@ async function updateReceiptVerificationBadge() {
           badge.style.display = 'inline-flex';
           badge.style.alignItems = 'center';
           badge.style.justifyContent = 'center';
-          badge.style.background = 'var(--ink)';
-          badge.style.color = 'var(--canvas-elevated)';
+          badge.style.background = 'var(--nav-badge-bg)';
+          badge.style.color = 'var(--nav-badge-fg)';
           badge.style.fontSize = '0.72rem';
           badge.style.fontWeight = '800';
           badge.style.borderRadius = '20px';
@@ -453,8 +454,8 @@ async function updateGoodsReceiptBadge() {
           badge.style.display = 'inline-flex';
           badge.style.alignItems = 'center';
           badge.style.justifyContent = 'center';
-          badge.style.background = 'var(--ink)';
-          badge.style.color = 'var(--canvas-elevated)';
+          badge.style.background = 'var(--nav-badge-bg)';
+          badge.style.color = 'var(--nav-badge-fg)';
           badge.style.fontSize = '0.72rem';
           badge.style.fontWeight = '800';
           badge.style.borderRadius = '20px';
@@ -489,6 +490,26 @@ function updateSidebarMenuByRole(userRole) {
       }
     }
   });
+
+  // A group label is only meaningful while something under it is still
+  // visible; a role that cannot reach any purchasing screen should not be
+  // shown the word "จัดซื้อ" sitting on its own.
+  const items = Array.from(document.querySelectorAll('.sidebar-menu > li'));
+  let currentSection = null;
+  let sectionHasVisible = false;
+  const closeSection = () => {
+    if (currentSection) currentSection.style.display = sectionHasVisible ? 'block' : 'none';
+  };
+  items.forEach(li => {
+    if (li.classList.contains('nav-section')) {
+      closeSection();
+      currentSection = li;
+      sectionHasVisible = false;
+      return;
+    }
+    if (li.querySelector('.nav-link') && li.style.display !== 'none') sectionHasVisible = true;
+  });
+  closeSection();
   updateReceiptVerificationBadge();
   updateGoodsReceiptBadge();
   updateBranchAuditBadge();
@@ -515,7 +536,7 @@ async function navigateTo(viewName) {
   }
 
   state.currentView = viewName;
-  
+
   document.querySelectorAll('.nav-link').forEach(link => {
     if (link.getAttribute('data-view') === viewName) {
       link.classList.add('active');
@@ -535,12 +556,12 @@ async function navigateTo(viewName) {
     switch (viewName) {
       case 'dashboard':
         heading.innerText = 'แดชบอร์ดผู้บริหาร';
-        subheading.innerText = 'สรุปยอดขาย ประสิทธิภาพรายสาขา มูลค่าสต็อกสินค้าคงคลัง และสถานะการนับสต็อกประจำวันเรียลไทม์';
+        subheading.innerText = 'ภาพรวมธุรกิจและการดำเนินงานทั้งหมด';
         await renderDashboardView();
         break;
       case 'staff-dashboard':
         heading.innerText = 'แดชบอร์ดสำหรับพนักงาน';
-        subheading.innerText = 'สรุปข้อมูลพื้นฐานทั่วไป รายการขายประจำวัน สถานะสต็อกสินค้า และการส่งตรวจนับคลังประจำวัน';
+        subheading.innerText = 'ภาพรวมการขายและสถานะการดำเนินงานของทุกสาขา';
         await renderStaffDashboardView();
         break;
       case 'pos':
@@ -711,514 +732,1160 @@ function initAppSession() {
 
 /* ==========================================================================
    VIEW 1.5: STAFF DASHBOARD
+
+   Three bands, in the order an operator reads them:
+     1. What happened today — revenue and its shape, bills, stock, the count.
+     2. What is true now    — branch standings, what is waiting, what is left.
+     3. What just happened  — the day's sales and the activity trail.
    ========================================================================== */
+
+const THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const THAI_MONTHS_LONG = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
+function thaiDate(d, long = false) {
+  const months = long ? THAI_MONTHS_LONG : THAI_MONTHS_SHORT;
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+}
+
+function thaiTime(d) {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} น.`;
+}
+
+function baht(n) {
+  return '฿' + Math.round(Number(n) || 0).toLocaleString('en-US');
+}
+
+/*
+ * The revenue curve is inline SVG rather than a Chart.js canvas. It is the
+ * first thing on the page, it has no axes, no tooltip and no interaction, so
+ * it paints with the HTML instead of waiting on a 70KB library.
+ * preserveAspectRatio="none" stretches it to whatever width the card gets;
+ * vector-effect keeps the stroke at 2px while that happens.
+ */
+function sparklineSvg(values, id, opts = {}) {
+  const W = 400;
+  const H = opts.height || 118;
+  const PAD = opts.pad || 8;
+  const stroke = opts.stroke || '#F2C230';
+  const fillOpacity = opts.fillOpacity === undefined ? 0.30 : opts.fillOpacity;
+  const className = opts.className || 'spark';
+  const series = (values && values.length > 1) ? values : [0, 0];
+  const n = series.length;
+  const max = Math.max.apply(null, series.concat([1]));
+
+  const pts = series.map((v, i) => [
+    (i / (n - 1)) * W,
+    H - PAD - ((Number(v) || 0) / max) * (H - PAD * 2)
+  ]);
+
+  // Catmull-Rom through the points, expressed as cubic beziers, so the line
+  // reads as a curve instead of a polygon.
+  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+  }
+
+  const gid = `spark-fill-${id}`;
+  const label = opts.label || 'กราฟยอดขายรายชั่วโมงของวันนี้';
+  return `
+    <svg class="${className}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+         aria-label="${label}" focusable="false">
+      <defs>
+        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${stroke}" stop-opacity="${fillOpacity}"></stop>
+          <stop offset="100%" stop-color="${stroke}" stop-opacity="0"></stop>
+        </linearGradient>
+      </defs>
+      <path d="${d} L ${W} ${H} L 0 ${H} Z" fill="url(#${gid})"></path>
+      <path d="${d}" fill="none" stroke="${stroke}" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    </svg>`;
+}
+
+function deltaHtml(current, previous, label) {
+  let pct = 0;
+  if (previous > 0) pct = ((current - previous) / previous) * 100;
+  else if (current > 0) pct = 100;
+
+  const dir = pct > 0.5 ? 'up' : pct < -0.5 ? 'down' : 'flat';
+  const icon = dir === 'up' ? 'fa-arrow-up' : dir === 'down' ? 'fa-arrow-down' : 'fa-minus';
+  return `<span class="delta delta-${dir}">
+    <i class="fa-solid ${icon}" aria-hidden="true"></i><b>${Math.abs(Math.round(pct))}%</b> ${escapeHtml(label)}
+  </span>`;
+}
+
+/*
+ * DailyAudit.status is 'Pending Verification' | 'Verified' | 'Rejected'.
+ * Older documents carry lower-case words, so both spellings are accepted here
+ * rather than compared exactly.
+ */
+function auditCardState(stats) {
+  if (!stats.auditSubmitted) {
+    return { phrase: 'ยังไม่ได้ตรวจ', sub: 'ต้องสแกนส่งรายงาน', cta: 'เริ่มตรวจสอบสต็อก' };
+  }
+  const st = String(stats.auditStatus || '').toLowerCase();
+  if (st.indexOf('verif') >= 0 || st.indexOf('approve') >= 0) {
+    return { phrase: 'ผ่านการตรวจแล้ว', sub: 'สำนักงานใหญ่ยืนยันแล้ววันนี้', cta: 'ดูผลการตรวจ' };
+  }
+  if (st.indexOf('reject') >= 0) {
+    return { phrase: 'ไม่ผ่านการตรวจ', sub: 'ต้องนับใหม่และส่งอีกครั้ง', cta: 'ตรวจนับอีกครั้ง' };
+  }
+  return { phrase: 'รอสำนักงานใหญ่', sub: 'ส่งรายงานแล้ว รอการอนุมัติ', cta: 'ดูรายงานที่ส่ง' };
+}
+
+const ACTIVITY_LABELS = {
+  CREATE_POS_SALE: { text: 'มีการขายสินค้า', icon: 'fa-cart-shopping', tone: 'green' },
+  VOID_SALE: { text: 'ยกเลิกรายการขาย', icon: 'fa-circle-minus', tone: 'rose' },
+  UPDATE_SALE_SELLING_PRICES: { text: 'แก้ไขราคาขาย', icon: 'fa-coins', tone: 'amber' },
+  SUBMIT_GOODS_RECEIPT: { text: 'แจ้งรับสินค้าเข้าสต็อก', icon: 'fa-truck-ramp-box', tone: 'blue' },
+  CONFIRM_GOODS_RECEIPT: { text: 'ยืนยันรับสินค้าเข้าสต็อก', icon: 'fa-clipboard-check', tone: 'blue' },
+  UPDATE_GOODS_RECEIPT: { text: 'แก้ไขใบรับสินค้า', icon: 'fa-file-invoice', tone: 'blue' },
+  EDIT_BRANCH_STOCK: { text: 'อัปเดตสต็อกสาขา', icon: 'fa-boxes-stacked', tone: 'amber' },
+  SUBMIT_DAILY_AUDIT: { text: 'ส่งผลนับสต็อกประจำวัน', icon: 'fa-barcode', tone: 'violet' },
+  SUBMIT_DAILY_CHECK: { text: 'ส่งผลนับสต็อกประจำวัน', icon: 'fa-barcode', tone: 'violet' },
+  RESUBMIT_DAILY_CHECK: { text: 'ส่งผลนับสต็อกอีกครั้ง', icon: 'fa-barcode', tone: 'violet' },
+  HQ_AUTO_VERIFY: { text: 'ตรวจสอบสต็อกผ่านแล้ว', icon: 'fa-clipboard-check', tone: 'green' },
+  AUDIT_ITEM_DECISION: { text: 'ตัดสินผลการนับสต็อก', icon: 'fa-clipboard-list', tone: 'violet' },
+  CREATE_BRANCH_PURCHASE_ORDER: { text: 'สร้างใบสั่งซื้อ (PO)', icon: 'fa-cart-flatbed', tone: 'violet' },
+  RECEIVE_BRANCH_PURCHASE_ORDER: { text: 'รับสินค้าตามใบสั่งซื้อ', icon: 'fa-cart-flatbed', tone: 'green' },
+  MARK_PO_AS_RECEIVED: { text: 'ปิดใบสั่งซื้อ', icon: 'fa-cart-flatbed', tone: 'green' },
+  CREATE_TRANSFER: { text: 'สร้างใบโอนย้ายสินค้า', icon: 'fa-arrow-right-arrow-left', tone: 'blue' },
+  RELEASE_STOCK_ITEM: { text: 'จ่ายออกสินค้า', icon: 'fa-circle-minus', tone: 'orange' },
+  CREATE_EXPENSE: { text: 'บันทึกค่าใช้จ่าย', icon: 'fa-coins', tone: 'amber' },
+  USER_LOGIN: { text: 'เข้าสู่ระบบ', icon: 'fa-right-to-bracket', tone: 'slate' },
+  CREATE_USER: { text: 'เพิ่มพนักงานใหม่', icon: 'fa-users-gear', tone: 'slate' },
+  UPDATE_USER: { text: 'แก้ไขข้อมูลพนักงาน', icon: 'fa-users-gear', tone: 'slate' },
+  CREATE_BRANCH: { text: 'เพิ่มสาขาใหม่', icon: 'fa-store', tone: 'slate' },
+  UPDATE_BRANCH: { text: 'แก้ไขข้อมูลสาขา', icon: 'fa-store', tone: 'slate' }
+};
+
+function activityMeta(action) {
+  return ACTIVITY_LABELS[action] ||
+    { text: String(action || 'กิจกรรมระบบ').replace(/_/g, ' ').toLowerCase(), icon: 'fa-clock-rotate-left', tone: 'slate' };
+}
+
+// The dashboard is re-read by its own controls (compare basis, branch sort)
+// without another round trip, so the payload stays reachable after render.
+let dashStats = null;
+
+function setRevenueCompare(mode) {
+  const box = document.getElementById('dash-revenue-delta');
+  if (!box || !dashStats) return;
+  const basis = mode === 'avg7' ? (dashStats.last7AvgRevenue || 0) : (dashStats.yesterdayRevenue || 0);
+  const label = mode === 'avg7' ? 'จากค่าเฉลี่ย 7 วัน' : 'จากเมื่อวาน';
+  box.innerHTML = deltaHtml(dashStats.todayRevenue || 0, basis, label);
+}
+
+function sortBranchRows(mode) {
+  const body = document.getElementById('dash-branch-rows');
+  if (!body || !dashStats) return;
+  const cards = (dashStats.branchCards || []).slice();
+  if (mode === 'stock') cards.sort((a, b) => b.totalStockCount - a.totalStockCount);
+  else if (mode === 'name') cards.sort((a, b) => String(a.branchName).localeCompare(String(b.branchName), 'th'));
+  else cards.sort((a, b) => b.todaySalesAmount - a.todaySalesAmount);
+  body.innerHTML = branchRowsHtml(cards);
+}
+
+function branchRowsHtml(cards) {
+  if (!cards.length) {
+    return `<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--body-muted);">ยังไม่มีข้อมูลสาขา</td></tr>`;
+  }
+  return cards.map((c, i) => `
+    <tr>
+      <td class="rank-num">${String(i + 1).padStart(2, '0')}</td>
+      <td class="cell-flex">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span class="tile tile-xs tile-amber" aria-hidden="true"><i class="fa-solid fa-store" aria-hidden="true"></i></span>
+          <span class="row-body">
+            <span class="row-title">${escapeHtml(c.branchName || '-')}</span>
+            <span class="row-sub">${escapeHtml(c.branchCode || '-')}</span>
+          </span>
+        </div>
+      </td>
+      <td style="text-align:center;">${(c.totalStockCount || 0).toLocaleString()} เครื่อง</td>
+      <td style="text-align:center;">${(c.todaySalesQty || 0).toLocaleString()}</td>
+      <td style="text-align:right; font-weight:600;">${baht(c.todaySalesAmount)}</td>
+      <td style="text-align:right;">
+        <button class="link-quiet" onclick="openBranchInventory('${c.branchId}')"
+                aria-label="ดูสต็อกของ ${escapeHtml(c.branchName || '')}">
+          <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// The branch table's chevron should land on that branch's stock, not on an
+// unfiltered list the operator then has to narrow by hand.
+async function openBranchInventory(branchId) {
+  await navigateTo('branch-inventory');
+  await renderBranchInventoryView(branchId);
+}
+
 async function renderStaffDashboardView() {
   const container = document.getElementById('content-container');
   container.innerHTML = `
-    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-      <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary); margin-bottom:1rem;" aria-hidden="true"></i>
-      <br><span style="font-size:1.1rem; font-weight:600; color:var(--text-main);">กำลังโหลดแดชบอร์ดพนักงาน...</span>
-    </div>
-  `;
+    <div class="card">
+      <div class="empty-state">
+        <div class="page-loading-spinner" aria-hidden="true"></div>
+        <p class="empty-sub">กำลังโหลดแดชบอร์ด...</p>
+      </div>
+    </div>`;
 
   try {
     const res = await apiRequest('/pos/staff-dashboard');
     const stats = res.stats || {};
+    dashStats = stats;
+
+    const now = new Date();
+    const allowed = getUserAllowedMenus();
+    const audit = auditCardState(stats);
     const recentSales = stats.recentSales || [];
     const stockSummary = stats.stockSummary || [];
+    const act = stats.actionItems || {};
 
-    let auditStatusBadge = `<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> ยังไม่ได้ส่งตรวจสต็อก</span>`;
-    if (stats.auditSubmitted) {
-      if (stats.auditStatus === 'approved') {
-        auditStatusBadge = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ตรวจสต็อกผ่านแล้ว (Approved)</span>`;
-      } else if (stats.auditStatus === 'rejected') {
-        auditStatusBadge = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ตรวจสต็อกไม่ผ่าน (Rejected)</span>`;
-      } else {
-        auditStatusBadge = `<span class="badge badge-blue"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ส่งตรวจแล้ว รอการอนุมัติ</span>`;
-      }
-    }
+    const branches = (stats.branchCards || []).slice()
+      .sort((a, b) => b.todaySalesAmount - a.todaySalesAmount);
+
+    // Only offer work the role can actually open.
+    const queue = [
+      { view: 'branch-audit', tone: 'rose', icon: 'fa-clipboard-check', title: 'ตรวจสอบสต็อก', n: act.audit || 0, unit: 'สาขารอตรวจนับ' },
+      { view: 'transfers', tone: 'amber', icon: 'fa-truck-ramp-box', title: 'สินค้ารอเข้าสาขา', n: act.transfers || 0, unit: 'รายการ' },
+      { view: 'receipt-verification', tone: 'blue', icon: 'fa-file-invoice', title: 'รายการรับสินค้า', n: act.receipts || 0, unit: 'รายการ' },
+      { view: 'goods-receipt', tone: 'green', icon: 'fa-cart-flatbed', title: 'ใบสั่งซื้อรอรับเข้า', n: act.purchaseOrders || 0, unit: 'รายการ' }
+    ].filter(q => allowed.includes(q.view));
 
     container.innerHTML = `
-      <!-- KPI Stats -->
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1.2rem; margin-bottom:1.8rem;">
-        <div class="card" style="position:relative; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">ยอดขายวันนี้ (Revenue)</span>
-            <i class="fa-solid fa-money-bill-trend-up" style="color: var(--accent-primary); font-size:1.4rem;" aria-hidden="true"></i>
+      <!-- Band 1 — what happened today -->
+      <div class="dash-band dash-band-1">
+
+        <section class="card card-invert" aria-labelledby="dash-revenue-title">
+          <div class="card-head">
+            <h2 class="card-title" id="dash-revenue-title">วันนี้ • ${thaiDate(now, true)}</h2>
+            <label class="sr-only" for="dash-compare">ฐานที่ใช้เปรียบเทียบ</label>
+            <select id="dash-compare" class="form-select select-inline"
+                    onchange="setRevenueCompare(this.value)">
+              <option value="yesterday">เทียบกับ เมื่อวาน</option>
+              <option value="avg7">เทียบกับ ค่าเฉลี่ย 7 วัน</option>
+            </select>
           </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">฿${(stats.todayRevenue || 0).toLocaleString()}</div>
-          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
-            รวมรายการที่ทำเสร็จสิ้นวันนี้
-          </p>
-        </div>
 
-        <div class="card" style="position:relative; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">บิลสำเร็จวันนี้ (Bills)</span>
-            <i class="fa-solid fa-receipt" style="color: var(--accent-gold); font-size:1.4rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.todaySalesCount || 0} <span style="font-size:1rem; font-weight:600; color:var(--text-muted);">บิล</span></div>
-          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
-            จำนวนรายการ POS สำเร็จ
-          </p>
-        </div>
-
-        <div class="card" style="position:relative; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">สต็อกสินค้าพร้อมขาย (In Stock)</span>
-            <i class="fa-solid fa-boxes-stacked" style="color: var(--ink); font-size:1.4rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size: 1.8rem; font-weight:800; color:var(--text-main);">${stats.inStockCount || 0} <span style="font-size:1rem; font-weight:600; color:var(--text-muted);">เครื่อง</span></div>
-          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.4rem;">
-            สินค้าคงเหลือในคลังสาขาปัจจุบัน
-          </p>
-        </div>
-
-        <div class="card" style="position:relative; overflow:hidden;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight:700;">การนับสต็อกวันนี้ (Audit)</span>
-            <i class="fa-solid fa-clipboard-list" style="color: var(--ink); font-size:1.4rem;" aria-hidden="true"></i>
-          </div>
-          <div style="margin-top:0.3rem;">${auditStatusBadge}</div>
-          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.6rem;">
-            ต้องสแกนส่งรายงานตรวจสต็อกทุกวัน
-          </p>
-        </div>
-      </div>
-
-      <!-- Branch Cards Section -->
-      <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin:1.8rem 0 0.8rem 0; display:flex; align-items:center; gap:0.5rem;">
-        <i class="fa-solid fa-store" style="color:var(--accent-primary);" aria-hidden="true"></i> สรุปข้อมูลสินค้าและยอดขายรายสาขา
-      </h3>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.2rem; margin-bottom:1.8rem;">
-        ${(stats.branchCards || []).map(card => {
-          return `
-            <div class="card" style="background: var(--canvas-elevated); border: 1px solid var(--border-color); padding: 1.4rem; border-radius:12px; display:flex; flex-direction:column; gap:1rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:0.6rem;">
-                <h4 style="font-size:1.05rem; font-weight:800; color:var(--text-main); margin:0; display:flex; align-items:center; gap:0.4rem;">
-                  <i class="fa-solid fa-store" style="color:var(--accent-gold);" aria-hidden="true"></i> ${card.branchName}
-                </h4>
-                <span style="font-size:0.75rem; font-weight:700; background:var(--divider-soft); color:var(--text-muted); padding:0.15rem 0.5rem; border-radius:4px;">
-                  รหัส: ${card.branchCode}
-                </span>
-              </div>
-              
-              <div style="display:flex; flex-direction:column; gap:0.6rem;">
-                <!-- Total Stock Today -->
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
-                  <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-layer-group" style="width:16px; color:var(--primary);" aria-hidden="true"></i> สินค้าทั้งหมดของวันนี้:
-                  </span>
-                  <strong style="color:var(--text-main);">${card.totalStockToday.toLocaleString()} เครื่อง</strong>
-                </div>
-
-                <!-- Stock -->
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
-                  <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-boxes-stacked" style="width:16px; color:var(--ink);" aria-hidden="true"></i> สินค้าคงเหลือขณะนี้:
-                  </span>
-                  <strong style="color:var(--text-main);">${card.totalStockCount.toLocaleString()} เครื่อง</strong>
-                </div>
-
-                <!-- Today Sales Qty -->
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
-                  <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-cart-shopping" style="width:16px; color:var(--ink);" aria-hidden="true"></i> วันนี้ขายได้แล้ว:
-                  </span>
-                  <strong style="color:var(--text-main);">${card.todaySalesQty.toLocaleString()} เครื่อง</strong>
-                </div>
-
-                <!-- Today Revenue -->
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
-                  <span style="color:var(--text-muted); display:flex; align-items:center; gap:0.4rem;">
-                    <i class="fa-solid fa-wallet" style="width:16px; color:var(--accent-primary);" aria-hidden="true"></i> ยอดขายวันนี้:
-                  </span>
-                  <strong style="color:var(--ink); font-size:1rem;">฿${card.todaySalesAmount.toLocaleString()}</strong>
-                </div>
+          <div class="hero-split">
+            <div>
+              <p class="metric-label">ยอดขายวันนี้ (Revenue)</p>
+              <div class="metric-value metric-hero">${baht(stats.todayRevenue)}</div>
+              <div id="dash-revenue-delta" style="margin-top:12px;">
+                ${deltaHtml(stats.todayRevenue || 0, stats.yesterdayRevenue || 0, 'จากเมื่อวาน')}
               </div>
             </div>
-          `;
-        }).join('')}
+            <div class="spark-wrap">
+              ${sparklineSvg(stats.hourlyRevenue || new Array(24).fill(0), 'rev')}
+              <div class="spark-axis" aria-hidden="true">
+                <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card stat-card" aria-labelledby="dash-bills-title">
+          <div class="card-head lead">
+            <span class="tile tile-violet" aria-hidden="true"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+            <h2 class="card-title" id="dash-bills-title">บิลวันนี้ (Bills)</h2>
+          </div>
+          <div class="metric-value">${(stats.todaySalesCount || 0).toLocaleString()}</div>
+          <p class="metric-unit">บิล</p>
+          <div style="margin-top:auto; padding-top:16px;">
+            ${deltaHtml(stats.todaySalesCount || 0, stats.yesterdaySalesCount || 0, 'จากเมื่อวาน')}
+          </div>
+        </section>
+
+        <section class="card stat-card" aria-labelledby="dash-stock-title">
+          <div class="card-head lead">
+            <span class="tile tile-green" aria-hidden="true"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></span>
+            <h2 class="card-title" id="dash-stock-title">สต็อกพร้อมขาย</h2>
+          </div>
+          <div class="metric-value">${(stats.inStockCount || 0).toLocaleString()}</div>
+          <p class="metric-unit">เครื่อง</p>
+          <div style="margin-top:auto; padding-top:16px;">
+            <a class="metric-link" href="javascript:void(0)" onclick="navigateTo('branch-inventory')">
+              ${(stats.lowStockCount || 0).toLocaleString()} รายการใกล้หมด
+            </a>
+          </div>
+        </section>
+
+        <section class="card stat-card" aria-labelledby="dash-audit-title">
+          <div class="card-head lead">
+            <span class="tile tile-orange" aria-hidden="true"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
+            <h2 class="card-title" id="dash-audit-title">ตรวจนับสต็อก (Audit)</h2>
+          </div>
+          <p class="metric-phrase">${audit.phrase}</p>
+          <p class="metric-unit">${audit.sub}</p>
+          <div style="margin-top:auto; padding-top:16px;">
+            <button class="btn btn-secondary btn-block" onclick="navigateTo('branch-audit')">${audit.cta}</button>
+          </div>
+        </section>
       </div>
 
-      <!-- Main Layout Panels -->
-      <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:1.5rem; align-items:start;" class="grid-1_5-1">
-        <!-- Recent Sales Section -->
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
-            <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการขายล่าสุดของสาขาวันนี้
-            </h3>
-            <button class="btn btn-secondary btn-sm" onclick="navigateTo('sales-history')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
-              ดูประวัติทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-            </button>
+      <!-- Band 2 — what is true right now -->
+      <div class="dash-band dash-band-2">
+
+        <section class="card" aria-labelledby="dash-branches-title">
+          <div class="card-head">
+            <h2 class="card-title" id="dash-branches-title">ผลการดำเนินงานแต่ละสาขา</h2>
+            <div class="card-actions">
+              <label class="sr-only" for="dash-branch-sort">เรียงลำดับสาขาตาม</label>
+              <select id="dash-branch-sort" class="form-select select-inline"
+                      onchange="sortBranchRows(this.value)">
+                <option value="revenue">เรียงตาม ยอดขาย</option>
+                <option value="stock">เรียงตาม สต็อก</option>
+                <option value="name">เรียงตาม ชื่อสาขา</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="navigateTo('dashboard')">ดูทั้งหมด</button>
+            </div>
           </div>
 
-          <div class="table-container" style="border:none; margin:0;">
-            <table class="data-table">
+          <div style="overflow-x:auto;">
+            <table class="data-table table-flush">
               <thead>
                 <tr>
-                  <th scope="col">เลขที่ใบเสร็จ / เวลา</th>
-                  <th scope="col">ผู้ขาย</th>
-                  <th scope="col">การชำระเงิน</th>
-                  <th scope="col">ยอดขายสุทธิ</th>
+                  <th scope="col" style="width:34px;"><span class="sr-only">ลำดับ</span></th>
+                  <th scope="col">สาขา</th>
+                  <th scope="col" style="text-align:center;">สต็อกพร้อมขาย</th>
+                  <th scope="col" style="text-align:center;">ขายแล้ว</th>
+                  <th scope="col" style="text-align:right;">ยอดขายวันนี้</th>
+                  <th scope="col" style="width:32px;"><span class="sr-only">เปิดดูสต็อก</span></th>
                 </tr>
               </thead>
-              <tbody>
-                ${recentSales.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีรายการขายเกิดขึ้นในวันนี้</td></tr>` : ''}
-                ${recentSales.map(s => {
-                  const timeStr = new Date(s.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                  let payBadge = '';
-                  if (s.paymentMethod === 'cash') payBadge = '<span class="badge badge-green">เงินสด</span>';
-                  else if (s.paymentMethod === 'transfer') payBadge = '<span class="badge badge-blue">โอนเงิน</span>';
-                  else if (s.paymentMethod === 'credit_card') payBadge = '<span class="badge badge-gray">บัตรเครดิต</span>';
-                  else payBadge = `<span class="badge badge-gold">ไฟแนนซ์</span>`;
-
-                  return `
-                    <tr>
-                      <td>
-                        <strong>${s.receiptNumber}</strong><br>
-                        <span style="font-size:0.75rem; color:var(--text-muted);">เวลา: ${timeStr} น.</span>
-                      </td>
-                      <td><span style="font-size:0.85rem;">${s.soldBy ? s.soldBy.fullName || s.soldBy.username : '-'}</span></td>
-                      <td>${payBadge}</td>
-                      <td><strong style="color:var(--ink);">฿${(s.grandTotal || 0).toLocaleString()}</strong></td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
+              <tbody id="dash-branch-rows">${branchRowsHtml(branches)}</tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <!-- Top Stock Items Section -->
-        <div class="card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; border-bottom:1px solid var(--border-color); padding-bottom:0.8rem;">
-            <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <i class="fa-solid fa-boxes-packing" style="color:var(--accent-gold);" aria-hidden="true"></i> สินค้าคงคลังแยกตามรุ่น
-            </h3>
-            <button class="btn btn-secondary btn-sm" onclick="navigateTo('branch-inventory')" style="font-size:0.78rem; padding:0.3rem 0.6rem;">
-              ดูสต็อกทั้งหมด
-            </button>
+        <section class="card" aria-labelledby="dash-queue-title">
+          <div class="card-head">
+            <h2 class="card-title" id="dash-queue-title">ต้องดำเนินการ</h2>
+            <button class="link-quiet" onclick="navigateTo('hq-audit')">ดูทั้งหมด</button>
+          </div>
+          <div class="row-list">
+            ${queue.length === 0 ? `<p class="empty-sub">ไม่มีรายการที่ต้องดำเนินการ</p>` : ''}
+            ${queue.map(q => `
+              <button class="action-row" onclick="navigateTo('${q.view}')">
+                <span class="tile tile-sm tile-${q.tone}" aria-hidden="true"><i class="fa-solid ${q.icon}" aria-hidden="true"></i></span>
+                <span class="row-body">
+                  <span class="row-title">${q.title}</span>
+                  <span class="row-sub">${q.n.toLocaleString()} ${q.unit}</span>
+                </span>
+                <i class="fa-solid fa-arrow-right row-go" aria-hidden="true"></i>
+              </button>
+            `).join('')}
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="dash-inventory-title">
+          <div class="card-head">
+            <h2 class="card-title" id="dash-inventory-title">สินค้าคงคลังแยกตามกลุ่ม</h2>
+            <button class="link-quiet" onclick="navigateTo('branch-inventory')">ดูทั้งหมด</button>
+          </div>
+          <div>
+            ${stockSummary.length === 0 ? `<p class="empty-sub">ไม่มีสินค้าคงคลังในขณะนี้</p>` : ''}
+            ${stockSummary.slice(0, 5).map((item, i) => `
+              <div class="rank-row">
+                <span class="rank-num">${i + 1}</span>
+                ${item.image
+        ? `<img class="rank-thumb" src="${escapeHtml(item.image)}" alt="" loading="lazy">`
+        : `<span class="tile tile-xs tile-slate" aria-hidden="true"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></span>`}
+                <span class="rank-name">${escapeHtml(item.productName)}</span>
+                <span class="rank-count">${item.count.toLocaleString()} เครื่อง</span>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn btn-secondary btn-block" style="margin-top:16px;"
+                  onclick="navigateTo('branch-inventory')">ดูสินค้าทั้งหมด</button>
+        </section>
+      </div>
+
+      <!-- Band 3 — what just happened -->
+      <div class="dash-band dash-band-3 dash-band-3-full">
+
+        <section class="card" aria-labelledby="dash-sales-title">
+          <div class="card-head">
+            <h2 class="card-title" id="dash-sales-title">
+              <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> รายการขายล่าสุด
+            </h2>
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('sales-history')">ดูทั้งหมด</button>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:0.6rem;">
-            ${stockSummary.length === 0 ? `<div style="text-align:center; color:var(--text-muted); padding:2rem; font-size:0.85rem;">ไม่มีสินค้าคงคลังในสาขาขณะนี้</div>` : ''}
-            ${stockSummary.map((item, idx) => {
-              const colors = ['var(--surface-tile-2)', 'var(--surface-tile-2)', 'var(--surface-tile-2)', 'var(--surface-tile-3)'];
-              const textColors = ['var(--primary)', 'var(--primary)', 'var(--ink)', 'var(--ink)'];
-              const colIdx = idx % colors.length;
+          ${recentSales.length === 0 ? `
+            <div class="empty-state">
+              <div class="empty-art" aria-hidden="true">
+                <span><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+                <span><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
+              </div>
+              <p class="empty-title">ยังไม่มีรายการขาย</p>
+              <p class="empty-sub">รายการขายจะแสดงที่นี่เมื่อมีการขายในวันนี้</p>
+              <button class="btn btn-secondary" onclick="navigateTo('pos')">ไปที่หน้าขายสินค้า</button>
+            </div>
+          ` : `
+            <div style="overflow-x:auto;">
+              <table class="data-table table-flush">
+                <thead>
+                  <tr>
+                    <th scope="col">เวลา</th>
+                    <th scope="col">เลขที่บิล</th>
+                    <th scope="col">สาขา</th>
+                    <th scope="col">ลูกค้า</th>
+                    <th scope="col" style="text-align:center;">รายการ</th>
+                    <th scope="col" style="text-align:right;">ยอดขาย</th>
+                    <th scope="col">การชำระเงิน</th>
+                    <th scope="col">สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${recentSales.map(s => {
+          const pay = {
+            cash: '<span class="badge badge-green">เงินสด</span>',
+            transfer: '<span class="badge badge-blue">โอนเงิน</span>',
+            credit_card: '<span class="badge badge-purple">บัตรเครดิต</span>'
+          }[s.paymentMethod] || '<span class="badge badge-yellow">ไฟแนนซ์</span>';
 
-              return `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--divider-soft); border:1px solid var(--border-color); padding:0.6rem 0.8rem; border-radius:8px;">
-                  <div style="display:flex; align-items:center; gap:0.6rem; max-width:80%;">
-                    <div style="width:24px; height:24px; border-radius:50%; background:${colors[colIdx]}; color:${textColors[colIdx]}; display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:800; flex-shrink:0;">
-                      ${idx + 1}
-                    </div>
-                    <span style="font-size:0.83rem; font-weight:700; color:var(--text-main); word-break:break-all;">${item.productName}</span>
-                  </div>
-                  <strong style="color:${textColors[colIdx]}; font-size:0.9rem; flex-shrink:0;">${item.count} เครื่อง</strong>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
+          const voided = s.status === 'voided';
+          return `
+                      <tr>
+                        <td>${thaiTime(new Date(s.createdAt))}</td>
+                        <td><strong>${escapeHtml(s.receiptNumber || '-')}</strong></td>
+                        <td>${escapeHtml(s.branch ? (s.branch.name || '-') : '-')}</td>
+                        <td>${escapeHtml(s.customer ? (s.customer.name || 'ลูกค้าทั่วไป') : 'ลูกค้าทั่วไป')}</td>
+                        <td style="text-align:center;">${(s.items || []).length}</td>
+                        <td style="text-align:right; font-weight:600;">${baht(s.grandTotal)}</td>
+                        <td>${pay}</td>
+                        <td>${voided
+              ? '<span class="badge badge-red">ยกเลิกแล้ว</span>'
+              : '<span class="badge badge-green">สำเร็จ</span>'}</td>
+                      </tr>`;
+        }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </section>
       </div>
     `;
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--ink); padding:2rem;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดพนักงาน: ${err.message}</div>`;
+    container.innerHTML = `
+      <div class="card">
+        <div class="empty-state">
+          <p class="empty-title">โหลดแดชบอร์ดไม่สำเร็จ</p>
+          <p class="empty-sub">${escapeHtml(err.message)}</p>
+          <button class="btn btn-secondary" onclick="renderStaffDashboardView()">ลองอีกครั้ง</button>
+        </div>
+      </div>`;
   }
 }
 
 /* ==========================================================================
-   VIEW 1: DASHBOARD OVERVIEW
+   VIEW 1: DASHBOARD OVERVIEW — แดชบอร์ดผู้บริหาร
+
+   A wide reading column beside a standing rail.
+
+   Reading column : four readings for the day → how sales moved over time →
+                    what led the week (products, branches) → the count.
+   Standing rail  : what needs attention, and what just happened.
+
+   Every figure on this page comes from a record. Where the data does not
+   exist — there is no sales target in the model, and stock value is never
+   snapshotted, so it has no history — the element is left out rather than
+   filled with something plausible.
    ========================================================================== */
+
+// Scope and shape of the page. The branch and the date re-fetch; the metric
+// and the range only redraw, because one call carries all three series.
+const execState = { metric: 'revenue', range: '7d', branchId: 'all', date: null, series: null, stats: null };
+
+const EXEC_METRICS = {
+  revenue: { label: 'ยอดขาย', title: 'ยอดขาย', money: true },
+  orders:  { label: 'บิล',    title: 'จำนวนบิล', money: false },
+  profit:  { label: 'กำไร',   title: 'กำไร', money: true }
+};
+
+const EXEC_RANGES = [
+  ['7d', '7 วัน'], ['30d', '30 วัน'], ['90d', '90 วัน'], ['1y', '1 ปี']
+];
+
+function execToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Short axis label. A year of daily points cannot show a label per day, so the
+// chart thins them out rather than overlapping them.
+function execDayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]}`;
+}
+
+function compactNumber(n) {
+  const v = Number(n) || 0;
+  if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(v % 1000000 === 0 ? 0 : 1) + 'M';
+  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(v % 1000 === 0 ? 0 : 0) + 'K';
+  return String(Math.round(v));
+}
+
+function execMetricValue(v, metric) {
+  return EXEC_METRICS[metric].money ? baht(v) : `${Math.round(v).toLocaleString()} บิล`;
+}
+
+/* --- The reading of a branch's day ---------------------------------------
+   Accuracy is the counted total against the expected total from that day's
+   audit. A branch that has not submitted has no accuracy — not 0%. */
+function auditAccuracy(row) {
+  if (!row || !row.auditId || !row.totalExpected) return null;
+  return Math.min(100, (row.totalActual / row.totalExpected) * 100);
+}
+
+function branchStatusFromAudit(row) {
+  if (!row || !row.auditId) return { cls: 'warn', text: 'ต้องดูแล', icon: 'fa-triangle-exclamation' };
+  const variance = Math.abs(row.totalVariance || 0);
+  if (row.rawStatus === 'Rejected') return { cls: 'bad', text: 'ไม่ผ่าน', icon: 'fa-circle-exclamation' };
+  if (variance === 0) return { cls: 'ok', text: 'ดีมาก', icon: null };
+  if (variance <= 2) return { cls: 'ok', text: 'ดี', icon: null };
+  return { cls: 'warn', text: 'ต้องดูแล', icon: 'fa-triangle-exclamation' };
+}
+
+function inventoryStatus(row) {
+  if (!row || !row.auditId) return '<span class="status-inline status-warn"><span class="dot dot-warn"></span> ยังไม่ได้นับ</span>';
+  const variance = Math.abs(row.totalVariance || 0);
+  if (variance === 0) return '<span class="status-inline status-ok"><span class="dot dot-ok"></span> ปกติ</span>';
+  if (variance <= 2) return '<span class="status-inline status-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ต่างเล็กน้อย</span>';
+  return '<span class="status-inline status-bad"><span class="dot dot-bad"></span> ต่างมาก</span>';
+}
+
+/* --- The activity trail --------------------------------------------------
+   The subtitle is whichever identifying field the log actually recorded.
+   Nothing is invented: an entry with no usable detail shows its entity. */
+function activityDetail(log) {
+  const d = log.details || {};
+  const first = d.productName || d.receiptNumber || d.orderNumber || d.transferNumber ||
+                d.branch || d.branchName || d.name || d.username || d.imei;
+  return first ? String(first) : String(log.entity || '');
+}
+
 async function renderDashboardView() {
   const container = document.getElementById('content-container');
 
-  // Destroy previous chart instance BEFORE replacing DOM to prevent flicker
-  if (window._execBranchChart) {
-    window._execBranchChart.destroy();
-    window._execBranchChart = null;
-  }
+  if (window._execChart) { window._execChart.destroy(); window._execChart = null; }
+  if (!execState.date) execState.date = execToday();
 
-  container.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-primary);" aria-hidden="true"></i><br><br><span style="font-size:1.1rem; font-weight:600;">กำลังโหลดแดชบอร์ดผู้บริหาร</span></div>`;
+  container.innerHTML = `
+    <div class="card">
+      <div class="empty-state">
+        <div class="page-loading-spinner" aria-hidden="true"></div>
+        <p class="empty-sub">กำลังโหลดแดชบอร์ดผู้บริหาร...</p>
+      </div>
+    </div>`;
 
   try {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const [execRes, auditRes] = await Promise.all([
-      apiRequest('/pos/executive-dashboard'),
-      apiRequest(`/audit/dashboard?date=${todayStr}`)
+    const scope = `branchId=${encodeURIComponent(execState.branchId)}&date=${encodeURIComponent(execState.date)}`;
+    const [execRes, auditRes, seriesRes] = await Promise.all([
+      apiRequest(`/pos/executive-dashboard?${scope}`),
+      apiRequest(`/audit/dashboard?date=${encodeURIComponent(execState.date)}`),
+      apiRequest(`/pos/sales-series?range=${execState.range}&${scope}`)
     ]);
 
     const stats = execRes.executiveStats || {};
-    const branchesSummary = auditRes.summary ? auditRes.summary.branches : [];
-    const pendingAuditsCount = auditRes.summary ? auditRes.summary.pendingCount : 0;
-    const submittedCount = auditRes.summary ? auditRes.summary.submittedCount : 0;
+    execState.stats = stats;
+    execState.series = seriesRes;
 
-    const todayRevenue = stats.todayRevenue || 0;
-    const todayProfit = stats.todayProfit || 0;
-    const todayBills = stats.todayBills || 0;
-    const todayCashRevenue = stats.todayCashRevenue || 0;
-    const todayFinanceRevenue = stats.todayFinanceRevenue || 0;
-    const totalStockItems = stats.totalStockItems || 0;
-    const totalStockValue = stats.totalStockValue || 0;
-    const branchPerformance = stats.branchPerformance || [];
-    const topSellingProducts = stats.topSellingProducts || [];
-    const lowStockAlerts = stats.lowStockAlerts || [];
+    const auditBranches = (auditRes.summary ? auditRes.summary.branches : []) || [];
+    const scopedAudit = execState.branchId === 'all'
+      ? auditBranches
+      : auditBranches.filter(b => String(b.branch.id) === String(execState.branchId));
+
+    const branchList = state.masterOptions && state.masterOptions.branches ? state.masterOptions.branches : [];
+
+    // Operational standing: a branch is settled once its count is in and clean.
+    const settled = scopedAudit.filter(b => b.auditId && Math.abs(b.totalVariance || 0) === 0).length;
+    const needsCare = scopedAudit.length - settled;
+
+    const lowStock = stats.lowStockAlerts || [];
+    const notCounted = scopedAudit.filter(b => !b.auditId);
+    const pendingPo = stats.pendingPurchaseOrders || 0;
+
+    const accuracyByBranch = {};
+    auditBranches.forEach(b => { accuracyByBranch[String(b.branch.id)] = b; });
 
     container.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem;">
-        <div>
-          <h3 style="font-size:1.25rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-            <i class="fa-solid fa-chart-line" style="color:var(--accent-primary);" aria-hidden="true"></i> ภาพรวมแดชบอร์ดผู้บริหาร
-          </h3>
-        </div>
+      <div class="toolbar" style="margin-bottom:var(--space-4);">
+        <label class="sr-only" for="exec-branch">ขอบเขตสาขา</label>
+        <select id="exec-branch" class="form-select select-inline" onchange="setExecBranch(this.value)">
+          <option value="all"${execState.branchId === 'all' ? ' selected' : ''}>สาขา: ทั้งหมด</option>
+          ${branchList.map(b => `<option value="${b._id}"${String(execState.branchId) === String(b._id) ? ' selected' : ''}>สาขา: ${escapeHtml(b.name)}</option>`).join('')}
+        </select>
 
-        <div>
-          <button class="btn btn-primary" onclick="openExecutiveReportModal()" style="padding:0.6rem 1.2rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 14px var(--hairline);">
-            <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i> ดูรายงานสรุปผู้บริหาร
-          </button>
-        </div>
+        <label class="sr-only" for="exec-date">วันที่ของรายงาน</label>
+        <input type="date" id="exec-date" class="form-control select-inline" style="width:auto;"
+               value="${execState.date}" max="${execToday()}" onchange="setExecDate(this.value)">
+
+        <button class="btn btn-primary" onclick="exportExecutiveDashboard()">
+          <i class="fa-solid fa-download" aria-hidden="true"></i> ส่งออกข้อมูล
+        </button>
       </div>
 
-      <!-- Executive KPI Cards Grid -->
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-        
-        <!-- KPI 1: Today Revenue -->
-        <div class="card" style="background: var(--canvas-elevated); border: 1px solid var(--surface-tile-2);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">ยอดขายรวมวันนี้</span>
-            <i class="fa-solid fa-sack-dollar" style="color:var(--ink); font-size:1.5rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size:2.2rem; font-weight:800; color:var(--ink);">฿${todayRevenue.toLocaleString()}</div>
-          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            สด/โอน: <strong style="color:var(--text-main);">฿${todayCashRevenue.toLocaleString()}</strong> | ไฟแนนซ์: <strong style="color:var(--ink);">฿${todayFinanceRevenue.toLocaleString()}</strong>
-          </div>
-        </div>
+      <div class="exec-grid">
+        <div class="exec-main">
 
-        <!-- KPI 2: Today Bills -->
-        <div class="card" style="background: var(--canvas-elevated); border: 1px solid var(--hairline);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">บิลขายวันนี้</span>
-            <i class="fa-solid fa-receipt" style="color:var(--primary); font-size:1.5rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size:2.2rem; font-weight:800; color:var(--ink);">${todayBills} <span style="font-size:0.95rem; color:var(--text-muted);">บิล</span></div>
-          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            ประมาณการกำไร: <strong style="color:var(--ink);">฿${todayProfit.toLocaleString()}</strong>
-          </div>
-        </div>
-
-        <!-- KPI 3: Total Stock Value -->
-        <div class="card" style="background: var(--canvas-elevated); border: 1px solid var(--hairline);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">มูลค่าสต็อกสินค้าคงเหลือ</span>
-            <i class="fa-solid fa-boxes-stacked" style="color:var(--accent-primary); font-size:1.5rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size:2.2rem; font-weight:800; color:var(--text-main);">฿${totalStockValue.toLocaleString()}</div>
-          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            สินค้าคงคลัง: <strong style="color:var(--ink);">${totalStockItems.toLocaleString()}</strong> เครื่อง (5 สาขา)
-          </div>
-        </div>
-
-        <!-- KPI 4: Daily Audit Status -->
-        <div class="card" style="background: var(--canvas-elevated); border: 1px solid var(--hairline);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-            <span style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">สถานะนับสต็อกประจำวัน</span>
-            <i class="fa-solid fa-clipboard-check" style="color:var(--primary); font-size:1.5rem;" aria-hidden="true"></i>
-          </div>
-          <div style="font-size:2.2rem; font-weight:800; color:var(--ink);">
-            ${submittedCount} / 5 <span style="font-size:0.95rem; color:var(--text-muted);">สาขาส่งแล้ว</span>
-          </div>
-          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.3rem;">
-            ${pendingAuditsCount} สาขารอตรวจสอบจากส่วนกลาง
-          </div>
-        </div>
-      </div>
-
-      <!-- Charts & Widgets Middle Grid -->
-      <div class="grid-1_5-1" style="gap:1.2rem; margin-bottom:1.5rem; align-items:stretch;">
-        
-        <!-- Interactive Chart: Revenue & Stock Value per Branch -->
-        <div class="card" style="display:flex; flex-direction:column;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <h3 style="font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-              <i class="fa-solid fa-chart-column" style="color:var(--accent-primary);" aria-hidden="true"></i> เปรียบเทียบยอดขาย & มูลค่าสต็อก
-            </h3>
-            <span style="font-size:0.78rem; color:var(--text-muted);"><i class="fa-solid fa-circle" style="color:var(--ink);" aria-hidden="true"></i> ข้อมูลประจำวันวันนี้</span>
-          </div>
-          <div style="position:relative; flex:1; min-height:260px;">
-            <canvas id="executive-branch-chart"></canvas>
-          </div>
-        </div>
-
-        <!-- Right Side Widgets: Top Selling & Low Stock Alerts -->
-        <div style="display:flex; flex-direction:column; gap:1.2rem;">
-          
-          <!-- Top Selling Products Widget -->
-          <div class="card" style="flex:1;">
-            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:var(--accent-primary); display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-fire" style="color:var(--primary);" aria-hidden="true"></i> สินค้าขายดีประจำวัน Top 5
-            </h4>
-            <div style="font-size:0.82rem;">
-              ${topSellingProducts.length === 0 ? '<div style="color:var(--text-muted); font-style:italic; padding:1rem 0; text-align:center;">ยังไม่มีรายการขายในวันนี้</div>' : ''}
-              ${topSellingProducts.map((p, idx) => `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-bottom:1px solid var(--border-color);">
-                  <div>
-                    <strong style="color:var(--text-main);">${idx + 1}. ${p.productName}</strong>
-                  </div>
-                  <div style="text-align:right;">
-                    <span class="badge badge-green" style="font-size:0.75rem;">${p.quantity} เครื่อง</span>
-                    <div style="font-weight:700; color:var(--ink); font-size:0.8rem; margin-top:0.1rem;">฿${p.revenue.toLocaleString()}</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <!-- Low Stock Alerts Widget -->
-          <div class="card" style="flex:1;">
-            <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:0.8rem; color:var(--ink); display:flex; align-items:center; gap:0.4rem;">
-              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งเตือนสินค้าสต็อกต่ำ (เหลือ ≤ 2)
-            </h4>
-            <div style="font-size:0.8rem; max-height:140px; overflow-y:auto;">
-              ${lowStockAlerts.length === 0 ? '<div style="color:var(--ink); font-style:italic; padding:0.5rem 0;">ไม่มีสินค้าสต็อกต่ำในขณะนี้ ทุกสาขามีสต็อกเพียงพอ</div>' : ''}
-              ${lowStockAlerts.map(item => `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:var(--surface-tile-3); border-radius:6px; margin-bottom:0.4rem; border:1px solid var(--surface-tile-3);">
-                  <div>
-                    <strong style="color:var(--text-main);">${item.productName}</strong>
-                    <div style="font-size:0.73rem; color:var(--text-muted);">${item.branchName}</div>
-                  </div>
-                  <span class="badge badge-red" style="font-weight:800; font-size:0.82rem;">เหลือ ${item.quantity} เครื่อง</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Real-time 5-Branch Operational & Audit Health Grid -->
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <h3 style="font-size: 1.1rem; font-weight:700; margin-bottom: 1rem; display:flex; align-items:center; gap:0.5rem;">
-          <i class="fa-solid fa-store" style="color:var(--accent-primary);" aria-hidden="true"></i> สถานะการนับสต็อกประจำวัน (${todayStr})
-        </h3>
-        
-        <div class="audit-grid">
-          ${branchesSummary.map(b => `
-            <div class="audit-card status-${b.colorCode}">
-              <div class="audit-header">
-                <div>
-                  <div class="branch-name">${b.branch.name}</div>
-                  <div class="branch-code">เบอร์โทร: ${b.branch.phone}</div>
-                </div>
-                <span class="badge badge-${b.colorCode}">${b.status}</span>
-              </div>
-
-              <div class="audit-stats">
-                <div class="stat-item">
-                  <div class="stat-val">${b.totalExpected}</div>
-                  <div class="stat-lbl">จำนวนสินค้า</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-val">${b.totalActual}</div>
-                  <div class="stat-lbl">นับได้จริง</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-val" style="color: ${b.totalVariance === 0 ? 'var(--ink)' : 'var(--ink)'};">${b.totalVariance}</div>
-                  <div class="stat-lbl">ยอดที่ขาด/เกิน</div>
+          <!-- Four readings for the day -->
+          <div class="kpi-row">
+            <section class="card kpi">
+              <div class="kpi-head">
+                <span class="tile tile-amber" aria-hidden="true"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i></span>
+                <div class="kpi-body">
+                  <p class="kpi-label">ยอดขายวันนี้</p>
+                  <div class="kpi-value">${baht(stats.todayRevenue)}</div>
+                  <div style="margin-top:6px;">${deltaHtml(stats.todayRevenue || 0, stats.yesterdayRevenue || 0, 'จากเมื่อวาน')}</div>
                 </div>
               </div>
+              ${sparklineSvg(seriesRes.buckets.map(b => b.revenue), 'kpi-rev', { className: 'spark-sm', height: 34, pad: 4, stroke: '#F2C230', fillOpacity: 0.22, label: 'แนวโน้มยอดขาย 7 วันล่าสุด' })}
+              <p class="kpi-foot">เมื่อวาน ${baht(stats.yesterdayRevenue)}</p>
+            </section>
+
+            <section class="card kpi">
+              <div class="kpi-head">
+                <span class="tile tile-green" aria-hidden="true"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></span>
+                <div class="kpi-body">
+                  <p class="kpi-label">คำสั่งซื้อวันนี้</p>
+                  <div class="kpi-value">${(stats.todayBills || 0).toLocaleString()} <small>รายการ</small></div>
+                  <div style="margin-top:6px;">${deltaHtml(stats.todayBills || 0, stats.yesterdayBills || 0, 'จากเมื่อวาน')}</div>
+                </div>
+              </div>
+              ${sparklineSvg(seriesRes.buckets.map(b => b.orders), 'kpi-ord', { className: 'spark-sm', height: 34, pad: 4, stroke: '#10924A', fillOpacity: 0.16, label: 'แนวโน้มจำนวนบิล 7 วันล่าสุด' })}
+              <p class="kpi-foot">บิลขาย · เมื่อวาน ${(stats.yesterdayBills || 0).toLocaleString()} รายการ</p>
+            </section>
+
+            <!-- Stock value is never snapshotted, so it has no history and no
+                 trend can be stated. The card carries what is recorded. -->
+            <section class="card kpi">
+              <div class="kpi-head">
+                <span class="tile tile-violet" aria-hidden="true"><i class="fa-solid fa-box" aria-hidden="true"></i></span>
+                <div class="kpi-body">
+                  <p class="kpi-label">มูลค่าสต็อกทั้งหมด</p>
+                  <div class="kpi-value">${baht(stats.totalStockValue)}</div>
+                  <div class="metric-unit" style="margin-top:6px;">ต้นทุนรวม ${baht(stats.totalStockCost)}</div>
+                </div>
+              </div>
+              <p class="kpi-foot">${(stats.totalStockItems || 0).toLocaleString()} เครื่องในคลัง</p>
+            </section>
+
+            <section class="card kpi">
+              <div class="kpi-head">
+                <span class="tile tile-blue" aria-hidden="true"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>
+                <div class="kpi-body">
+                  <p class="kpi-label">สถานะการดำเนินงาน</p>
+                  <div class="kpi-value">${settled} / ${scopedAudit.length} <small>สาขา</small></div>
+                  <div class="status-inline status-ok" style="margin-top:6px;"><span class="dot dot-ok"></span> ปกติ ${settled} สาขา</div>
+                </div>
+              </div>
+              <p class="kpi-foot">
+                ${needsCare > 0
+                  ? `<span class="status-inline status-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ${needsCare} สาขาต้องดูแล</span>`
+                  : 'ทุกสาขานับครบและไม่มีผลต่าง'}
+              </p>
+            </section>
+          </div>
+
+          <!-- How sales moved -->
+          <section class="card" aria-labelledby="exec-perf-title">
+            <div class="card-head" style="align-items:flex-start; flex-wrap:wrap; gap:var(--space-3);">
+              <div style="display:flex; align-items:center; gap:var(--space-4); flex-wrap:wrap;">
+                <h2 class="section-label" id="exec-perf-title">ผลการดำเนินงานยอดขาย</h2>
+                <div class="seg" role="group" aria-label="ตัวชี้วัดที่แสดง">
+                  ${Object.keys(EXEC_METRICS).map(m => `
+                    <button type="button" class="seg-btn" aria-pressed="${execState.metric === m}"
+                            onclick="setExecMetric('${m}')">${EXEC_METRICS[m].label}</button>`).join('')}
+                </div>
+              </div>
+              <div class="seg" role="group" aria-label="ช่วงเวลา">
+                ${EXEC_RANGES.map(([v, l]) => `
+                  <button type="button" class="seg-btn" aria-pressed="${execState.range === v}"
+                          onclick="setExecRange('${v}')">${l}</button>`).join('')}
+              </div>
             </div>
-          `).join('')}
+
+            <div id="exec-total" style="margin-bottom:var(--space-4);">${execTotalHtml()}</div>
+            <div class="chart-frame"><canvas id="exec-chart" aria-label="กราฟยอดขายตามช่วงเวลา" role="img"></canvas></div>
+            <!-- The historical range report is a different question about the same
+                 series, so it lives with the chart rather than in the toolbar. -->
+            <div style="display:flex; justify-content:flex-end; margin-top:var(--space-3);">
+              <button class="link-quiet" onclick="openExecutiveReportModal()">
+                ดูรายงานสรุปย้อนหลัง <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </div>
+          </section>
+
+          <!-- What led the week -->
+          <div class="exec-duo">
+            <section class="card" aria-labelledby="exec-top-title">
+              <div class="card-head">
+                <h2 class="section-label" id="exec-top-title">สินค้าขายดี <span class="sub">(สัปดาห์นี้)</span></h2>
+              </div>
+              ${execTopProductsHtml(stats.weekTopProducts || [])}
+              <button class="link-quiet" style="margin-top:var(--space-3);" onclick="navigateTo('branch-inventory')">
+                ดูสินค้าทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </section>
+
+            <section class="card" aria-labelledby="exec-branch-title">
+              <div class="card-head">
+                <h2 class="section-label" id="exec-branch-title">ผลงานแต่ละสาขา <span class="sub">(สัปดาห์นี้)</span></h2>
+              </div>
+              ${execBranchTableHtml(stats.weekBranchPerformance || [], accuracyByBranch)}
+              <button class="link-quiet" style="margin-top:var(--space-3);" onclick="navigateTo('branches')">
+                ดูสาขาทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </section>
+          </div>
+
+          <!-- The count -->
+          <section class="card" aria-labelledby="exec-inv-title">
+            <div class="card-head">
+              <h2 class="section-label" id="exec-inv-title">ควบคุมสต็อกสินค้า <span class="sub">(การตรวจนับสต็อก)</span></h2>
+              <button class="link-quiet" onclick="navigateTo('hq-audit')">
+                ดูรายละเอียดทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </div>
+            ${execInventoryHtml(scopedAudit)}
+          </section>
+        </div>
+
+        <!-- The standing rail -->
+        <div class="exec-rail">
+          <section class="card" aria-labelledby="exec-attn-title">
+            <div class="card-head">
+              <h2 class="section-label" id="exec-attn-title">ศูนย์แจ้งเตือน</h2>
+            </div>
+            <div class="row-list">
+              ${execAlertHtml('critical', 'วิกฤต', 'fa-circle-exclamation', lowStock.length,
+                  'สินค้าใกล้หมดสต็อก',
+                  lowStock.length ? `${escapeHtml(lowStock[0].productName)} เหลือ ${lowStock[0].quantity} เครื่อง` : '',
+                  'branch-inventory')}
+
+              ${execAlertHtml('warning', 'เตือน', 'fa-triangle-exclamation', notCounted.length,
+                  'สาขาที่ต้องตรวจสอบสต็อก',
+                  notCounted.length ? `${escapeHtml(notCounted[0].branch.name)} ยังไม่ได้ตรวจสอบ` : '',
+                  'hq-audit')}
+
+              ${execAlertHtml('pending', 'รอดำเนินการ', 'fa-clock', pendingPo,
+                  'คำสั่งซื้อรอดำเนินการ',
+                  pendingPo ? 'ยังไม่ได้เติม IMEI เข้าสต็อก' : '',
+                  'goods-receipt')}
+            </div>
+            <div style="display:flex; justify-content:center; margin-top:var(--space-4);">
+              <button class="link-quiet" onclick="navigateTo('hq-audit')">
+                ดูทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="exec-act-title">
+            <div class="card-head">
+              <h2 class="section-label" id="exec-act-title">กิจกรรมล่าสุด</h2>
+              <button class="link-quiet" onclick="navigateTo('system-logs')">
+                ดูทั้งหมด <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div>
+              ${(stats.recentActivity || []).length === 0 ? '<p class="empty-sub">ยังไม่มีกิจกรรมในระบบ</p>' : ''}
+              ${(stats.recentActivity || []).map(log => {
+                const meta = activityMeta(log.action);
+                return `
+                  <div class="act-row">
+                    <span class="act-time">${thaiTime(new Date(log.createdAt)).replace(' น.', '')}</span>
+                    <span class="tile tile-sm tile-${meta.tone}" aria-hidden="true"><i class="fa-solid ${meta.icon}" aria-hidden="true"></i></span>
+                    <span class="row-body">
+                      <span class="row-title">${escapeHtml(log.username || 'ระบบ')} ${escapeHtml(meta.text)}</span>
+                      <span class="row-sub">${escapeHtml(activityDetail(log))}</span>
+                    </span>
+                  </div>`;
+              }).join('')}
+            </div>
+          </section>
         </div>
       </div>
     `;
 
-    // Chart.js is fetched on demand — this is the only view that draws a chart.
-    // Awaiting it here keeps the rest of the dashboard painting immediately.
-    if (!window.Chart) {
-      try { await loadChartJs(); } catch (err) { console.warn('Chart.js load failed:', err.message); }
-    }
-
-    // Render Chart.js Chart (no setTimeout — render immediately to avoid blank flash)
-    requestAnimationFrame(() => {
-      const ctx = document.getElementById('executive-branch-chart');
-      if (ctx && window.Chart) {
-        const labels = branchPerformance.map(b => b.name.replace('บานาน่า ', ''));
-        const revenues = branchPerformance.map(b => b.revenue);
-        const stockValues = branchPerformance.map(b => b.stockValue);
-
-        window._execBranchChart = new window.Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: labels.length > 0 ? labels : ['เบตง', 'ยะลา', 'ปัตตานี', 'นราธิวาส', 'หาดใหญ่'],
-            datasets: [
-              {
-                label: 'ยอดขายวันนี้ (บาท)',
-                data: revenues.length > 0 ? revenues : [0, 0, 0, 0, 0],
-                // Sales is the reading you act on, so it carries the accent.
-                backgroundColor: token('--primary'),
-                borderColor: token('--primary'),
-                borderWidth: 0,
-                borderRadius: 4
-              },
-              {
-                label: 'มูลค่าสต็อกคงเหลือ (บาท)',
-                data: stockValues.length > 0 ? stockValues : [0, 0, 0, 0, 0],
-                // Stock value is context: same shape, no hue.
-                backgroundColor: token('--surface-chip'),
-                borderColor: token('--hairline'),
-                borderWidth: 1,
-                borderRadius: 4
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-              legend: {
-                labels: {
-                  color: token('--body-muted'),
-                  font: { family: chartFont, size: 12 },
-                  boxWidth: 12,
-                  boxHeight: 12,
-                  usePointStyle: true,
-                  pointStyle: 'rectRounded'
-                }
-              },
-              tooltip: {
-                backgroundColor: token('--surface-tile-2'),
-                titleColor: token('--ink'),
-                bodyColor: token('--body-muted'),
-                borderColor: token('--hairline'),
-                borderWidth: 1,
-                padding: 10,
-                titleFont: { family: chartFont },
-                bodyFont: { family: chartFont }
-              }
-            },
-            scales: {
-              x: {
-                ticks: { color: token('--body-muted'), font: { family: chartFont } },
-                grid: { color: token('--divider-soft'), drawTicks: false },
-                border: { color: token('--hairline') }
-              },
-              y: {
-                ticks: { color: token('--body-muted'), font: { family: chartFont } },
-                grid: { color: token('--divider-soft'), drawTicks: false },
-                border: { display: false }
-              }
-            }
-          }
-        });
-      }
-    });
-
+    await drawExecChart();
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--ink); padding:2rem;">เกิดข้อผิดพลาดในการโหลดแดชบอร์ดผู้บริหาร: ${err.message}</div>`;
+    container.innerHTML = `
+      <div class="card">
+        <div class="empty-state">
+          <p class="empty-title">โหลดแดชบอร์ดผู้บริหารไม่สำเร็จ</p>
+          <p class="empty-sub">${escapeHtml(err.message)}</p>
+          <button class="btn btn-secondary" onclick="renderDashboardView()">ลองอีกครั้ง</button>
+        </div>
+      </div>`;
+  }
+}
+
+/* --- Panels --------------------------------------------------------------- */
+
+function execTotalHtml() {
+  const s = execState.series;
+  if (!s) return '';
+  const m = execState.metric;
+  return `
+    <div class="metric-value" style="font-size:28px;">${execMetricValue(s.totals[m], m)}</div>
+    <div style="margin-top:6px;">${deltaHtml(s.totals[m], s.previous[m], 'จากช่วงก่อนหน้า')}</div>`;
+}
+
+function execTopProductsHtml(rows) {
+  if (!rows.length) return '<div class="empty-state"><p class="empty-title">ยังไม่มีการขาย</p><p class="empty-sub">ไม่มีรายการขายในช่วง 7 วันก่อนวันที่เลือก</p></div>';
+  const max = Math.max.apply(null, rows.map(r => r.quantity).concat([1]));
+  return `
+    <div style="overflow-x:auto;">
+      <table class="data-table table-flush">
+        <thead>
+          <tr>
+            <th scope="col">สินค้า</th>
+            <th scope="col" style="width:22%;"><span class="sr-only">สัดส่วน</span></th>
+            <th scope="col" style="text-align:right;">ขายแล้ว</th>
+            <th scope="col" style="text-align:right;">ยอดขาย</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => `
+            <tr>
+              <td class="cell-flex">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span class="rank-chip${i > 2 ? ' rank-rest' : ''}">${i + 1}</span>
+                  <span class="rank-name">${escapeHtml(r.productName)}</span>
+                </div>
+              </td>
+              <td><span class="bar-track"><span class="bar-fill" style="width:${Math.max(6, (r.quantity / max) * 100)}%"></span></span></td>
+              <td style="text-align:right; white-space:nowrap;">${r.quantity.toLocaleString()} เครื่อง</td>
+              <td style="text-align:right; font-weight:600; white-space:nowrap;">${baht(r.revenue)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function execBranchTableHtml(rows, accuracyByBranch) {
+  if (!rows.length) return '<div class="empty-state"><p class="empty-title">ยังไม่มีข้อมูลสาขา</p></div>';
+  return `
+    <div style="overflow-x:auto;">
+      <table class="data-table table-flush">
+        <thead>
+          <tr>
+            <th scope="col" style="width:34px;">อันดับ</th>
+            <th scope="col">สาขา</th>
+            <th scope="col" style="text-align:right;">ยอดขาย</th>
+            <th scope="col" style="text-align:right;">คำสั่งซื้อ</th>
+            <th scope="col" style="text-align:right;">สต็อก</th>
+            <th scope="col">สถานะ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => {
+            const audit = accuracyByBranch[String(r.branchId)];
+            const acc = auditAccuracy(audit);
+            const st = branchStatusFromAudit(audit);
+            return `
+              <tr>
+                <td><span class="rank-chip${i > 2 ? ' rank-rest' : ''}">${i + 1}</span></td>
+                <td class="cell-flex"><span class="rank-name">${escapeHtml(r.name)}</span></td>
+                <td style="text-align:right; font-weight:600; white-space:nowrap;">${baht(r.revenue)}</td>
+                <td style="text-align:right;">${r.bills.toLocaleString()}</td>
+                <td style="text-align:right;">${acc === null ? '<span style="color:var(--body-muted);">—</span>' : acc.toFixed(acc % 1 === 0 ? 0 : 1) + '%'}</td>
+                <td><span class="status-inline status-${st.cls}">${st.icon ? `<i class="fa-solid ${st.icon}" aria-hidden="true"></i>` : '<span class="dot dot-' + st.cls + '"></span>'} ${st.text}</span></td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function execInventoryHtml(rows) {
+  if (!rows.length) return '<div class="empty-state"><p class="empty-title">ยังไม่มีการตรวจนับ</p><p class="empty-sub">ไม่มีรายงานการนับสต็อกของวันที่เลือก</p></div>';
+
+  // Two tables side by side, as the reference lays it out. With an odd number
+  // of branches the left column takes the extra row.
+  const half = Math.ceil(rows.length / 2);
+  const columns = rows.length > 3 ? [rows.slice(0, half), rows.slice(half)] : [rows];
+
+  const table = (list) => `
+    <div style="overflow-x:auto;">
+      <table class="data-table table-flush">
+        <thead>
+          <tr>
+            <th scope="col">สาขา</th>
+            <th scope="col" style="text-align:right;">คงเหลือ</th>
+            <th scope="col" style="text-align:right;">นับได้จริง</th>
+            <th scope="col" style="text-align:right;">ผลต่าง</th>
+            <th scope="col" style="text-align:right;">ความแม่นยำ</th>
+            <th scope="col">สถานะ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map(b => {
+            const acc = auditAccuracy(b);
+            const v = b.auditId ? (b.totalVariance || 0) : null;
+            return `
+              <tr>
+                <td class="cell-flex"><span class="rank-name">${escapeHtml(b.branch.name)}</span></td>
+                <td style="text-align:right;">${(b.totalExpected || 0).toLocaleString()}</td>
+                <td style="text-align:right;">${b.auditId ? (b.totalActual || 0).toLocaleString() : '<span style="color:var(--body-muted);">—</span>'}</td>
+                <td style="text-align:right; ${v ? 'color:var(--negative); font-weight:600;' : ''}">${v === null ? '<span style="color:var(--body-muted);">—</span>' : v}</td>
+                <td style="text-align:right;">${acc === null ? '<span style="color:var(--body-muted);">—</span>' : acc.toFixed(acc % 1 === 0 ? 0 : 1) + '%'}</td>
+                <td>${inventoryStatus(b)}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  return columns.length === 2
+    ? `<div class="exec-duo">${table(columns[0])}${table(columns[1])}</div>`
+    : table(columns[0]);
+}
+
+function execAlertHtml(kind, kindLabel, icon, count, title, detail, view) {
+  const clear = !count;
+  return `
+    <button type="button" class="alert alert-${clear ? 'clear' : kind}"
+            ${clear ? 'disabled' : `onclick="navigateTo('${view}')"`}>
+      <span class="alert-body">
+        <span class="alert-kind"><i class="fa-solid ${icon}" aria-hidden="true"></i> ${kindLabel}</span>
+        <span class="alert-title">${title}</span>
+        <span class="alert-meta">${count ? count.toLocaleString() + ' รายการ' : 'ไม่มีรายการ'}</span>
+        ${detail ? `<span class="alert-detail">${detail}</span>` : ''}
+      </span>
+      <span class="alert-count">${count.toLocaleString()}</span>
+      ${clear ? '' : '<i class="fa-solid fa-chevron-right alert-go" aria-hidden="true"></i>'}
+    </button>`;
+}
+
+/* --- Controls ------------------------------------------------------------- */
+
+function setExecMetric(metric) {
+  execState.metric = metric;
+  document.querySelectorAll('#exec-perf-title ~ .seg .seg-btn, .card-head .seg .seg-btn').forEach(b => {
+    if (b.getAttribute('onclick') === `setExecMetric('${metric}')`) b.setAttribute('aria-pressed', 'true');
+    else if (String(b.getAttribute('onclick')).startsWith('setExecMetric')) b.setAttribute('aria-pressed', 'false');
+  });
+  const total = document.getElementById('exec-total');
+  if (total) total.innerHTML = execTotalHtml();
+  drawExecChart();
+}
+
+async function setExecRange(range) {
+  execState.range = range;
+  const scope = `branchId=${encodeURIComponent(execState.branchId)}&date=${encodeURIComponent(execState.date)}`;
+  execState.series = await apiRequest(`/pos/sales-series?range=${range}&${scope}`);
+  document.querySelectorAll('.seg .seg-btn').forEach(b => {
+    const oc = String(b.getAttribute('onclick'));
+    if (oc.startsWith('setExecRange')) b.setAttribute('aria-pressed', String(oc === `setExecRange('${range}')`));
+  });
+  const total = document.getElementById('exec-total');
+  if (total) total.innerHTML = execTotalHtml();
+  drawExecChart();
+}
+
+function setExecBranch(branchId) { execState.branchId = branchId; renderDashboardView(); }
+function setExecDate(date) { if (date) { execState.date = date; renderDashboardView(); } }
+
+/* --- The chart ------------------------------------------------------------
+   Chart.js draws on a canvas, which cannot resolve CSS custom properties, so
+   every colour is read through token() first. */
+async function drawExecChart() {
+  const canvas = document.getElementById('exec-chart');
+  const s = execState.series;
+  if (!canvas || !s) return;
+
+  await loadChartJs();
+  if (window._execChart) { window._execChart.destroy(); window._execChart = null; }
+
+  const metric = execState.metric;
+  const money = EXEC_METRICS[metric].money;
+  const values = s.buckets.map(b => b[metric]);
+  const labels = s.buckets.map(b => execDayLabel(b.date));
+
+  const line = token('--primary-graphic', '#F2C230');
+  const muted = token('--body-muted', '#6B6B73');
+  const grid = token('--divider-soft', '#F0F0F2');
+  const surface = token('--surface', '#FFFFFF');
+
+  // The area fill fades from the line down to nothing, rather than sitting at
+  // one flat tint. It is drawn per-frame from the real chart area — a static
+  // gradient stretches or tiles wrongly the moment the canvas resizes — and it
+  // is the one gradient this system allows: a soft read of the curve's
+  // shape, never a decorative wash on a button, card or background.
+  function areaGradient(context) {
+    const { chart } = context;
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return 'rgba(242, 194, 48, 0.12)';
+    const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, 'rgba(242, 194, 48, 0.32)');
+    g.addColorStop(0.6, 'rgba(242, 194, 48, 0.08)');
+    g.addColorStop(1, 'rgba(242, 194, 48, 0)');
+    return g;
+  }
+
+  // The last point carries a label, the way the reference calls out where the
+  // series ended. Drawn as a plugin so it tracks the real pixel position.
+  const endLabel = {
+    id: 'endLabel',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      const pt = meta.data[meta.data.length - 1];
+      if (!pt) return;
+      const raw = values[values.length - 1];
+      const text = money ? baht(raw) : Math.round(raw).toLocaleString();
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 12px Sarabun, sans-serif';
+      const w = ctx.measureText(text).width + 16;
+      const h = 24;
+      let x = pt.x + 10;
+      if (x + w > chart.chartArea.right) x = pt.x - w - 10;
+      const y = pt.y - h / 2;
+      ctx.fillStyle = token('--ink', '#17171A');
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 6);
+      ctx.fill();
+      ctx.fillStyle = surface;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + 8, y + h / 2 + 0.5);
+      ctx.restore();
+    }
+  };
+
+  window._execChart = new window.Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: EXEC_METRICS[metric].title,
+        data: values,
+        borderColor: line,
+        borderWidth: 2.5,
+        backgroundColor: areaGradient,
+        fill: true,
+        tension: 0.35,
+        pointRadius: values.length > 40 ? 0 : 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: surface,
+        pointBorderColor: line,
+        pointBorderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      layout: { padding: { right: 112, top: 12 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: token('--nav-bg', '#141416'),
+          titleColor: '#ffffff',
+          bodyColor: token('--nav-muted', '#9A9AA2'),
+          borderColor: 'rgba(255,255,255,0.12)',
+          borderWidth: 1,
+          padding: 10,
+          displayColors: false,
+          titleFont: { family: chartFont },
+          bodyFont: { family: chartFont },
+          callbacks: {
+            label: (c) => `${EXEC_METRICS[metric].title}: ${money ? baht(c.parsed.y) : Math.round(c.parsed.y).toLocaleString() + ' บิล'}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: muted,
+            font: { family: chartFont, size: 11 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8
+          },
+          grid: { display: false },
+          border: { color: grid }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: muted,
+            font: { family: chartFont, size: 11 },
+            maxTicksLimit: 5,
+            precision: 0,
+            callback: (v) => money ? compactNumber(v) : Math.round(v).toLocaleString()
+          },
+          grid: { color: grid, drawTicks: false },
+          border: { display: false }
+        }
+      }
+    },
+    plugins: [endLabel]
+  });
+}
+
+/* --- Export ---------------------------------------------------------------
+   One workbook, one sheet per panel, carrying exactly what the page shows. */
+async function exportExecutiveDashboard() {
+  const stats = execState.stats;
+  const series = execState.series;
+  if (!stats || !series) return;
+
+  if (!window.XLSX) {
+    try {
+      showToast('กำลังเตรียมไฟล์ Excel...');
+      await loadXlsx();
+    } catch (err) {
+      showToast('ไม่สามารถโหลดโมดูล Export Excel ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'error');
+      return;
+    }
+  }
+
+  try {
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { รายการ: 'ยอดขายวันนี้', ค่า: stats.todayRevenue || 0 },
+      { รายการ: 'ยอดขายเมื่อวาน', ค่า: stats.yesterdayRevenue || 0 },
+      { รายการ: 'บิลขายวันนี้', ค่า: stats.todayBills || 0 },
+      { รายการ: 'บิลขายเมื่อวาน', ค่า: stats.yesterdayBills || 0 },
+      { รายการ: 'กำไรวันนี้', ค่า: stats.todayProfit || 0 },
+      { รายการ: 'มูลค่าสต็อกทั้งหมด', ค่า: stats.totalStockValue || 0 },
+      { รายการ: 'ต้นทุนสต็อกทั้งหมด', ค่า: stats.totalStockCost || 0 },
+      { รายการ: 'จำนวนเครื่องในคลัง', ค่า: stats.totalStockItems || 0 },
+      { รายการ: 'ใบสั่งซื้อรอดำเนินการ', ค่า: stats.pendingPurchaseOrders || 0 }
+    ]), 'สรุป');
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      series.buckets.map(b => ({ วันที่: b.date, ยอดขาย: b.revenue, จำนวนบิล: b.orders, กำไร: b.profit }))
+    ), 'ยอดขายรายวัน');
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      (stats.weekTopProducts || []).map((p, i) => ({ อันดับ: i + 1, สินค้า: p.productName, ขายแล้ว: p.quantity, ยอดขาย: p.revenue }))
+    ), 'สินค้าขายดี');
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      (stats.weekBranchPerformance || []).map((b, i) => ({ อันดับ: i + 1, สาขา: b.name, รหัสสาขา: b.code, ยอดขาย: b.revenue, จำนวนบิล: b.bills }))
+    ), 'ผลงานสาขา');
+
+    XLSX.writeFile(wb, `executive-dashboard-${execState.date}.xlsx`);
+    showToast('ส่งออกไฟล์ Excel เรียบร้อยแล้ว');
+  } catch (err) {
+    showToast('ส่งออกไฟล์ Excel ไม่สำเร็จ: ' + err.message, 'error');
   }
 }
 
@@ -1317,7 +1984,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
             <div style="background:var(--surface-tile-2); border:1px solid var(--hairline); padding:0.8rem; border-radius:8px;">
               <div style="font-size:0.78rem; color:var(--text-muted);">สัดส่วนช่องทางชำระเงิน</div>
               <div style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin:0.3rem 0;">
-                สด/โอน: ${totalRev > 0 ? Math.round((cashRev/totalRev)*100) : 0}% | ไฟแนนซ์: ${totalRev > 0 ? Math.round((finRev/totalRev)*100) : 0}%
+                สด/โอน: ${totalRev > 0 ? Math.round((cashRev / totalRev) * 100) : 0}% | ไฟแนนซ์: ${totalRev > 0 ? Math.round((finRev / totalRev) * 100) : 0}%
               </div>
               <div style="font-size:0.72rem; color:var(--text-muted);">ครอบคลุมทั้ง 5 สาขา</div>
             </div>
@@ -1325,7 +1992,7 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
           </div>
 
           <!-- Branch Performance Breakdown Table -->
-          <h5 style="font-size:0.95rem; font-weight:700; color:var(--primary); margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
+          <h5 style="font-size:0.95rem; font-weight:700; color:var(--accent-ink); margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
             <i class="fa-solid fa-store" aria-hidden="true"></i> 1. สรุปผลงานและยอดขายแยกรายสาขา (5 สาขา)
           </h5>
 
@@ -1344,11 +2011,11 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
               <tbody>
                 ${branchPerf.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลผลการดำเนินงานรายสาขาในช่วงเวลานี้</td></tr>` : ''}
                 ${branchPerf.map(b => {
-                  const proportion = totalRev > 0 ? Math.round((b.revenue / totalRev) * 100) : 0;
-                  return `
+      const proportion = totalRev > 0 ? Math.round((b.revenue / totalRev) * 100) : 0;
+      return `
                     <tr>
                       <td>
-                        <strong style="color:var(--primary);">[${b.code || '-'}]</strong> <strong>${b.name || '-'}</strong>
+                        <strong style="color:var(--accent-ink);">[${b.code || '-'}]</strong> <strong>${b.name || '-'}</strong>
                       </td>
                       <td style="text-align:center;">${b.bills || 0} บิล</td>
                       <td style="text-align:right; font-weight:700; color:var(--ink);">฿${(b.revenue || 0).toLocaleString()}</td>
@@ -1364,13 +2031,13 @@ async function openExecutiveReportModal(startDate = null, endDate = null) {
                       </td>
                     </tr>
                   `;
-                }).join('')}
+    }).join('')}
               </tbody>
             </table>
           </div>
 
           <!-- Top 10 Best Selling Products Table -->
-          <h5 style="font-size:0.95rem; font-weight:700; color:var(--primary); margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
+          <h5 style="font-size:0.95rem; font-weight:700; color:var(--accent-ink); margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem;">
             <i class="fa-solid fa-trophy" aria-hidden="true"></i> 2. Top 10 สินค้าขายดีที่สุด (ประจำช่วงเวลา)
           </h5>
 
@@ -1476,7 +2143,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
 
     const queryParam = branchIdParam ? `?branchId=${branchIdParam}` : '';
     const res = await apiRequest(`/stock/my-branch${queryParam}`);
-    
+
     // Collect unique brands dynamically
     const uniqueBrands = new Set();
     (res.stock || []).forEach(st => {
@@ -1504,7 +2171,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
       }
       return statusMatch && brandMatch;
     });
-    
+
     state.branchStockCache = res.stock || [];
     const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
 
@@ -1582,33 +2249,33 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
           <tbody>
             ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
-              const p = st.product || {};
-              const imeiStr = st.imei;
-              const prodName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`;
-              const brandStr = st.brand || p.brand || '-';
-              const modelStr = st.model || p.model || '';
-              const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
-              const priceNum = st.selling_price || p.selling_price || 0;
+      const p = st.product || {};
+      const imeiStr = st.imei;
+      const prodName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`;
+      const brandStr = st.brand || p.brand || '-';
+      const modelStr = st.model || p.model || '';
+      const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
+      const priceNum = st.selling_price || p.selling_price || 0;
 
-              // Render beautiful localized badges
-              let badgeHtml = '';
-              if (st.status === 'in_stock') {
-                badgeHtml = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> พร้อมขาย</span>`;
-              } else if (st.status === 'sold') {
-                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-dollar-to-slot" aria-hidden="true"></i> ขายแล้ว</span>`;
-              } else if (st.status === 'in_transit') {
-                badgeHtml = `<span class="badge badge-yellow"><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i> ระหว่างโอนย้าย</span>`;
-              } else if (st.status === 'transferred') {
-                badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> โอนย้ายสำเร็จ</span>`;
-              } else if (st.status === 'missing') {
-                badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> สูญหาย</span>`;
-              } else if (st.status === 'released') {
-                badgeHtml = `<span class="badge badge-yellow" style="background:var(--primary); color:var(--canvas-elevated); border:none;"><i class="fa-solid fa-circle-minus" aria-hidden="true"></i> จ่ายออกแล้ว</span>`;
-              } else {
-                badgeHtml = `<span class="badge badge-gray">${st.status}</span>`;
-              }
+      // Render beautiful localized badges
+      let badgeHtml = '';
+      if (st.status === 'in_stock') {
+        badgeHtml = `<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> พร้อมขาย</span>`;
+      } else if (st.status === 'sold') {
+        badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-dollar-to-slot" aria-hidden="true"></i> ขายแล้ว</span>`;
+      } else if (st.status === 'in_transit') {
+        badgeHtml = `<span class="badge badge-yellow"><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i> ระหว่างโอนย้าย</span>`;
+      } else if (st.status === 'transferred') {
+        badgeHtml = `<span class="badge badge-gray"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> โอนย้ายสำเร็จ</span>`;
+      } else if (st.status === 'missing') {
+        badgeHtml = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> สูญหาย</span>`;
+      } else if (st.status === 'released') {
+        badgeHtml = `<span class="badge badge-yellow" style="background:var(--primary); color:var(--on-primary); border:none;"><i class="fa-solid fa-circle-minus" aria-hidden="true"></i> จ่ายออกแล้ว</span>`;
+      } else {
+        badgeHtml = `<span class="badge badge-gray">${st.status}</span>`;
+      }
 
-              return `
+      return `
                 <tr class="bi-row" data-search="${(imeiStr + ' ' + prodName + ' ' + brandStr + ' ' + modelStr + ' ' + specStr).toLowerCase()}">
                   <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
                   <td><strong style="color:var(--ink); font-family:ui-monospace,monospace; font-size:0.95rem; font-variant-numeric:tabular-nums; letter-spacing:0.02em;">${imeiStr}</strong></td>
@@ -1629,7 +2296,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                   ` : ''}
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -1656,7 +2323,13 @@ function filterBranchInventoryTable() {
    ========================================================================== */
 async function renderPosView(selectedBranchId = null) {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดระบบขายสินค้า POS...</div>`;
+  container.innerHTML = `
+    <div class="card">
+      <div class="empty-state">
+        <div class="page-loading-spinner" aria-hidden="true"></div>
+        <p class="empty-sub">กำลังโหลดระบบขายสินค้า POS...</p>
+      </div>
+    </div>`;
 
   try {
     const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
@@ -1673,164 +2346,184 @@ async function renderPosView(selectedBranchId = null) {
     const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
 
     container.innerHTML = `
-      <div class="grid-1_3-1" style="gap:1.2rem; align-items:start;">
-        <!-- Left Side: Product Selection & Barcode Scanner -->
-        <div>
-          <div class="card" style="margin-bottom:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1rem;">
-              <div>
-                <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-                  <i class="fa-solid fa-cash-register" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการสินค้าในสต็อก: ${currentBranch.name}
-                </h3>
-                <p style="font-size:0.8rem; color:var(--text-muted);">เลือกสินค้าตามหมายเลข IMEI เพื่อเพิ่มลงตะกร้าขาย</p>
+      <div class="grid-1_3-1" style="gap:var(--space-4); align-items:start;">
+        <!-- Left: product catalogue -->
+        <div class="card">
+          <div class="card-head" style="align-items:flex-start;">
+            <div>
+              <h2 class="card-title"><i class="fa-solid fa-cash-register" aria-hidden="true"></i> สินค้าพร้อมขาย</h2>
+              <p class="metric-unit" style="margin-top:4px;">${escapeHtml(currentBranch.name)} · เลือกสินค้าตามหมายเลข IMEI เพื่อเพิ่มลงตะกร้า</p>
+            </div>
+            ${isAdminOrHq ? `
+              <div class="card-actions">
+                <label class="sr-only" for="pos-branch-select">เปลี่ยนสาขา</label>
+                <select id="pos-branch-select" class="form-select select-inline" onchange="renderPosView(this.value)">
+                  <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>สาขา: ทั้งหมด</option>
+                  ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>สาขา: ${escapeHtml(b.name)}</option>`).join('') : ''}
+                </select>
               </div>
+            ` : ''}
+          </div>
 
-              ${isAdminOrHq ? `
-                <div style="display:flex; align-items:center; gap:0.4rem;">
-                  <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
-                  <select class="form-select" style="width:auto; padding:0.3rem 0.6rem; font-size:0.82rem;" onchange="renderPosView(this.value)">
-                    <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
-                    ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
-                  </select>
-                </div>
-              ` : ''}
-            </div>
-
-            <!-- Barcode / IMEI Fast Scanner -->
-            <div style="background:var(--hairline); border:1px solid var(--hairline); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
-              <label style="font-size:0.8rem; font-weight:700; color:var(--accent-secondary);">
-                <i class="fa-solid fa-barcode" aria-hidden="true"></i> ยิงสแกน IMEI / บาร์โค้ด สินค้าเพื่อเพิ่มลงตะกร้ารวดเร็ว
+          <!-- Fast-scan zone: the primary way items enter the cart, so it earns
+               the one accent tint on this page rather than blending into the
+               neutral surfaces around it. -->
+          <div style="display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4); background:var(--tile-amber-bg); border:1px solid #F3E2B8; border-radius:var(--radius-lg); margin-bottom:var(--space-4);">
+            <span class="tile tile-amber" aria-hidden="true"><i class="fa-solid fa-barcode"></i></span>
+            <div style="flex:1; min-width:0;">
+              <label for="pos-barcode-input" style="display:block; font-size:12.5px; font-weight:600; color:#8A5E05; margin-bottom:4px;">
+                ยิงสแกน IMEI / บาร์โค้ดสินค้าเพื่อเพิ่มลงตะกร้าอย่างรวดเร็ว
               </label>
-              <input type="text" id="pos-barcode-input" class="form-control" placeholder="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." aria-label="สแกน หรือ พิมพ์หมายเลข IMEI แล้วกด Enter..." style="margin-top:0.4rem;" autofocus>
+              <input type="text" id="pos-barcode-input" class="form-control" style="background:var(--surface);"
+                     placeholder="สแกน หรือพิมพ์หมายเลข IMEI แล้วกด Enter..."
+                     aria-label="สแกน หรือพิมพ์หมายเลข IMEI แล้วกด Enter..." autofocus>
             </div>
+          </div>
 
-            <input type="text" id="pos-search-input" class="form-control" placeholder="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." aria-label="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือ รุ่น..." onkeyup="filterPosCatalogTable()" style="margin-bottom:1rem;">
+          <div class="form-group">
+            <label class="sr-only" for="pos-search-input">ค้นหาสินค้า</label>
+            <input type="text" id="pos-search-input" class="form-control"
+                   placeholder="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือรุ่น..."
+                   aria-label="ค้นหาชื่อสินค้า, IMEI, ยี่ห้อ หรือรุ่น..." onkeyup="filterPosCatalogTable()">
+          </div>
 
-            <!-- Stock Product Table -->
-            <div class="table-container" style="max-height:450px; overflow-y:auto;">
-              <table class="data-table" id="pos-catalog-table">
-                <thead>
-                  <tr>
-                    <th scope="col" style="width:40px; text-align:center;">ไอคอน</th>
-                    <th scope="col">รายการสินค้า</th>
-                    <th scope="col">หมายเลข IMEI</th>
-                    <th scope="col">ราคาขาย</th>
-                    <th scope="col" style="text-align:center;">ดำเนินการ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${stockList.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบสินค้าพร้อมขายในสาขานี้</td></tr>` : ''}
-                  ${stockList.map((st, idx) => {
-                    const p = st.product || {};
-                    const imei = st.imei;
-                    const productName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`.trim() || 'สินค้าสมาร์ทโฟน';
-                    const sellingPrice = st.selling_price || p.selling_price || 0;
-                    const brandStr = st.brand || p.brand || '-';
-                    const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ');
+          <div class="table-container" style="max-height:480px; overflow-y:auto;">
+            <table class="data-table" id="pos-catalog-table">
+              <thead>
+                <tr>
+                  <th scope="col" style="width:44px;"><span class="sr-only">ไอคอน</span></th>
+                  <th scope="col">รายการสินค้า</th>
+                  <th scope="col">หมายเลข IMEI</th>
+                  <th scope="col" style="text-align:right;">ราคาขาย</th>
+                  <th scope="col" style="text-align:center;">ดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${stockList.length === 0 ? `
+                  <tr><td colspan="5" style="padding:0; border:0;">
+                    <div class="empty-state">
+                      <div class="empty-art" aria-hidden="true">
+                        <span><i class="fa-solid fa-mobile-screen-button"></i></span>
+                        <span><i class="fa-solid fa-magnifying-glass"></i></span>
+                      </div>
+                      <p class="empty-title">ไม่พบสินค้าพร้อมขาย</p>
+                      <p class="empty-sub">ยังไม่มีสินค้าคงเหลือในสาขานี้</p>
+                    </div>
+                  </td></tr>` : ''}
+                ${stockList.map((st) => {
+                  const p = st.product || {};
+                  const imei = st.imei;
+                  const productName = st.productName || p.name || `${st.brand || ''} ${st.model || ''}`.trim() || 'สินค้าสมาร์ทโฟน';
+                  const sellingPrice = st.selling_price || p.selling_price || 0;
+                  const brandStr = st.brand || p.brand || '-';
+                  const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ');
+                  const branchName = currentBranch._id === 'all' && st.branch ? (st.branch.name || 'ไม่ระบุสาขา') : '';
 
-                    return `
-                      <tr class="pos-item-row" data-search="${(imei + ' ' + productName + ' ' + brandStr + ' ' + specStr).toLowerCase()}">
-                        <td style="text-align:center; font-size:1.3rem; color:var(--accent-primary);">
-                          <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>
-                        </td>
-                        <td>
-                          <strong>${productName}</strong>
-                          ${currentBranch._id === 'all' && st.branch ? `<br><span style="font-size:0.72rem; color:var(--accent-primary); background:var(--surface-tile-2); padding:1px 6px; border-radius:3px;"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${st.branch.name || 'ไม่ระบุสาขา'}</span>` : ''}
-                        </td>
-                        <td><strong style="color:var(--ink); font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; font-size:0.92rem;">${imei}</strong></td>
-                        <td><strong style="color:var(--ink);">฿${sellingPrice.toLocaleString()}</strong></td>
-                        <td style="text-align:center;">
-                          <button class="btn btn-secondary btn-sm" onclick="addToPosCart('${p._id || ''}', '${productName.replace(/'/g, "\\'")}', ${sellingPrice}, null, '${imei}')">
-                            <i class="fa-solid fa-cart-plus" aria-hidden="true"></i> เพิ่ม
-                          </button>
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
+                  return `
+                    <tr class="pos-item-row" data-search="${escapeHtml((imei + ' ' + productName + ' ' + brandStr + ' ' + specStr).toLowerCase())}">
+                      <td>
+                        <span class="tile tile-xs tile-blue" aria-hidden="true"><i class="fa-solid fa-mobile-screen-button"></i></span>
+                      </td>
+                      <td class="cell-flex">
+                        <span class="row-title">${escapeHtml(productName)}</span>
+                        ${branchName ? `<span class="badge badge-blue" style="margin-top:4px;"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtml(branchName)}</span>` : ''}
+                      </td>
+                      <td><span style="font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; font-size:13px;">${escapeHtml(imei)}</span></td>
+                      <td style="text-align:right; font-weight:700; white-space:nowrap;">${baht(sellingPrice)}</td>
+                      <td style="text-align:center;">
+                        <button class="btn btn-secondary btn-sm" onclick="addToPosCart('${p._id || ''}', '${String(productName).replace(/'/g, "\\'")}', ${sellingPrice}, null, '${imei}')">
+                          <i class="fa-solid fa-cart-plus" aria-hidden="true"></i> เพิ่ม
+                        </button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <!-- Right Side: POS Shopping Cart & Checkout Panel -->
-        <div>
-          <div class="card" style="position:sticky; top:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.6rem;">
-              <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; color:var(--ink);">
-                <i class="fa-solid fa-shopping-cart" aria-hidden="true"></i> ตะกร้าสินค้าชำระเงิน
-              </h3>
-              <button class="btn btn-danger btn-sm" onclick="clearPosCart()"><i class="fa-solid fa-trash" aria-hidden="true"></i> ล้างตะกร้า</button>
-            </div>
-
-            <!-- Customer Info Form -->
-            <div style="background:var(--divider-soft); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
-              <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem; color:var(--accent-secondary);">
-                <i class="fa-solid fa-user-tag" aria-hidden="true"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ) <span style="color:var(--body-muted); font-weight:800;">* จำเป็น</span>
-              </div>
-              <div class="grid-2col" style="gap:0.6rem;">
-                <input type="text" id="pos-cust-name" class="form-control" style="font-size:0.82rem;" placeholder="ชื่อลูกค้า (จำเป็น)" aria-label="ชื่อลูกค้า (จำเป็น)" required>
-                <input type="text" id="pos-cust-phone" class="form-control" style="font-size:0.82rem;" placeholder="เบอร์โทรศัพท์ (จำเป็น)" aria-label="เบอร์โทรศัพท์ (จำเป็น)" required>
-              </div>
-            </div>
-
-            <!-- Cart Items List -->
-            <div id="pos-cart-items-container" style="max-height:220px; overflow-y:auto; margin-bottom:1rem; border:1px solid var(--border-color); border-radius:6px; padding:0.5rem;">
-              <!-- Rendered Cart Items -->
-            </div>
-
-            <!-- Totals & Payment Calculations -->
-            <div style="background:var(--divider-soft); border:1px solid var(--border-color); padding:1rem; border-radius:8px; margin-bottom:1rem;">
-              <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.9rem;">
-                <span>ยอดรวมสินค้า (Subtotal):</span>
-                <strong id="pos-subtotal-val">฿0</strong>
-              </div>
-
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; font-size:0.85rem;">
-                <span>ส่วนลดพิเศษ (Discount):</span>
-                <input type="number" id="pos-discount-input" aria-label="ส่วนลดพิเศษ (บาท)" class="form-control" style="width:110px; padding:0.25rem 0.5rem; text-align:right;" min="0" value="0" oninput="updatePosCartTotals()">
-              </div>
-
-              <div style="display:flex; justify-content:space-between; margin-top:0.8rem; padding-top:0.6rem; border-top:1px solid rgba(255,255,255,0.15); font-size:1.2rem; font-weight:800; color:var(--ink);">
-                <span>ยอดรวมสุทธิ (Grand Total):</span>
-                <span id="pos-grandtotal-val">฿0</span>
-              </div>
-            </div>
-
-            <!-- Payment Method & Received Amount -->
-            <div class="form-group" style="margin-bottom:0.8rem;">
-              <label for="pos-payment-method" style="font-size:0.85rem; font-weight:600;">ช่องทางการชำระเงิน</label>
-              <select id="pos-payment-method" class="form-select" onchange="toggleCashReceivedField(this.value)">
-                <option value="cash">เงินสด (Cash)</option>
-                <option value="transfer">โอนเงิน / สแกน QR Code (Bank Transfer)</option>
-                <option value="finance">ผ่อน / จัดไฟแนนซ์ (Financing)</option>
-              </select>
-            </div>
-
-            <div id="pos-cash-container" class="grid-2col" style="gap:0.6rem; margin-bottom:1rem;">
-              <div>
-                <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">รับเงินมา (บาท)</label>
-                <input type="number" id="pos-received-input" class="form-control" placeholder="0" aria-label="รับเงินมา (บาท)" min="0" oninput="updatePosCartTotals()">
-              </div>
-              <div>
-                <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">เงินทอน (บาท)</label>
-                <div id="pos-change-val" style="font-size:1.2rem; font-weight:800; color:var(--ink); padding-top:0.4rem;">฿0</div>
-              </div>
-            </div>
-
-            <div id="pos-finance-container" style="display:none; margin-bottom:1rem; background:var(--surface-tile-2); border:1px solid var(--surface-tile-2); padding:0.8rem; border-radius:6px;">
-              <label for="pos-finance-company" style="font-size:0.82rem; font-weight:700; color:var(--primary);">
-                <i class="fa-solid fa-file-contract" aria-hidden="true"></i> ชื่อบริษัทไฟแนนซ์ / สถาบันการเงิน (จำเป็น)
-              </label>
-              <input type="text" id="pos-finance-company" class="form-control" placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" aria-label="เช่น SG Capital, AEON, KB J Capital ฯลฯ" style="margin-top:0.4rem;" value="Banana">
-              <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* รายการขายจัดไฟแนนซ์จะเข้าสู่สถานะ "รอรับเงินจากไฟแนนซ์" ในเมนูการเงิน</span>
-            </div>
-
-            <!-- Submit Checkout & Print Receipt Button -->
-            <button class="btn btn-primary" style="width:100%; padding:0.8rem; font-size:1.05rem; font-weight:700;" onclick="submitPosCheckout('${currentBranch._id}')">
-              <i class="fa-solid fa-receipt" aria-hidden="true"></i> ชำระเงิน & ออกใบเสร็จรับเงิน
-            </button>
+        <!-- Right: cart & checkout -->
+        <div class="card" style="position:sticky; top:var(--space-4);">
+          <div class="card-head">
+            <h2 class="card-title"><i class="fa-solid fa-shopping-cart" aria-hidden="true"></i> ตะกร้าสินค้าชำระเงิน</h2>
+            <button class="btn btn-danger btn-sm" onclick="clearPosCart()"><i class="fa-solid fa-trash" aria-hidden="true"></i> ล้างตะกร้า</button>
           </div>
+
+          <!-- Customer info: a surface nested one level in, per the system's
+               depth rule — sunken tone, no shadow of its own. -->
+          <div class="card" style="margin-bottom:var(--space-4);">
+            <div style="display:flex; align-items:center; gap:var(--space-2); font-weight:700; font-size:13px; color:var(--ink-2); margin-bottom:var(--space-3);">
+              <i class="fa-solid fa-user-tag" aria-hidden="true"></i> ข้อมูลลูกค้า (สำหรับออกใบเสร็จ)
+              <span style="color:var(--negative); font-weight:800;">* จำเป็น</span>
+            </div>
+            <div class="grid-2col" style="gap:var(--space-3);">
+              <div class="form-group" style="margin-bottom:0;">
+                <input type="text" id="pos-cust-name" class="form-control" placeholder="ชื่อลูกค้า (จำเป็น)" aria-label="ชื่อลูกค้า (จำเป็น)" required>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <input type="text" id="pos-cust-phone" class="form-control" placeholder="เบอร์โทรศัพท์ (จำเป็น)" aria-label="เบอร์โทรศัพท์ (จำเป็น)" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cart items -->
+          <div id="pos-cart-items-container" style="max-height:240px; overflow-y:auto; margin-bottom:var(--space-4);">
+            <!-- Rendered Cart Items -->
+          </div>
+
+          <!-- Totals -->
+          <div class="card" style="margin-bottom:var(--space-4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-2); font-size:13.5px;">
+              <span style="color:var(--body-muted);">ยอดรวมสินค้า</span>
+              <strong id="pos-subtotal-val" style="font-variant-numeric:tabular-nums;">฿0</strong>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-2); font-size:13.5px;">
+              <span style="color:var(--body-muted);">ส่วนลดพิเศษ (บาท)</span>
+              <input type="number" id="pos-discount-input" aria-label="ส่วนลดพิเศษ (บาท)" class="form-control"
+                     style="width:110px; min-height:32px; padding:4px 10px; text-align:right;" min="0" value="0" oninput="updatePosCartTotals()">
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--hairline-strong);">
+              <span style="font-weight:700; color:var(--ink);">ยอดรวมสุทธิ</span>
+              <span id="pos-grandtotal-val" class="metric-value">฿0</span>
+            </div>
+          </div>
+
+          <!-- Payment -->
+          <div class="form-group">
+            <label for="pos-payment-method">ช่องทางการชำระเงิน</label>
+            <select id="pos-payment-method" class="form-select" onchange="toggleCashReceivedField(this.value)">
+              <option value="cash">เงินสด</option>
+              <option value="transfer">โอนเงิน / สแกน QR Code</option>
+              <option value="finance">ผ่อน / จัดไฟแนนซ์</option>
+            </select>
+          </div>
+
+          <div id="pos-cash-container" class="grid-2col" style="gap:var(--space-3); margin-bottom:var(--space-4);">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="pos-received-input">รับเงินมา (บาท)</label>
+              <input type="number" id="pos-received-input" class="form-control" placeholder="0" aria-label="รับเงินมา (บาท)" min="0" oninput="updatePosCartTotals()">
+            </div>
+            <div>
+              <label style="display:block; font-size:12.5px; font-weight:600; color:var(--ink-2); margin-bottom:var(--space-2);">เงินทอน (บาท)</label>
+              <div id="pos-change-val" class="metric-value" style="font-size:20px;">฿0</div>
+            </div>
+          </div>
+
+          <div id="pos-finance-container" class="card" style="display:none; margin-bottom:var(--space-4);">
+            <label for="pos-finance-company" style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--ink-2);">
+              <i class="fa-solid fa-file-contract" aria-hidden="true"></i> ชื่อบริษัทไฟแนนซ์ / สถาบันการเงิน (จำเป็น)
+            </label>
+            <input type="text" id="pos-finance-company" class="form-control" style="margin-top:var(--space-2);"
+                   placeholder="เช่น SG Capital, AEON, KB J Capital ฯลฯ" aria-label="เช่น SG Capital, AEON, KB J Capital ฯลฯ" value="Banana">
+            <p style="font-size:11.5px; color:var(--body-muted); margin-top:var(--space-2);">* รายการขายจัดไฟแนนซ์จะเข้าสู่สถานะ "รอรับเงินจากไฟแนนซ์" ในเมนูการเงิน</p>
+          </div>
+
+          <button class="btn btn-primary btn-block" style="min-height:52px; font-size:15px;" onclick="submitPosCheckout('${currentBranch._id}')">
+            <i class="fa-solid fa-receipt" aria-hidden="true"></i> ชำระเงิน & ออกใบเสร็จรับเงิน
+          </button>
         </div>
       </div>
     `;
@@ -1854,7 +2547,14 @@ async function renderPosView(selectedBranchId = null) {
     }
 
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--ink); padding:2rem;">เกิดข้อผิดพลาดในการโหลดระบบ POS: ${err.message}</div>`;
+    container.innerHTML = `
+      <div class="card">
+        <div class="empty-state">
+          <p class="empty-title">โหลดระบบขายสินค้าไม่สำเร็จ</p>
+          <p class="empty-sub">${escapeHtml(err.message)}</p>
+          <button class="btn btn-secondary" onclick="renderPosView()">ลองอีกครั้ง</button>
+        </div>
+      </div>`;
   }
 }
 
@@ -1935,19 +2635,25 @@ function renderPosCartUI() {
   if (!container) return;
 
   if (state.posCart.length === 0) {
-    container.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:1.5rem; font-size:0.85rem;">ยังไม่มีรายการสินค้าในตะกร้า</div>`;
+    container.innerHTML = `
+      <div style="text-align:center; padding:var(--space-6) var(--space-3); color:var(--body-muted);">
+        <i class="fa-solid fa-cart-shopping" style="font-size:20px; color:var(--hairline-strong);" aria-hidden="true"></i>
+        <p style="font-size:13px; margin-top:var(--space-2);">ยังไม่มีรายการสินค้าในตะกร้า</p>
+      </div>`;
   } else {
     container.innerHTML = state.posCart.map((item, idx) => `
-      <div style="display:flex; justify-content:space-between; align-items:center; background:var(--divider-soft); border:1px solid var(--border-color); padding:0.5rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.83rem; gap:0.5rem;">
+      <div style="display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3); background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius-lg); margin-bottom:var(--space-2);">
+        <span class="tile tile-xs tile-blue" aria-hidden="true"><i class="fa-solid fa-mobile-screen-button"></i></span>
         <div style="flex:1; min-width:0;">
-          <strong style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">${item.productName}</strong>
-          <span style="font-size:0.75rem; color:var(--text-muted);">IMEI: ${item.imei || '-'}</span>
+          <div class="row-title">${escapeHtml(item.productName)}</div>
+          <div class="row-sub">IMEI: ${escapeHtml(item.imei || '-')}</div>
         </div>
-        <div style="text-align:right; display:flex; align-items:center; gap:0.3rem;">
-          <span style="color:var(--ink); font-weight:700;">฿</span>
-          <input type="number" class="form-control" style="width:90px; padding:0.2rem 0.4rem; text-align:right; font-size:0.82rem; font-weight:700; color:var(--ink); aria-label="ราคาขายต่อเครื่อง (บาท)" margin:0; background:var(--canvas-elevated);" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
+        <div style="display:flex; align-items:center; gap:6px; flex:none;">
+          <span style="color:var(--ink); font-weight:700; font-size:13px;">฿</span>
+          <input type="number" class="form-control" style="width:92px; min-height:32px; padding:4px 8px; text-align:right; font-size:13px; font-weight:700;"
+                 aria-label="ราคาขายต่อเครื่อง (บาท)" value="${item.unitPrice}" oninput="updateCartItemPrice(${idx}, this.value)" min="0">
         </div>
-        <button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;" onclick="removeFromPosCart(${idx})" aria-label="นำสินค้าออกจากตะกร้า">
+        <button class="btn btn-danger btn-sm" style="padding:6px 8px; flex:none;" onclick="removeFromPosCart(${idx})" aria-label="นำสินค้าออกจากตะกร้า">
           <i class="fa-solid fa-xmark" aria-hidden="true"></i>
         </button>
       </div>
@@ -2238,7 +2944,7 @@ function openSelectReceiptTypeModal(sale) {
   window.currentReceiptSale = sale;
   const bodyHtml = `
     <div style="background:var(--surface-tile-3); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
-      <div style="font-weight:800; font-size:1.05rem; color:var(--primary); display:flex; align-items:center; gap:0.4rem;">
+      <div style="font-weight:800; font-size:1.05rem; color:var(--accent-ink); display:flex; align-items:center; gap:0.4rem;">
         <i class="fa-solid fa-circle-check" style="color:var(--ink);" aria-hidden="true"></i> บันทึกการขายสำเร็จ: ${sale.receiptNumber}
       </div>
       <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.3rem;">
@@ -2291,10 +2997,10 @@ function handleSelectReceiptType() {
 
 function openFullTaxInvoiceDetailsModal(sale) {
   const customer = sale.customer || {};
-  
+
   const bodyHtml = `
     <div style="background:var(--surface-tile-3); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
-      <div style="font-weight:700; font-size:0.95rem; color:var(--primary);">
+      <div style="font-weight:700; font-size:0.95rem; color:var(--accent-ink);">
         <i class="fa-solid fa-file-invoice" aria-hidden="true"></i> กรอกข้อมูลผู้เสียภาษี (สำหรับใบกำกับภาษีเต็มรูปแบบ)
       </div>
       <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.2rem;">
@@ -2374,7 +3080,7 @@ function openFullTaxInvoiceModal(sale, tax) {
   const branch = sale.branch || {};
   const seller = sale.soldBy || {};
   const items = sale.items || [];
-  
+
   const subtotal = sale.grandTotal || 0;
   const taxableVal = subtotal / 1.07;
   const vatVal = subtotal - taxableVal;
@@ -2592,7 +3298,7 @@ async function renderFinanceView(filterParams = {}) {
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
             <span style="color: var(--text-muted); font-size: 0.82rem; font-weight:600;">กำไรที่รอรับจากไฟแนนซ์</span>
-            <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary); font-size:1.3rem;" aria-hidden="true"></i>
+            <i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-ink); font-size:1.3rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size: 1.6rem; font-weight:800; color:var(--ink);">฿${(summary.pendingFinanceAmount || 0).toLocaleString()}</div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-top:0.2rem;">
@@ -2709,31 +3415,31 @@ async function renderFinanceView(filterParams = {}) {
             <tbody>
               ${sales.length === 0 ? `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการขายในเงื่อนไขที่เลือก</td></tr>` : ''}
               ${sales.map((s, idx) => {
-                const itemsStr = (s.items || []).map(i => {
-                  const std = i.standardPrice || i.unitPrice || 0;
-                  const act = i.unitPrice || 0;
-                  return `
-                    <strong>• ${i.productName}</strong> <span style="font-family:monospace; color:var(--primary); font-size:0.78rem;">(${i.imei})</span><br>
+      const itemsStr = (s.items || []).map(i => {
+        const std = i.standardPrice || i.unitPrice || 0;
+        const act = i.unitPrice || 0;
+        return `
+                    <strong>• ${i.productName}</strong> <span style="font-family:monospace; color:var(--accent-ink); font-size:0.78rem;">(${i.imei})</span><br>
                     <span style="font-size:0.75rem; color:var(--text-muted);">
                       ราคาแนะนำ: ฿${std.toLocaleString()} | ขายจริง: <strong style="color:var(--ink);">฿${act.toLocaleString()}</strong>
                     </span>
                   `;
-                }).join('<div style="margin: 0.35rem 0; border-top:1px dashed rgba(255,255,255,0.08);"></div>');
-                const isFinance = s.paymentMethod === 'finance';
-                const finDetails = s.financeDetails || {};
-                const isVoided = s.status === 'voided';
-                const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
+      }).join('<div style="margin: 0.35rem 0; border-top:1px dashed rgba(255,255,255,0.08);"></div>');
+      const isFinance = s.paymentMethod === 'finance';
+      const finDetails = s.financeDetails || {};
+      const isVoided = s.status === 'voided';
+      const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
 
-                let costTotal = s.totalCost || 0;
-                const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
-                if (isReturnedCost) {
-                  costTotal = s.actualCostReturned;
-                } else if (!costTotal && s.items) {
-                  costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
-                }
-                const profitTotal = isReturnedCost ? (s.grandTotal - costTotal) : (s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal));
+      let costTotal = s.totalCost || 0;
+      const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
+      if (isReturnedCost) {
+        costTotal = s.actualCostReturned;
+      } else if (!costTotal && s.items) {
+        costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
+      }
+      const profitTotal = isReturnedCost ? (s.grandTotal - costTotal) : (s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal));
 
-                return `
+      return `
                   <tr class="fin-row" data-search="${(s.receiptNumber + ' ' + (s.branch ? s.branch.name : '') + ' ' + (s.customer ? s.customer.name : '') + ' ' + (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')).toLowerCase()}" style="${isVoided ? 'opacity: 0.6; background: var(--surface-tile-3);' : ''}">
                     <td>
                       <strong>${s.receiptNumber}</strong>
@@ -2747,9 +3453,9 @@ async function renderFinanceView(filterParams = {}) {
                     <td style="font-size:0.82rem;">${itemsStr}</td>
                     <td>
                       ${s.paymentMethod === 'cash' ? '<span class="badge badge-green">เงินสด</span>' :
-                        s.paymentMethod === 'transfer' ? '<span class="badge badge-blue">โอนเงิน</span>' :
-                        s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
-                        `<span class="badge badge-gold"><i class="fa-solid fa-file-contract" aria-hidden="true"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
+          s.paymentMethod === 'transfer' ? '<span class="badge badge-blue">โอนเงิน</span>' :
+            s.paymentMethod === 'credit_card' ? '<span class="badge badge-gray">บัตรเครดิต</span>' :
+              `<span class="badge badge-gold"><i class="fa-solid fa-file-contract" aria-hidden="true"></i> จัดไฟแนนซ์ (${finDetails.companyName || 'ไฟแนนซ์'})</span>`}
                     </td>
                     <td>
                       ฿${costTotal.toLocaleString()}
@@ -2788,7 +3494,7 @@ async function renderFinanceView(filterParams = {}) {
                           <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.15rem; line-height:1.35;">
                             วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}<br>
                             ${s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== costTotal ? `
-                              <span style="color:var(--primary); font-weight:700;">ส่วนต่างทุน: ฿${(s.actualCostReturned - costTotal).toLocaleString()}</span>
+                              <span style="color:var(--accent-ink); font-weight:700;">ส่วนต่างทุน: ฿${(s.actualCostReturned - costTotal).toLocaleString()}</span>
                             ` : ''}
                           </span>
                         `}
@@ -2808,7 +3514,7 @@ async function renderFinanceView(filterParams = {}) {
                     </td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
             </tbody>
           </table>
         </div>
@@ -2856,19 +3562,19 @@ async function renderFinanceView(filterParams = {}) {
               <select id="exp-recorded-by-filter" class="form-select" style="width:auto; font-size:0.78rem; padding:0.2rem 0.4rem; height:auto; min-height:auto;" onchange="filterExpenseTable()">
                 <option value="">-- ทั้งหมด --</option>
                 ${(() => {
-                  const uniqueRecoders = [];
-                  const recoderIds = new Set();
-                  expenses.forEach(e => {
-                    if (e.recordedBy) {
-                      const id = e.recordedBy._id || e.recordedBy;
-                      if (!recoderIds.has(id)) {
-                        recoderIds.add(id);
-                        uniqueRecoders.push(e.recordedBy);
-                      }
-                    }
-                  });
-                  return uniqueRecoders.map(u => `<option value="${u._id || u}">${u.fullName || u.username}</option>`).join('');
-                })()}
+        const uniqueRecoders = [];
+        const recoderIds = new Set();
+        expenses.forEach(e => {
+          if (e.recordedBy) {
+            const id = e.recordedBy._id || e.recordedBy;
+            if (!recoderIds.has(id)) {
+              recoderIds.add(id);
+              uniqueRecoders.push(e.recordedBy);
+            }
+          }
+        });
+        return uniqueRecoders.map(u => `<option value="${u._id || u}">${u.fullName || u.username}</option>`).join('');
+      })()}
               </select>
             </div>
 
@@ -2928,21 +3634,21 @@ async function renderFinanceView(filterParams = {}) {
             <tbody id="expenses-tbody">
               ${expenses.length === 0 ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีรายการบันทึกรายจ่ายใดๆ</td></tr>` : ''}
               ${expenses.map(exp => {
-                const dateStr = new Date(exp.expenseDate).toLocaleDateString('th-TH');
-                const isoDate = new Date(exp.expenseDate).toISOString().split('T')[0];
-                const searchStr = (exp.expenseNumber + ' ' + (exp.title || '') + ' ' + (exp.branch ? exp.branch.name : 'ส่วนกลาง') + ' ' + exp.category + ' ' + (exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : '') + ' ' + (exp.note || '')).toLowerCase();
-                const defaultCategories = {
-                  'Rent': 'ค่าเช่าสถานที่',
-                  'Utilities': 'ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต',
-                  'Salary': 'เงินเดือน/ค่าจ้างพนักงาน',
-                  'Marketing': 'ค่าโฆษณา/การตลาด',
-                  'Repair/Maintenance': 'ค่าซ่อมแซม/บำรุงรักษา',
-                  'Other': 'อื่นๆ'
-                };
-                const categoryThai = defaultCategories[exp.category] || exp.category;
-                const recUserId = exp.recordedBy ? exp.recordedBy._id || exp.recordedBy : '';
+        const dateStr = new Date(exp.expenseDate).toLocaleDateString('th-TH');
+        const isoDate = new Date(exp.expenseDate).toISOString().split('T')[0];
+        const searchStr = (exp.expenseNumber + ' ' + (exp.title || '') + ' ' + (exp.branch ? exp.branch.name : 'ส่วนกลาง') + ' ' + exp.category + ' ' + (exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : '') + ' ' + (exp.note || '')).toLowerCase();
+        const defaultCategories = {
+          'Rent': 'ค่าเช่าสถานที่',
+          'Utilities': 'ค่าน้ำ/ค่าไฟ/อินเทอร์เน็ต',
+          'Salary': 'เงินเดือน/ค่าจ้างพนักงาน',
+          'Marketing': 'ค่าโฆษณา/การตลาด',
+          'Repair/Maintenance': 'ค่าซ่อมแซม/บำรุงรักษา',
+          'Other': 'อื่นๆ'
+        };
+        const categoryThai = defaultCategories[exp.category] || exp.category;
+        const recUserId = exp.recordedBy ? exp.recordedBy._id || exp.recordedBy : '';
 
-                return `
+        return `
                   <tr class="exp-row" data-search="${searchStr}" data-category="${exp.category}" data-date="${isoDate}" data-recorded-by="${recUserId}" data-amount="${exp.amount || 0}">
                     <td>
                       <strong style="color:var(--ink);">${exp.expenseNumber}</strong><br>
@@ -2964,7 +3670,7 @@ async function renderFinanceView(filterParams = {}) {
                     </td>
                   </tr>
                 `;
-              }).join('')}
+      }).join('')}
             </tbody>
           </table>
         </div>
@@ -3347,7 +4053,7 @@ function filterExpenseTable() {
     const rowCategory = row.getAttribute('data-category') || '';
     const rowRecordedBy = row.getAttribute('data-recorded-by') || '';
     const rowAmount = Number(row.getAttribute('data-amount') || '0');
-    
+
     let matchSearch = searchData.includes(query);
     let matchCategory = !categoryFilter || rowCategory === categoryFilter;
     let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
@@ -3377,7 +4083,7 @@ function openRecordFinancePayoutModal(saleId, receiptNumber, amount, companyName
 
     <form id="record-payout-form" onsubmit="event.preventDefault(); submitFinancePayoutReceived('${saleId}');">
       <div class="form-group">
-        <label for="fp-received-date" style="color:var(--primary); font-weight:700;">
+        <label for="fp-received-date" style="color:var(--accent-ink); font-weight:700;">
           <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> ระบุวันที่ ที่รับเงินจากไฟแนนซ์จริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="fp-received-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700;">
@@ -3484,7 +4190,7 @@ async function renderMasterSettingsView() {
         <!-- 1. BRANDS -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:var(--primary);">
+            <h4 style="font-weight:700; font-size:0.95rem; color:var(--accent-ink);">
               <i class="fa-solid fa-copyright" aria-hidden="true"></i> ยี่ห้อ (Brand)
             </h4>
             <span class="badge badge-gray">${brands.length} รายการ</span>
@@ -3506,7 +4212,7 @@ async function renderMasterSettingsView() {
         <!-- 2. MODELS -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:var(--primary);">
+            <h4 style="font-weight:700; font-size:0.95rem; color:var(--accent-ink);">
               <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i> ชื่อรุ่น (Model)
             </h4>
             <span class="badge badge-gray">${models.length} รายการ</span>
@@ -3553,7 +4259,7 @@ async function renderMasterSettingsView() {
         <!-- 4. COLORS -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:var(--primary);">
+            <h4 style="font-weight:700; font-size:0.95rem; color:var(--accent-ink);">
               <i class="fa-solid fa-droplet" aria-hidden="true"></i> สีสินค้า (Color)
             </h4>
             <span class="badge badge-gray">${colors.length} รายการ</span>
@@ -3575,7 +4281,7 @@ async function renderMasterSettingsView() {
         <!-- 5. CATEGORIES -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; border-bottom:1px solid var(--border-color); padding-bottom:0.4rem;">
-            <h4 style="font-weight:700; font-size:0.95rem; color:var(--primary);">
+            <h4 style="font-weight:700; font-size:0.95rem; color:var(--accent-ink);">
               <i class="fa-solid fa-tags" aria-hidden="true"></i> หมวดหมู่สินค้า (Category)
             </h4>
             <span class="badge badge-gray">${categories.length} รายการ</span>
@@ -3824,7 +4530,7 @@ function filterHqAuditGrid() {
 
   gridContainer.innerHTML = filtered.map(b => {
     const isSelected = (branchFilter !== 'all' && b.branch.id === branchFilter);
-    
+
     let badgeClass = 'badge-gray';
     let iconClass = 'fa-minus';
     if (b.colorCode === 'green') {
@@ -3908,7 +4614,7 @@ function renderHqAuditDetails() {
 
   activeBranches.forEach(b => {
     const items = (b.items || []).filter(item => (item.expectedCount > 0 || item.actualCount > 0));
-    
+
     items.forEach(item => {
       const pName = item.productName || 'สินค้าไม่ระบุชื่อ';
       const expectedImeis = item.expectedImeis || [];
@@ -3922,7 +4628,7 @@ function renderHqAuditDetails() {
         expectedImeis.forEach(imei => {
           const isScanned = scannedSet.has(imei);
           const imgObj = imeiImages.find(img => img.imei === imei);
-          
+
           const issueObj = (item.imeiIssues || []).find(iss => iss.imei === imei && iss.hasIssue);
           const hasIssue = !!issueObj;
           const issueRemark = issueObj ? issueObj.remark : '';
@@ -4036,7 +4742,7 @@ function renderHqAuditDetails() {
             <div>สแกนส่งตรวจทั้งหมด: <strong style="color:var(--text-main);">${totalToVerify}</strong> เครื่อง</div>
             <div><i class="fa-solid fa-circle-check" style="color:var(--ink);" aria-hidden="true"></i> ผ่าน: <strong style="color:var(--ink);">${totalPassed}</strong> เครื่อง</div>
             <div><i class="fa-solid fa-circle-xmark" style="color:var(--ink);" aria-hidden="true"></i> ไม่ผ่าน: <strong style="color:var(--ink);">${totalFailed}</strong> เครื่อง</div>
-            <div><i class="fa-solid fa-rotate-left" style="color:var(--primary);" aria-hidden="true"></i> ให้ส่งตรวจใหม่: <strong style="color:var(--ink);">${totalResubmit}</strong> เครื่อง</div>
+            <div><i class="fa-solid fa-rotate-left" style="color:var(--accent-ink);" aria-hidden="true"></i> ให้ส่งตรวจใหม่: <strong style="color:var(--ink);">${totalResubmit}</strong> เครื่อง</div>
             <div><i class="fa-solid fa-clock" style="color:var(--body-muted);" aria-hidden="true"></i> ยังไม่ได้ตรวจ: <strong style="color:var(--text-main);">${totalPendingVerify}</strong> เครื่อง</div>
           </div>
         </div>
@@ -4059,28 +4765,28 @@ function renderHqAuditDetails() {
           <tbody>
             ${unitRows.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้า</td></tr>` : ''}
             ${unitRows.map(row => {
-              const imei = row.imei;
-              const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
-              const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
-              const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+    const imei = row.imei;
+    const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+    const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+    const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
 
-              return `
+    return `
                 <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei + ' ' + row.branchName).toLowerCase()}">
                   <td>
                     <span class="badge badge-gray" style="font-weight:700;">${row.branchName}</span>
                   </td>
                   <td>
                     <strong style="color:var(--ink);">${row.productName}</strong>
-                    ${row.hasIssue ? `<div style="font-size:0.75rem; color:var(--primary); font-weight:700; margin-top:0.2rem;"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> หมายเหตุ: ${row.issueRemark} <span style="color:var(--text-muted); font-weight:normal; margin-left:0.3rem;">(แจ้งโดย: ${row.reportedByName || 'พนักงานสาขา'})</span></div>` : ''}
+                    ${row.hasIssue ? `<div style="font-size:0.75rem; color:var(--accent-ink); font-weight:700; margin-top:0.2rem;"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> หมายเหตุ: ${row.issueRemark} <span style="color:var(--text-muted); font-weight:normal; margin-left:0.3rem;">(แจ้งโดย: ${row.reportedByName || 'พนักงานสาขา'})</span></div>` : ''}
                   </td>
                   <td style="font-size:0.9rem;">
                     ${row.isScanned && imei !== '-' ? `
                       <span style="font-family:monospace; font-weight:700; color:var(--ink); font-size:0.95rem;">${imei}</span>
-                      ${row.isUnexpected ? '<span style="color:var(--primary); font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
+                      ${row.isUnexpected ? '<span style="color:var(--accent-ink); font-size:0.75rem; margin-left:0.4rem;">(สแกนเกิน)</span>' : ''}
                     ` : imei !== '-' && imei !== 'ไม่มี IMEI' ? `
                       <span style="font-family:monospace; font-weight:700; color:var(--ink); font-size:0.92rem;">${imei}</span>
                       ${row.hasIssue ? `
-                        <span class="badge badge-yellow" style="background:var(--primary); color:var(--canvas-elevated); font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา</span>
+                        <span class="badge badge-yellow" style="background:var(--primary); color:var(--on-primary); font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา</span>
                       ` : `
                         <span style="color:var(--ink); font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
                       `}
@@ -4091,9 +4797,9 @@ function renderHqAuditDetails() {
                       <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
                         <div>
                           ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ผ่าน</span>' :
-                            isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ไม่ผ่าน</span>' :
-                            isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ส่งตรวจใหม่</span>' :
-                            '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
+          isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ไม่ผ่าน</span>' :
+            isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ส่งตรวจใหม่</span>' :
+              '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
                         </div>
 
                         <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
@@ -4104,7 +4810,7 @@ function renderHqAuditDetails() {
                   </td>
                 </tr>
               `;
-            }).join('')}
+  }).join('')}
           </tbody>
         </table>
       </div>
@@ -4194,7 +4900,7 @@ function openImeiInspectionModal(imei, branchId) {
     if (matchedItem) {
       productName = matchedItem.productName;
       imgObj = (matchedItem.imeiImages || []).find(img => img.imei === imei);
-      
+
       const issueObj = (matchedItem.imeiIssues || []).find(iss => iss.imei === imei && iss.hasIssue);
       if (issueObj) {
         hasIssue = true;
@@ -4246,9 +4952,9 @@ function openImeiInspectionModal(imei, branchId) {
 
     ${hasIssue ? `
       <div style="background:var(--surface-tile-2); border:1.5px solid var(--primary); padding:0.9rem; border-radius:8px; margin-bottom:1.2rem; display:flex; gap:0.6rem; align-items:flex-start; text-align:left; font-family:'Sarabun';">
-        <div style="font-size:1.4rem; color:var(--primary); margin-top:0.15rem;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
+        <div style="font-size:1.4rem; color:var(--accent-ink); margin-top:0.15rem;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
         <div>
-          <strong style="color:var(--primary); font-size:0.92rem; display:block;">แจ้งปัญหาจากพนักงานหน้าร้าน:</strong>
+          <strong style="color:var(--accent-ink); font-size:0.92rem; display:block;">แจ้งปัญหาจากพนักงานหน้าร้าน:</strong>
           <span style="font-size:0.88rem; color:var(--text-main); line-height:1.5; margin-top:0.2rem; display:block;">${issueRemark || 'ไม่ได้ระบุหมายเหตุ'}</span>
           <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:0.4rem; font-weight:700;"><i class="fa-solid fa-user" aria-hidden="true"></i> ผู้แจ้ง: ${reportedByName || 'พนักงานสาขา'}</span>
         </div>
@@ -4261,7 +4967,7 @@ function openImeiInspectionModal(imei, branchId) {
         <div style="width:100%; text-align:center;">
           <div style="position:relative; display:inline-block; cursor:pointer;" onclick="window.open('${targetDriveUrl.replace(/'/g, "\\'")}', '_blank')" title="แตะเพื่อเปิดดูลิงก์รูปภาพเต็มใน Google Drive (แท็บใหม่)">
             <img src="${imgUrl}" style="max-height:360px; max-width:100%; border-radius:8px; border:2px solid var(--accent-gold); box-shadow:0 6px 20px var(--surface-tile-3); transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onerror="this.onerror=null; ${fileId ? `this.src='https://drive.google.com/thumbnail?id=${fileId}&sz=w1000';` : `document.getElementById('no-img-text-${imei}').style.display='block';`}">
-            <div style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.85); color:var(--primary); padding:0.3rem 0.7rem; border-radius:6px; font-size:0.78rem; border:1px solid var(--primary-muted); pointer-events:none; font-weight:700;">
+            <div style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.85); color:var(--accent-ink); padding:0.3rem 0.7rem; border-radius:6px; font-size:0.78rem; border:1px solid var(--primary-muted); pointer-events:none; font-weight:700;">
               <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> แตะเพื่อเปิดลิงก์รูปภาพ
             </div>
           </div>
@@ -4301,17 +5007,17 @@ async function setItemDecision(imei, decision) {
   if (!window.hqAuditInspectionState) return;
 
   const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
-  
+
   let branchId = window.currentInspectedBranchId;
   if (!branchId || branchId === 'all') {
     branchId = window.hqAuditInspectionState.branchId;
   }
-  
+
   // Fallback to match item in collection
   if (!branchId || branchId === 'all') {
     if (window.hqAuditInspectionState.items) {
-      const matched = window.hqAuditInspectionState.items.find(i => 
-        (i.scannedImeis && i.scannedImeis.includes(imei)) || 
+      const matched = window.hqAuditInspectionState.items.find(i =>
+        (i.scannedImeis && i.scannedImeis.includes(imei)) ||
         (i.expectedImeis && i.expectedImeis.includes(imei))
       );
       if (matched && matched.branchId) {
@@ -4408,7 +5114,7 @@ async function renderBranchAuditView() {
 
         <div style="margin-top: 1.2rem; background: var(--surface-tile-2); border:1px solid var(--border-glow); padding:1rem; border-radius:var(--radius-md); display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
           ${selectedBranchId === 'all' ? `
-            <div style="font-size:0.9rem; font-weight:700; color:var(--primary); display:flex; align-items:center; gap:0.5rem; width:100%;">
+            <div style="font-size:0.9rem; font-weight:700; color:var(--accent-ink); display:flex; align-items:center; gap:0.5rem; width:100%;">
               <i class="fa-solid fa-circle-info" style="font-size:1.1rem;" aria-hidden="true"></i> 
               <span>กำลังเปิดดูสต็อกทุกสาขารวมกัน (โหมดอ่านอย่างเดียว) หากต้องการตรวจนับ/สแกนสินค้า กรุณาเลือกสาขาที่เจาะจงด้านบน</span>
             </div>
@@ -4442,17 +5148,17 @@ async function renderBranchAuditView() {
           <tbody id="branch-audit-table-body">
             ${state.expectedStockCache.length === 0 ? `<tr><td colspan="${selectedBranchId === 'all' ? 7 : 6}" style="text-align:center; color:var(--text-muted);">ไม่พบรายการสินค้าในสต็อกสาขานี้</td></tr>` : ''}
             ${state.expectedStockCache.map((item, idx) => {
-              const scannedImeis = item.scannedImeis || [];
-              const actual = scannedImeis.length;
-              const diff = actual - item.expectedCount;
-              const isScanned = item.isScanned || actual > 0;
-              const photoBtn = item.photoUrl ? `
+      const scannedImeis = item.scannedImeis || [];
+      const actual = scannedImeis.length;
+      const diff = actual - item.expectedCount;
+      const isScanned = item.isScanned || actual > 0;
+      const photoBtn = item.photoUrl ? `
                 <button class="btn btn-secondary btn-sm" onclick="viewAuditPhoto('${item.photoUrl}')" aria-label="ดูรูปภาพหลักฐาน">
                   <i class="fa-solid fa-image" aria-hidden="true"></i>
                 </button>
               ` : `<span style="color:var(--text-muted); font-size:0.8rem;">- ไม่มีรูปภาพ -</span>`;
 
-              return `
+      return `
                 <tr id="audit-row-${idx}">
                   <td>
                     <strong style="color:var(--ink);">${item.productName}</strong>
@@ -4467,7 +5173,7 @@ async function renderBranchAuditView() {
                           <i class="fa-solid fa-pen" aria-hidden="true"></i> แก้ไขหมายเหตุ
                         </button>
                       ` : `
-                        <button class="btn btn-warning btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700; background:var(--primary); border:none; color:var(--canvas-elevated);" onclick="openReportIssueModal('${item.imei}', ${idx})">
+                        <button class="btn btn-warning btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700; background:var(--primary); border:none; color:var(--on-primary);" onclick="openReportIssueModal('${item.imei}', ${idx})">
                           <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา
                         </button>
                       `}
@@ -4479,15 +5185,15 @@ async function renderBranchAuditView() {
                   </td>
                   <td id="variance-status-${idx}">
                     ${(diff === 0 || item.hasIssue) ? `<span class="badge badge-green">สำเร็จ</span>` :
-                      diff < 0 ? `<span class="badge badge-yellow">รอดำเนินการ</span>` :
-                      `<span class="badge badge-red">ยอดเกิน</span>`}
+          diff < 0 ? `<span class="badge badge-yellow">รอดำเนินการ</span>` :
+            `<span class="badge badge-red">ยอดเกิน</span>`}
                   </td>
                   <td id="photo-cell-${idx}" style="text-align:center; vertical-align:middle;">
                     ${photoBtn}
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -4583,7 +5289,7 @@ function openReportIssueModal(imei, idx) {
 
   const bodyHtml = `
     <div style="background:var(--surface-tile-2); border:1px solid var(--hairline); padding:1rem; border-radius:8px; margin-bottom:1.2rem;">
-      <div style="font-weight:800; font-size:1.05rem; color:var(--primary); margin-bottom:0.3rem;">
+      <div style="font-weight:800; font-size:1.05rem; color:var(--accent-ink); margin-bottom:0.3rem;">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหาไม่สามารถตรวจนับเครื่องได้
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
@@ -4606,13 +5312,13 @@ function openReportIssueModal(imei, idx) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-warning" onclick="submitReportIssue('${imei}', ${idx})" style="background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700;">
+    <button class="btn btn-warning" onclick="submitReportIssue('${imei}', ${idx})" style="background:var(--primary); border:none; color:var(--on-primary); font-weight:700;">
       <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> ยืนยันแจ้งปัญหา
     </button>
   `;
 
   openModal(`แจ้งปัญหาสินค้า IMEI: ${imei}`, bodyHtml, footerHtml);
-  
+
   setTimeout(() => {
     const txtArea = document.getElementById('issue-remark-input');
     if (txtArea) {
@@ -4631,7 +5337,7 @@ async function submitReportIssue(imei, idx) {
 
   const remark = remarkInput.value.trim();
   const auditDate = document.getElementById('branch-audit-date') ? document.getElementById('branch-audit-date').value : new Date().toISOString().split('T')[0];
-  
+
   const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
   const branchId = isHqUser ? state.selectedBranchAuditId : (state.user.branch ? state.user.branch._id : null);
 
@@ -4650,13 +5356,13 @@ async function submitReportIssue(imei, idx) {
 
     if (res.success) {
       showToast(res.message || 'บันทึกรายงานแจ้งปัญหาเรียบร้อยแล้ว');
-      
+
       // Update local state cache
       const item = state.expectedStockCache[idx];
       if (item) {
         item.hasIssue = true;
         item.issueRemark = remark;
-        
+
         // Add to imeiIssues inside expectedStockCache
         item.imeiIssues = item.imeiIssues || [];
         const existingIdx = item.imeiIssues.findIndex(i => i.imei === imei);
@@ -4669,13 +5375,13 @@ async function submitReportIssue(imei, idx) {
       }
 
       closeModal();
-      
+
       // Update UI row dynamically
       updateRowVariance(idx);
-      
+
       // Submit form silently to sync all audit items with backend
       await submitBranchAuditFormSilent();
-      
+
       // Re-fetch or refresh current view to guarantee sync
       renderBranchAuditView();
     }
@@ -4734,7 +5440,7 @@ function openUploadImeiImageModal(serial, matchedIdx) {
         <label for="imei-photo-file" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.8rem; padding:2rem 1.5rem; border:2px dashed var(--primary-muted); border-radius:12px; background:var(--surface-tile-2); cursor:pointer; transition:all 0.25s ease; max-width:340px; margin:0 auto;" 
                onmouseover="this.style.borderColor='var(--primary)'; this.style.background='var(--surface-tile-2)'; this.style.boxShadow='0 0 20px var(--hairline)';"
                onmouseout="this.style.borderColor='var(--primary-muted)'; this.style.background='var(--surface-tile-2)'; this.style.boxShadow='none';">
-          <div style="width:54px; height:54px; border-radius:50%; background:var(--canvas-elevated); display:flex; align-items:center; justify-content:center; color:var(--canvas-elevated); box-shadow:0 4px 15px var(--primary-muted);">
+          <div style="width:54px; height:54px; border-radius:50%; background:var(--canvas-elevated); display:flex; align-items:center; justify-content:center; color:var(--ink); box-shadow:0 4px 15px var(--primary-muted);">
             <i class="fa-solid fa-camera" style="font-size:1.5rem;" aria-hidden="true"></i>
           </div>
           <div style="font-size:1rem; font-weight:800; color:var(--text-main); margin-top:0.2rem;">เปิดกล้องถ่ายภาพ / เลือกรูปภาพ</div>
@@ -4764,7 +5470,7 @@ function previewImeiPhoto(input) {
 
   if (input.files && input.files[0]) {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
       previewImg.src = e.target.result;
       previewContainer.style.display = 'block';
     };
@@ -4936,7 +5642,7 @@ async function confirmScanWithoutPhoto(serial, matchedIdx) {
 async function submitBranchAuditFormSilent() {
   const auditDateEl = document.getElementById('branch-audit-date');
   const auditDate = auditDateEl ? auditDateEl.value : new Date().toISOString().split('T')[0];
-  
+
   const isHqUser = !state.user.branch || state.user.branch.code === 'BR-HQ01' || (state.user.branch.name && state.user.branch.name.includes('สำนักงานใหญ่'));
   const userBranchId = isHqUser && state.selectedBranchAuditId && state.selectedBranchAuditId !== 'all'
     ? state.selectedBranchAuditId
@@ -5027,20 +5733,20 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
 
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1.2rem;">
             ${branches.map(b => {
-              const bLimit = b.creditLimit || 0;
-              const bUsed = b.usedCredit || 0;
-              const bRem = Math.max(0, bLimit - bUsed);
-              const bPct = bLimit > 0 ? Math.min(100, Math.round((bUsed / bLimit) * 100)) : 0;
+      const bLimit = b.creditLimit || 0;
+      const bUsed = b.usedCredit || 0;
+      const bRem = Math.max(0, bLimit - bUsed);
+      const bPct = bLimit > 0 ? Math.min(100, Math.round((bUsed / bLimit) * 100)) : 0;
 
-              const bOrders = allOrders.filter(o => String(o.branch ? (o.branch._id || o.branch) : '') === String(b._id));
-              const pendingCount = bOrders.filter(o => o.status === 'pending_imei').length;
-              const receivedCount = bOrders.filter(o => o.status === 'received').length;
-              const totalOrderVal = bOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const bOrders = allOrders.filter(o => String(o.branch ? (o.branch._id || o.branch) : '') === String(b._id));
+      const pendingCount = bOrders.filter(o => o.status === 'pending_imei').length;
+      const receivedCount = bOrders.filter(o => o.status === 'received').length;
+      const totalOrderVal = bOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
-              const inStockCount = stockList.filter(s => String(s.branch ? (s.branch._id || s.branch) : '') === String(b._id) && s.status === 'in_stock').length;
-              const isSelected = selectedBranchId && String(selectedBranchId) === String(b._id);
+      const inStockCount = stockList.filter(s => String(s.branch ? (s.branch._id || s.branch) : '') === String(b._id) && s.status === 'in_stock').length;
+      const isSelected = selectedBranchId && String(selectedBranchId) === String(b._id);
 
-              return `
+      return `
                 <div class="card" style="background:var(--canvas-elevated); border:${isSelected ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)'}; border-radius:10px; padding:1.2rem; display:flex; flex-direction:column; justify-content:space-between; box-shadow:${isSelected ? '0 0 15px var(--primary-muted)' : 'none'};">
                   <div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
@@ -5121,7 +5827,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                   </div>
                 </div>
               `;
-            }).join('')}
+    }).join('')}
           </div>
         </div>
       ` : ''}
@@ -5177,21 +5883,21 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
           <tbody>
             ${displayedOrders.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีรายการสั่งซื้อสินค้าลงสาขา</td></tr>` : ''}
             ${displayedOrders.map(order => {
-              const isPending = order.status === 'pending_imei';
-              const itemsList = order.items || [];
-              const totalQty = itemsList.reduce((sum, item) => sum + (item.quantity || 0), 0);
-              const dateObj = new Date(order.createdAt);
-              const isoDate = dateObj.toISOString().split('T')[0];
-              const itemsNamesStr = itemsList.map(it => it.productName).join(' ');
+      const isPending = order.status === 'pending_imei';
+      const itemsList = order.items || [];
+      const totalQty = itemsList.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      const dateObj = new Date(order.createdAt);
+      const isoDate = dateObj.toISOString().split('T')[0];
+      const itemsNamesStr = itemsList.map(it => it.productName).join(' ');
 
-              let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> รับเข้าสต็อกแล้ว</span>';
-              if (isPending) {
-                statusBadge = '<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอสาขาเติม IMEI</span>';
-              } else if (order.status === 'cancelled') {
-                statusBadge = '<span class="badge badge-red"><i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิก</span>';
-              }
+      let statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> รับเข้าสต็อกแล้ว</span>';
+      if (isPending) {
+        statusBadge = '<span class="badge badge-yellow"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอสาขาเติม IMEI</span>';
+      } else if (order.status === 'cancelled') {
+        statusBadge = '<span class="badge badge-red"><i class="fa-solid fa-ban" aria-hidden="true"></i> ยกเลิก</span>';
+      }
 
-              return `
+      return `
                 <tr class="po-row" data-search="${(order.orderNumber + ' ' + (order.branchName || '') + ' ' + itemsNamesStr + ' ' + (order.orderedByName || '')).toLowerCase()}" data-date="${isoDate}">
                   <td>
                     <strong style="color:var(--accent-secondary); font-size:0.92rem;">${order.orderNumber}</strong><br>
@@ -5220,7 +5926,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                           </button>
                         </div>
                         ${isHqOrAdmin ? `
-                          <button class="btn btn-sm" style="padding:0.25rem 0.4rem; font-size:0.73rem; width:100%; font-weight:700; background:var(--primary); color:var(--canvas-elevated); border:none; margin-top:0.2rem;" onclick="markPurchaseOrderAsReceived('${order._id}', '${order.orderNumber}')">
+                          <button class="btn btn-sm" style="padding:0.25rem 0.4rem; font-size:0.73rem; width:100%; font-weight:700; background:var(--primary); color:var(--on-primary); border:none; margin-top:0.2rem;" onclick="markPurchaseOrderAsReceived('${order._id}', '${order.orderNumber}')">
                             <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ปิดใบสั่งซื้อ (รับเข้าสต็อกแล้ว)
                           </button>
                         ` : ''}
@@ -5232,7 +5938,7 @@ async function renderBranchPurchaseOrdersView(selectedBranchId = null, shouldScr
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -5259,7 +5965,7 @@ function filterPoTable() {
   document.querySelectorAll('.po-row').forEach(row => {
     const searchData = row.getAttribute('data-search') || '';
     const rowDate = row.getAttribute('data-date') || '';
-    
+
     let matchSearch = searchData.includes(query);
     let matchDate = true;
 
@@ -5601,7 +6307,7 @@ async function openEditPurchaseOrderModal(orderId) {
           </div>
         </div>
 
-        <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:var(--primary); display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-weight:800; font-size:0.98rem; margin-bottom:0.8rem; color:var(--accent-ink); display:flex; justify-content:space-between; align-items:center;">
           <span><i class="fa-solid fa-boxes-packing" aria-hidden="true"></i> รายการสินค้าที่ต้องการสั่งซื้อ (ระบุสเปกและราคา)</span>
           <button type="button" class="btn btn-success btn-sm" onclick="addPoItemRow()" style="font-weight:700;">
             <i class="fa-solid fa-plus" aria-hidden="true"></i> + เพิ่มรายการสินค้า
@@ -5731,7 +6437,7 @@ async function openFillImeiAndReceiveModal(orderId) {
           <div style="font-weight:800; font-size:0.92rem; color:var(--ink); margin-bottom:0.4rem;">
             ${itemIdx + 1}. ${item.productName}
           </div>
-          <div style="font-size:0.8rem; color:var(--primary); margin-bottom:0.6rem; font-weight:700;">
+          <div style="font-size:0.8rem; color:var(--accent-ink); margin-bottom:0.6rem; font-weight:700;">
             จำนวนที่ต้องกรอก: ${item.quantity} เครื่อง
           </div>
 
@@ -5775,7 +6481,7 @@ async function openFillImeiAndReceiveModal(orderId) {
 function handlePoImeiInputKeyDown(event, input) {
   if (event.key === 'Enter') {
     event.preventDefault();
-    
+
     const currentVal = input.value.trim();
     if (!currentVal) return;
 
@@ -5798,7 +6504,7 @@ function handlePoImeiInputKeyDown(event, input) {
       const productName = window.currentFillingPo && window.currentFillingPo.items[itemIdx]
         ? window.currentFillingPo.items[itemIdx].productName
         : '';
-      
+
       showToast(`หมายเลข IMEI ซ้ำกับ ${productName} เครื่องที่ ${subIdx + 1}`, 'error');
       input.focus();
       input.select();
@@ -5974,8 +6680,8 @@ async function printPurchaseOrderDoc(orderId) {
             </thead>
             <tbody>
               ${itemsList.map((item, idx) => {
-                const imeiList = (item.imeis && item.imeis.length > 0) ? item.imeis : [];
-                return `
+      const imeiList = (item.imeis && item.imeis.length > 0) ? item.imeis : [];
+      return `
                   <tr style="color:#000; border-bottom:1px solid #eee;">
                     <td style="padding:10px 8px; text-align:center; color:#555;">${idx + 1}</td>
                     <td style="padding:10px 8px;">
@@ -5987,7 +6693,7 @@ async function printPurchaseOrderDoc(orderId) {
                     <td style="padding:10px 8px; text-align:right; font-weight:700;">฿${(item.totalPrice || (item.quantity * item.unitPrice) || 0).toLocaleString()}</td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
             </tbody>
             <tfoot>
               <tr style="background:#f0fdf4; font-weight:700; border-top:1px solid #000; color:#000;">
@@ -6141,8 +6847,8 @@ async function renderGoodsReceiptView() {
         <div class="card gr-pending-po-card" style="width: 100%; margin:0 auto 1.5rem auto;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; flex-wrap:wrap; gap:0.5rem;">
             <div style="display:flex; align-items:center; gap:0.6rem;">
-              <i class="fa-solid fa-bell" style="color:var(--primary); font-size:1.1rem;" aria-hidden="true"></i>
-              <h4 style="font-size:1.05rem; font-weight:800; color:var(--primary); margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
+              <i class="fa-solid fa-bell" style="color:var(--accent-ink); font-size:1.1rem;" aria-hidden="true"></i>
+              <h4 style="font-size:1.05rem; font-weight:800; color:var(--accent-ink); margin:0;">ใบสั่งซื้อที่รอเติม IMEI & รับเข้าสต็อก</h4>
               <span id="gr-pending-po-count-badge" class="badge badge-yellow" style="font-size:0.82rem;">${pendingPoOrders.length} ใบ</span>
             </div>
             
@@ -6246,15 +6952,15 @@ async function renderGoodsReceiptView() {
             <tbody>
               ${receipts.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ยังไม่มีประวัติการรับสินค้าเข้าสต็อก</td></tr>` : ''}
               ${receipts.map(r => {
-                const p = r.productInfo || {};
-                const isPending = r.status === 'pending_pricing';
-                const isConfirmed = r.status === 'confirmed';
-                const dateObj = new Date(r.createdAt);
-                const dateStr = dateObj.toLocaleString('th-TH');
-                const isoDate = dateObj.toISOString().split('T')[0];
-                const branchId = r.branch ? (r.branch._id || r.branch) : '';
+      const p = r.productInfo || {};
+      const isPending = r.status === 'pending_pricing';
+      const isConfirmed = r.status === 'confirmed';
+      const dateObj = new Date(r.createdAt);
+      const dateStr = dateObj.toLocaleString('th-TH');
+      const isoDate = dateObj.toISOString().split('T')[0];
+      const branchId = r.branch ? (r.branch._id || r.branch) : '';
 
-                return `
+      return `
                   <tr class="receipt-history-row gr-table-row" data-search="${(r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + (p.brand || '') + ' ' + (p.model || '') + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase()}" data-date="${isoDate}" data-branch-id="${branchId}">
                     <td>
                       <strong style="color:var(--ink);">${r.receiptNumber}</strong><br>
@@ -6273,8 +6979,8 @@ async function renderGoodsReceiptView() {
                     </td>
                     <td>
                       ${isPending ? '<span class="badge badge-gr-pending"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคา / ยืนยัน</span>' :
-                        isConfirmed ? '<span class="badge badge-gr-confirmed"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
-                        '<span class="badge badge-red"><i class="fa-solid fa-xmark" aria-hidden="true"></i> ถูกปฏิเสธ</span>'}
+          isConfirmed ? '<span class="badge badge-gr-confirmed"><i class="fa-solid fa-check-double" aria-hidden="true"></i> ยืนยันเข้าสต็อกจริงแล้ว</span>' :
+            '<span class="badge badge-red"><i class="fa-solid fa-xmark" aria-hidden="true"></i> ถูกปฏิเสธ</span>'}
                     </td>
                     <td style="text-align:center;">
                       ${isPending ? `
@@ -6289,7 +6995,7 @@ async function renderGoodsReceiptView() {
                     </td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
             </tbody>
           </table>
         </div>
@@ -6314,7 +7020,7 @@ async function renderGoodsReceiptView() {
 
           <!-- Add Item Box -->
           <div style="background:var(--surface-tile-3); border:1px solid rgba(255,255,255,0.1); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem;">
-            <div style="font-weight:700; color:var(--primary); font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
+            <div style="font-weight:700; color:var(--accent-ink); font-size:0.95rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.4rem;">
               <i class="fa-solid fa-plus-circle" aria-hidden="true"></i> ระบุข้อมูลสินค้าเครื่องที่จะรับเข้า:
             </div>
 
@@ -6439,7 +7145,7 @@ function filterGrPendingPoTable() {
     const searchData = row.getAttribute('data-search') || '';
     const rowDate = row.getAttribute('data-date') || '';
     const rowBranchId = row.getAttribute('data-branch-id') || '';
-    
+
     let matchSearch = searchData.includes(query);
     let matchDate = true;
     let matchBranch = true;
@@ -6472,7 +7178,7 @@ function filterGrReceiptHistoryTable() {
     const searchData = row.getAttribute('data-search') || '';
     const rowDate = row.getAttribute('data-date') || '';
     const rowBranchId = row.getAttribute('data-branch-id') || '';
-    
+
     let matchSearch = searchData.includes(query);
     let matchDate = true;
     let matchBranch = true;
@@ -6504,7 +7210,7 @@ function openEditGoodsReceiptModal(receiptId) {
 
   const bodyHtml = `
     <div style="background:var(--surface-tile-3); padding:0.8rem; border-radius:6px; margin-bottom:1rem;">
-      <div style="font-weight:700; color:var(--primary); font-size:0.95rem; margin-bottom:0.2rem;">
+      <div style="font-weight:700; color:var(--accent-ink); font-size:0.95rem; margin-bottom:0.2rem;">
         เลขที่ใบรับ: <strong>${receipt.receiptNumber}</strong>
       </div>
       <div style="font-size:0.82rem; color:var(--text-muted);">
@@ -6561,7 +7267,7 @@ function openEditGoodsReceiptModal(receiptId) {
 
       <div class="form-group">
         <label for="edit-gr-imei">หมายเลขซีเรียล / IMEI</label>
-        <input type="text" id="edit-gr-imei" class="form-control" value="${currentImei}" style="font-family:monospace; font-weight:700; color:var(--primary);" required>
+        <input type="text" id="edit-gr-imei" class="form-control" value="${currentImei}" style="font-family:monospace; font-weight:700; color:var(--accent-ink);" required>
       </div>
     </form>
   `;
@@ -6751,7 +7457,7 @@ function openEditStagedItemModal(idx) {
 
       <div class="form-group">
         <label for="edit-staged-imei">หมายเลขซีเรียล / IMEI</label>
-        <input type="text" id="edit-staged-imei" class="form-control" value="${it.imei}" style="font-family:monospace; font-weight:700; color:var(--primary);" required>
+        <input type="text" id="edit-staged-imei" class="form-control" value="${it.imei}" style="font-family:monospace; font-weight:700; color:var(--accent-ink);" required>
       </div>
     </form>
   `;
@@ -6891,7 +7597,7 @@ function submitBatchGoodsReceipt() {
 
   const bodyHtml = `
     <div style="margin-bottom:1rem; background:var(--surface-tile-2); border:1px solid var(--hairline); padding:0.8rem 1rem; border-radius:6px;">
-      <div style="font-weight:700; color:var(--primary); font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+      <div style="font-weight:700; color:var(--accent-ink); font-size:1.05rem; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ยืนยันการรับสินค้าเข้าสต็อก (${items.length} รายการ)
       </div>
       <div style="font-size:0.85rem; color:var(--text-muted);">
@@ -7071,14 +7777,14 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
           <tbody>
             ${receipts.length === 0 ? `<tr><td colspan="${isHqOrPurchasing ? 8 : 7}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการรับสินค้าเข้าสต็อก</td></tr>` : ''}
             ${receipts.map(r => {
-              const p = r.productInfo || {};
-              const isPending = r.status === 'pending_pricing';
-              const dateObj = new Date(r.createdAt);
-              const isoDate = dateObj.toISOString().split('T')[0];
-              const branchId = r.branch ? (r.branch._id || r.branch) : '';
-              const searchStr = (r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase();
+      const p = r.productInfo || {};
+      const isPending = r.status === 'pending_pricing';
+      const dateObj = new Date(r.createdAt);
+      const isoDate = dateObj.toISOString().split('T')[0];
+      const branchId = r.branch ? (r.branch._id || r.branch) : '';
+      const searchStr = (r.receiptNumber + ' ' + (r.branch ? r.branch.name : '') + ' ' + (r.receivedBy ? (r.receivedBy.fullName || r.receivedBy.username) : '') + ' ' + p.name + ' ' + ((r.imeiSerials && r.imeiSerials[0]) || '')).toLowerCase();
 
-              return `
+      return `
                 <tr class="rcpt-verify-row" data-search="${searchStr}" data-date="${isoDate}" data-branch-id="${branchId}" data-status="${r.status}">
                   ${isHqOrPurchasing ? `
                     <td style="text-align:center;">
@@ -7098,11 +7804,11 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                     <span style="font-size:0.78rem; color:var(--text-muted);">หมวดหมู่: ${p.category}</span>
                   </td>
                   <td>
-                    <strong style="color:var(--primary); font-size:0.9rem;">IMEI: ${(r.imeiSerials && r.imeiSerials[0]) || '-'}</strong><br>
+                    <strong style="color:var(--accent-ink); font-size:0.9rem;">IMEI: ${(r.imeiSerials && r.imeiSerials[0]) || '-'}</strong><br>
                     <span class="badge badge-gold" style="font-size:0.7rem;">1 เครื่อง</span>
                   </td>
-                  <td>${r.purchase_price ? '฿' + r.purchase_price.toLocaleString() : '<span style="color:var(--primary);">ยังไม่ได้ตั้ง</span>'}</td>
-                  <td>${r.selling_price ? '<strong style="color:var(--ink);">฿' + r.selling_price.toLocaleString() + '</strong>' : '<span style="color:var(--primary);">ยังไม่ได้ตั้ง</span>'}</td>
+                  <td>${r.purchase_price ? '฿' + r.purchase_price.toLocaleString() : '<span style="color:var(--accent-ink);">ยังไม่ได้ตั้ง</span>'}</td>
+                  <td>${r.selling_price ? '<strong style="color:var(--ink);">฿' + r.selling_price.toLocaleString() + '</strong>' : '<span style="color:var(--accent-ink);">ยังไม่ได้ตั้ง</span>'}</td>
                   <td style="text-align:center;">
                     ${isPending ? `
                       <span class="badge badge-yellow" style="margin-bottom:0.3rem;"><i class="fa-solid fa-clock" aria-hidden="true"></i> รอตั้งราคา</span><br>
@@ -7131,7 +7837,7 @@ async function renderReceiptVerificationView(filterStatus = 'all') {
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -7156,7 +7862,7 @@ function filterRcptVerifyTable() {
     const rowDate = row.getAttribute('data-date') || '';
     const rowBranchId = row.getAttribute('data-branch-id') || '';
     const rowStatus = row.getAttribute('data-status') || '';
-    
+
     let matchSearch = searchData.includes(query);
     let matchDate = true;
     let matchBranch = true;
@@ -7221,7 +7927,7 @@ function openBatchConfirmReceiptModal() {
 
   let bodyHtml = `
     <div style="background:var(--surface-tile-3); padding:1rem; border-radius:6px; margin-bottom:1.2rem; border:1px solid rgba(255,255,255,0.1);">
-      <div style="font-weight:800; font-size:1rem; color:var(--primary);">
+      <div style="font-weight:800; font-size:1rem; color:var(--accent-ink);">
         คุณเลือกสินค้าทั้งหมด: <span style="color:var(--ink);">${selectedIds.length} รายการ (เครื่อง)</span>
       </div>
       <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">
@@ -7318,7 +8024,7 @@ function handleModalPoChange(receiptId) {
   const poSelect = document.getElementById('cr-po-select');
   if (!poSelect) return;
   const poId = poSelect.value;
-  
+
   const pPriceInput = document.getElementById('cr-pprice');
   if (!poId) {
     // Reset or keep empty if desired
@@ -7333,10 +8039,10 @@ function handleModalPoChange(receiptId) {
   const selectedPo = pendingPos.find(po => po._id === poId);
   if (!selectedPo) return;
 
-  const matchedItem = (selectedPo.items || []).find(item => 
-    (item.brand || '').trim().toLowerCase() === (brand || '').trim().toLowerCase() && 
-    (item.model || '').trim().toLowerCase() === (model || '').trim().toLowerCase() && 
-    (item.capacity || '').trim().toLowerCase() === (capacity || '').trim().toLowerCase() && 
+  const matchedItem = (selectedPo.items || []).find(item =>
+    (item.brand || '').trim().toLowerCase() === (brand || '').trim().toLowerCase() &&
+    (item.model || '').trim().toLowerCase() === (model || '').trim().toLowerCase() &&
+    (item.capacity || '').trim().toLowerCase() === (capacity || '').trim().toLowerCase() &&
     (item.color || '').trim().toLowerCase() === (color || '').trim().toLowerCase() &&
     (item.imeis || []).length < (item.quantity || 0)
   );
@@ -7464,10 +8170,10 @@ function thaiBahtText(num) {
   const parts = num.split('.');
   const intPart = parts[0];
   const decPart = parts[1];
-  
+
   const digits = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
   const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
-  
+
   function convert(part) {
     let result = '';
     const len = part.length;
@@ -7486,7 +8192,7 @@ function thaiBahtText(num) {
             digitWord = 'เอ็ด';
           }
         }
-        
+
         result += digitWord + units[pos % 6];
       }
       if (pos > 0 && pos % 6 === 0 && i < len - 1) {
@@ -7562,13 +8268,13 @@ async function printGoodsReceiptSlip(receiptId) {
         const scannedBy = receipt.receivedBy ? (receipt.receivedBy.fullName || receipt.receivedBy.username) : 'ไม่ระบุ';
 
         const printWindow = window.open('', '_blank', 'width=800,height=600');
-        
+
         let itemRowsHtml = '';
         let globalIndex = 1;
         order.items.forEach((item) => {
           const imeis = item.imeis || [];
-          const pPrice = item.unitPrice ? '฿' + item.unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
-          
+          const pPrice = item.unitPrice ? '฿' + item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+
           if (imeis.length === 0) {
             itemRowsHtml += `
               <tr>
@@ -7616,8 +8322,8 @@ async function printGoodsReceiptSlip(receiptId) {
                 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
                 body {
                   font-family: 'Sarabun', sans-serif;
-                  color: var(--ink);
-                  background: var(--canvas-elevated);
+                  color: #000;
+                  background: #fff;
                   padding: 20px;
                   font-size: 13px;
                   line-height: 1.5;
@@ -7630,11 +8336,11 @@ async function printGoodsReceiptSlip(receiptId) {
                 }
                 .info-label {
                   font-weight: 600;
-                  color: var(--body-muted);
+                  color: #333;
                 }
                 .info-value {
                   font-weight: 700;
-                  color: var(--ink);
+                  color: #000;
                 }
                 .product-table {
                   width: 100%;
@@ -7643,13 +8349,13 @@ async function printGoodsReceiptSlip(receiptId) {
                   margin-bottom: 20px;
                 }
                 .product-table th, .product-table td {
-                  border: 1px solid var(--hairline);
+                  border: 1px solid #999;
                   padding: 10px;
                   text-align: left;
                 }
                 .product-table th {
-                  background-color: var(--ink);
-                  color: var(--canvas-elevated);
+                  background-color: #000;
+                  color: #fff;
                   font-weight: 700;
                   font-size: 12px;
                 }
@@ -7668,20 +8374,20 @@ async function printGoodsReceiptSlip(receiptId) {
                 }
                 .signature-line {
                   width: 85%;
-                  border-bottom: 1px solid var(--body-muted);
+                  border-bottom: 1px solid #333;
                   margin-top: 35px;
                   margin-bottom: 6px;
                 }
                 .company-stamp {
                   width: 90px;
                   height: 90px;
-                  border: 1px dashed var(--body-muted);
+                  border: 1px dashed #333;
                   border-radius: 50%;
                   display: flex;
                   align-items: center;
                   justify-content: center;
                   font-size: 9px;
-                  color: var(--body-muted);
+                  color: #333;
                   margin: 0 auto;
                 }
                 @media print {
@@ -7696,31 +8402,31 @@ async function printGoodsReceiptSlip(receiptId) {
             </head>
             <body>
               <!-- Company Header Letterhead -->
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double var(--ink); padding-bottom:12px; margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #000; padding-bottom:12px; margin-bottom:20px;">
                 <div>
-                  <h2 style="margin:0; font-size:22px; font-weight:800; color:var(--ink); letter-spacing:0.5px;">ซิลมีน บานาน่า</h2>
-                  <span style="font-size:11px; color:var(--body-muted); display:block; margin-top:2px;">สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000</span>
+                  <h2 style="margin:0; font-size:22px; font-weight:800; color:#000; letter-spacing:0.5px;">ซิลมีน บานาน่า</h2>
+                  <span style="font-size:11px; color:#333; display:block; margin-top:2px;">สำนักงานใหญ่: 883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000</span>
                 </div>
                 <div style="text-align:right;">
-                  <span style="font-size:13px; font-weight:700; color:var(--body-muted); display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
+                  <span style="font-size:13px; font-weight:700; color:#333; display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
                 </div>
               </div>
 
               <!-- Info Grid Section -->
               <div style="display:grid; grid-template-columns: 1.1fr 0.9fr; gap:20px; margin-bottom:20px;">
-                <div style="border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2);">
-                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:var(--ink); border-bottom:1px solid var(--hairline); padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
-                  <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:var(--ink);">${branchName}</span></div>
+                <div style="border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2;">
+                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#000; border-bottom:1px solid #999; padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
+                  <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:#000;">${branchName}</span></div>
                   <div class="info-row"><span class="info-label">ผู้ส่งคำสั่งนำเข้า:</span> <span class="info-value">${orderedBy}</span></div>
                   <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${scannedBy}</span></div>
-                  <div class="info-row"><span class="info-label">หมายเหตุคัดย่อ:</span> <span class="info-value" style="color:var(--body-muted); font-weight:normal;">${order.note || '-'}</span></div>
+                  <div class="info-row"><span class="info-label">หมายเหตุคัดย่อ:</span> <span class="info-value" style="color:#333; font-weight:normal;">${order.note || '-'}</span></div>
                 </div>
-                <div style="border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2);">
-                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:var(--ink); border-bottom:1px solid var(--hairline); padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
-                  <div class="info-row"><span class="info-label">เลขที่ใบสั่งซื้อ (PO Number):</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:var(--ink);">${order.orderNumber}</span></div>
+                <div style="border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2;">
+                  <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#000; border-bottom:1px solid #999; padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
+                  <div class="info-row"><span class="info-label">เลขที่ใบสั่งซื้อ (PO Number):</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:#000;">${order.orderNumber}</span></div>
                   <div class="info-row"><span class="info-label">วันที่ส่งคำสั่งสั่งซื้อ:</span> <span class="info-value">${orderedDate}</span></div>
                   <div class="info-row"><span class="info-label">วันที่ตรวจอนุมัติเข้าสต็อก:</span> <span class="info-value">${receivedDate}</span></div>
-                  <div class="info-row"><span class="info-label">สถานะคลังสินค้า:</span> <span class="info-value" style="color:var(--ink); font-weight:800;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> นำเข้าสต็อกเรียบร้อยแล้ว</span></div>
+                  <div class="info-row"><span class="info-label">สถานะคลังสินค้า:</span> <span class="info-value" style="color:#000; font-weight:800;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> นำเข้าสต็อกเรียบร้อยแล้ว</span></div>
                 </div>
               </div>
 
@@ -7743,24 +8449,24 @@ async function printGoodsReceiptSlip(receiptId) {
 
               <!-- Totals Box Section -->
               <div style="display:flex; justify-content:space-between; align-items:stretch; margin-top:20px; margin-bottom:40px; gap:20px;">
-                <div style="flex:1; border:1px solid var(--hairline); border-radius:6px; padding:12px; display:flex; align-items:center; background:var(--surface-tile-2);">
+                <div style="flex:1; border:1px solid #999; border-radius:6px; padding:12px; display:flex; align-items:center; background:#f2f2f2;">
                   <div>
-                    <span style="font-size:11px; color:var(--body-muted); font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมสุทธิ (Total in Thai Baht)</span>
-                    <strong style="font-size:13px; color:var(--ink);">( ${thaiBahtText(order.totalAmount)} )</strong>
+                    <span style="font-size:11px; color:#333; font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมสุทธิ (Total in Thai Baht)</span>
+                    <strong style="font-size:13px; color:#000;">( ${thaiBahtText(order.totalAmount)} )</strong>
                   </div>
                 </div>
-                <div style="width:280px; border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2); display:flex; flex-direction:column; gap:4px;">
-                  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--body-muted);">
+                <div style="width:280px; border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#333;">
                     <span>ยอดรวมก่อนภาษี (Sub Total):</span>
-                    <span>฿${(order.totalAmount / 1.07).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>฿${(order.totalAmount / 1.07).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--body-muted); border-bottom:1px dashed var(--hairline); padding-bottom:4px; margin-bottom:4px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#333; border-bottom:1px dashed #999; padding-bottom:4px; margin-bottom:4px;">
                     <span>ภาษีมูลค่าเพิ่ม 7% (VAT 7%):</span>
-                    <span>฿${(order.totalAmount - (order.totalAmount / 1.07)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span>฿${(order.totalAmount - (order.totalAmount / 1.07)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:var(--ink);">
+                  <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:#000;">
                     <span>ยอดรวมเงินสุทธิ (Net Total):</span>
-                    <span style="font-size:16px; color:var(--ink);">฿${(order.totalAmount || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    <span style="font-size:16px; color:#000;">฿${(order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
@@ -7771,14 +8477,14 @@ async function printGoodsReceiptSlip(receiptId) {
                   <span class="info-label">พนักงานผู้รับของสาขา / ผู้สแกน</span>
                   <div class="signature-line"></div>
                   <span>( ${scannedBy} )</span>
-                  <span style="font-size: 11px; color: var(--body-muted); margin-top: 4px;">ผู้รับมอบสินค้าเข้าคลังสาขา</span>
+                  <span style="font-size: 11px; color: #333; margin-top: 4px;">ผู้รับมอบสินค้าเข้าคลังสาขา</span>
                 </div>
                 
                 <div class="signature-box">
                   <span class="info-label">ผู้อนุมัตินำเข้าคลัง / ผู้ตั้งราคา</span>
                   <div class="signature-line"></div>
                   <span>( ${approvedBy} )</span>
-                  <span style="font-size: 11px; color: var(--body-muted); margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
+                  <span style="font-size: 11px; color: #333; margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
                 </div>
               </div>
             </body>
@@ -7813,8 +8519,8 @@ async function printGoodsReceiptSlip(receiptId) {
   const approvedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : 'ไม่ระบุ';
   const scannedDate = receipt.createdAt ? new Date(receipt.createdAt).toLocaleString('th-TH') : '-';
   const approvedDate = receipt.confirmedAt ? new Date(receipt.confirmedAt).toLocaleString('th-TH') : '-';
-  const purchasePrice = receipt.purchase_price ? '฿' + receipt.purchase_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
-  const sellingPrice = receipt.selling_price ? '฿' + receipt.selling_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-';
+  const purchasePrice = receipt.purchase_price ? '฿' + receipt.purchase_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+  const sellingPrice = receipt.selling_price ? '฿' + receipt.selling_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
   const imei = (receipt.imeiSerials && receipt.imeiSerials[0]) || '-';
 
   const printWindow = window.open('', '_blank', 'width=800,height=600');
@@ -7826,8 +8532,8 @@ async function printGoodsReceiptSlip(receiptId) {
           @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
           body {
             font-family: 'Sarabun', sans-serif;
-            color: var(--ink);
-            background: var(--canvas-elevated);
+            color: #000;
+            background: #fff;
             padding: 20px;
             font-size: 13px;
             line-height: 1.5;
@@ -7840,11 +8546,11 @@ async function printGoodsReceiptSlip(receiptId) {
           }
           .info-label {
             font-weight: 600;
-            color: var(--body-muted);
+            color: #333;
           }
           .info-value {
             font-weight: 700;
-            color: var(--ink);
+            color: #000;
           }
           .product-table {
             width: 100%;
@@ -7853,13 +8559,13 @@ async function printGoodsReceiptSlip(receiptId) {
             margin-bottom: 20px;
           }
           .product-table th, .product-table td {
-            border: 1px solid var(--hairline);
+            border: 1px solid #999;
             padding: 10px;
             text-align: left;
           }
           .product-table th {
-            background-color: var(--ink);
-            color: var(--canvas-elevated);
+            background-color: #000;
+            color: #fff;
             font-weight: 700;
             font-size: 12px;
           }
@@ -7878,20 +8584,20 @@ async function printGoodsReceiptSlip(receiptId) {
           }
           .signature-line {
             width: 85%;
-            border-bottom: 1px solid var(--body-muted);
+            border-bottom: 1px solid #333;
             margin-top: 35px;
             margin-bottom: 6px;
           }
           .company-stamp {
             width: 90px;
             height: 90px;
-            border: 1px dashed var(--body-muted);
+            border: 1px dashed #333;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 9px;
-            color: var(--body-muted);
+            color: #333;
             margin: 0 auto;
           }
           @media print {
@@ -7906,29 +8612,29 @@ async function printGoodsReceiptSlip(receiptId) {
       </head>
       <body>
         <!-- Company Header Letterhead -->
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double var(--ink); padding-bottom:12px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px double #000; padding-bottom:12px; margin-bottom:20px;">
           <div>
-            <h2 style="margin:0; font-size:22px; font-weight:800; color:var(--ink); letter-spacing:0.5px;">บริษัท ซิลมีน บานาน่า จำกัด</h2>
-            <span style="font-size:11px; color:var(--body-muted); display:block; margin-top:2px;">สำนักงานใหญ่: 123/45 ถนนราชดำเนิน แขวงบวรนิเวศ เขตพระนคร กรุงเทพฯ 10200</span>
-            <span style="font-size:11px; color:var(--body-muted); display:block;">โทร: 02-123-4567 | อีเมล: contact@silminbanana.com | เลขประจำตัวผู้เสียภาษี: 0105569000123</span>
+            <h2 style="margin:0; font-size:22px; font-weight:800; color:#000; letter-spacing:0.5px;">บริษัท ซิลมีน บานาน่า จำกัด</h2>
+            <span style="font-size:11px; color:#333; display:block; margin-top:2px;">สำนักงานใหญ่: 123/45 ถนนราชดำเนิน แขวงบวรนิเวศ เขตพระนคร กรุงเทพฯ 10200</span>
+            <span style="font-size:11px; color:#333; display:block;">โทร: 02-123-4567 | อีเมล: contact@silminbanana.com | เลขประจำตัวผู้เสียภาษี: 0105569000123</span>
           </div>
           <div style="text-align:right;">
-            <h1 style="margin:0; font-size:22px; font-weight:800; color:var(--ink);">GOODS IMPORT SLIP</h1>
-            <span style="font-size:13px; font-weight:700; color:var(--body-muted); display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
+            <h1 style="margin:0; font-size:22px; font-weight:800; color:#000;">GOODS IMPORT SLIP</h1>
+            <span style="font-size:13px; font-weight:700; color:#333; display:block; margin-top:4px;">ใบรับรองการนำเข้าสินค้าเข้าสต็อกสาขา</span>
           </div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1.1fr 0.9fr; gap:20px; margin-bottom:20px;">
-          <div style="border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2);">
-            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:var(--ink); border-bottom:1px solid var(--hairline); padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
-            <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:var(--ink);">${branchName}</span></div>
+          <div style="border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2;">
+            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#000; border-bottom:1px solid #999; padding-bottom:4px;">ข้อมูลคลังสินค้าปลายทาง (Destination Stock)</h4>
+            <div class="info-row"><span class="info-label">สาขาปลายทาง:</span> <span class="info-value" style="color:#000;">${branchName}</span></div>
             <div class="info-row"><span class="info-label">ผู้ส่งคำสั่งนำเข้า:</span> <span class="info-value">${scannedBy}</span></div>
             <div class="info-row"><span class="info-label">ผู้รับมอบสินค้าเข้าคลังสาขา:</span> <span class="info-value">${approvedBy}</span></div>
-            <div class="info-row"><span class="info-label">หมายเหตุอนุมัติ:</span> <span class="info-value" style="color:var(--body-muted); font-weight:normal;">${receipt.remarks || '-'}</span></div>
+            <div class="info-row"><span class="info-label">หมายเหตุอนุมัติ:</span> <span class="info-value" style="color:#333; font-weight:normal;">${receipt.remarks || '-'}</span></div>
           </div>
-          <div style="border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2);">
-            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:var(--ink); border-bottom:1px solid var(--hairline); padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
-            <div class="info-row"><span class="info-label">เลขที่ใบรับสินค้า:</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:var(--ink);">${receipt.receiptNumber}</span></div>
+          <div style="border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2;">
+            <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; color:#000; border-bottom:1px solid #999; padding-bottom:4px;">รายละเอียดเอกสาร (Document Reference)</h4>
+            <div class="info-row"><span class="info-label">เลขที่ใบรับสินค้า:</span> <span class="info-value" style="font-family:monospace; font-weight:800; color:#000;">${receipt.receiptNumber}</span></div>
             <div class="info-row"><span class="info-label">วันที่ส่งรายการสแกน:</span> <span class="info-value">${scannedDate}</span></div>
             <div class="info-row"><span class="info-label">วันที่ตรวจอนุมัติเข้าสต็อก:</span> <span class="info-value">${approvedDate}</span></div>
             <div class="info-row"><span class="info-label">อ้างอิงใบสั่งซื้อ:</span> <span class="info-value" style="font-weight:700;">${poNumberText}</span></div>
@@ -7950,12 +8656,12 @@ async function printGoodsReceiptSlip(receiptId) {
             <tr>
               <td style="text-align: center;">1</td>
               <td>
-                <strong style="color:var(--ink);">${p.name}</strong>
+                <strong style="color:#000;">${p.name}</strong>
               </td>
               <td style="text-align: center;">
-                <span style="font-weight:700; border:1px solid var(--body-muted); padding:2px 6px; border-radius:3px; font-size:11px; background:var(--surface-tile-2);">1 เครื่อง</span>
+                <span style="font-weight:700; border:1px solid #333; padding:2px 6px; border-radius:3px; font-size:11px; background:#f2f2f2;">1 เครื่อง</span>
               </td>
-              <td style="font-family:monospace; font-size:0.82rem; text-align: center; color:var(--body-muted);">${imei}</td>
+              <td style="font-family:monospace; font-size:0.82rem; text-align: center; color:#333;">${imei}</td>
               <td style="text-align: right; font-weight:600;">${purchasePrice}</td>
               <td style="text-align: right; font-weight:600;">${sellingPrice}</td>
             </tr>
@@ -7964,16 +8670,16 @@ async function printGoodsReceiptSlip(receiptId) {
 
         <!-- Totals Box Section for Single Slip -->
         <div style="display:flex; justify-content:space-between; align-items:stretch; margin-top:20px; margin-bottom:40px; gap:20px;">
-          <div style="flex:1; border:1px solid var(--hairline); border-radius:6px; padding:12px; display:flex; align-items:center; background:var(--surface-tile-2);">
+          <div style="flex:1; border:1px solid #999; border-radius:6px; padding:12px; display:flex; align-items:center; background:#f2f2f2;">
             <div>
-              <span style="font-size:11px; color:var(--body-muted); font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมทุน (Total Cost in Thai Baht)</span>
-              <strong style="font-size:13px; color:var(--ink);">( ${thaiBahtText(receipt.purchase_price || 0)} )</strong>
+              <span style="font-size:11px; color:#333; font-weight:600; display:block; margin-bottom:4px;">ตัวอักษรยอดเงินรวมทุน (Total Cost in Thai Baht)</span>
+              <strong style="font-size:13px; color:#000;">( ${thaiBahtText(receipt.purchase_price || 0)} )</strong>
             </div>
           </div>
-          <div style="width:280px; border:1px solid var(--hairline); border-radius:6px; padding:12px; background:var(--surface-tile-2); display:flex; flex-direction:column; gap:4px;">
-            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:var(--ink);">
+          <div style="width:280px; border:1px solid #999; border-radius:6px; padding:12px; background:#f2f2f2; display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800; color:#000;">
               <span>ยอดรวมเงินทุนสุทธิ (Net Cost):</span>
-              <span style="font-size:16px; color:var(--ink);">${purchasePrice}</span>
+              <span style="font-size:16px; color:#000;">${purchasePrice}</span>
             </div>
           </div>
         </div>
@@ -7983,7 +8689,7 @@ async function printGoodsReceiptSlip(receiptId) {
             <span class="info-label">พนักงานผู้นำเข้า / ผู้ส่งมอบ</span>
             <div class="signature-line"></div>
             <span>( ${scannedBy} )</span>
-            <span style="font-size: 11px; color: var(--body-muted); margin-top: 4px;">ผู้สแกนรับเข้าสต็อกหน้าร้าน</span>
+            <span style="font-size: 11px; color: #333; margin-top: 4px;">ผู้สแกนรับเข้าสต็อกหน้าร้าน</span>
           </div>
 
 
@@ -7992,11 +8698,11 @@ async function printGoodsReceiptSlip(receiptId) {
             <span class="info-label">ผู้อนุมัตินำเข้าคลัง / ผู้ตั้งราคา</span>
             <div class="signature-line"></div>
             <span>( ${approvedBy} )</span>
-            <span style="font-size: 11px; color: var(--body-muted); margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
+            <span style="font-size: 11px; color: #333; margin-top: 4px;">เจ้าหน้าที่อนุมัติส่วนกลาง</span>
           </div>
         </div>
 
-        <div style="margin-top: 40px; text-align: center; font-size: 11px; color: var(--body-muted);" class="no-print">
+        <div style="margin-top: 40px; text-align: center; font-size: 11px; color: #333;" class="no-print">
           พิมพ์จากระบบ Silmin Banana Stock Management System เมื่อวันที่ ${new Date().toLocaleString('th-TH')}
         </div>
       </body>
@@ -8048,15 +8754,15 @@ async function renderTransfersView() {
           <tbody>
             ${transfers.length === 0 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">ไม่พบรายการโอนย้ายสินค้า</td></tr>` : ''}
             ${transfers.map(t => {
-              const userBranchId = state.user && state.user.branch ? String(state.user.branch._id || state.user.branch) : '';
-              const toBranchId = String(t.toBranch ? (t.toBranch._id || t.toBranch) : '');
-              const fromBranchId = String(t.fromBranch ? (t.fromBranch._id || t.fromBranch) : '');
-              
-              const isToBranch = toBranchId === userBranchId;
-              const isFromBranch = fromBranchId === userBranchId;
-              const isAdmin = state.user && (state.user ? state.user.role : 'admin') === 'admin';
+      const userBranchId = state.user && state.user.branch ? String(state.user.branch._id || state.user.branch) : '';
+      const toBranchId = String(t.toBranch ? (t.toBranch._id || t.toBranch) : '');
+      const fromBranchId = String(t.fromBranch ? (t.fromBranch._id || t.fromBranch) : '');
 
-              return `
+      const isToBranch = toBranchId === userBranchId;
+      const isFromBranch = fromBranchId === userBranchId;
+      const isAdmin = state.user && (state.user ? state.user.role : 'admin') === 'admin';
+
+      return `
                 <tr class="transfer-history-row">
                   <td><strong>${t.transferNumber}</strong></td>
                   <td>${t.fromBranch ? t.fromBranch.name : 'ไม่ระบุ'}</td>
@@ -8088,7 +8794,7 @@ async function renderTransfersView() {
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -8262,8 +8968,8 @@ async function printTransferDoc(transferId) {
             </thead>
             <tbody>
               ${doc.items.map((item, idx) => {
-                const imeiText = (item.imei_serials && item.imei_serials.length > 0) ? item.imei_serials.join(', ') : (item.imei || '-');
-                return `
+      const imeiText = (item.imei_serials && item.imei_serials.length > 0) ? item.imei_serials.join(', ') : (item.imei || '-');
+      return `
                   <tr style="color:#000; border-bottom:1px solid #eee;">
                     <td style="padding:10px 8px; text-align:center; color:#555;">${idx + 1}</td>
                     <td style="padding:10px 8px;"><strong>${item.productName || (item.product ? item.product.name : 'สินค้าทั่วไป')}</strong></td>
@@ -8271,7 +8977,7 @@ async function printTransferDoc(transferId) {
                     <td style="padding:10px 8px; text-align:right;"><strong>${item.quantity}</strong></td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
             </tbody>
             <tfoot>
               <tr style="background:#f9fafb; font-weight:800; border-bottom:2px solid #000; color:#000;">
@@ -8308,7 +9014,7 @@ async function printTransferDoc(transferId) {
       </div>
     `;
 
-  const footerHtml = `
+    const footerHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>
       <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> พิมพ์ใบโอนย้ายสินค้า</button>
     `;
@@ -8929,9 +9635,9 @@ async function renderEmployeeManagementView() {
           <tbody>
             ${users.length === 0 ? `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลพนักงานในระบบ</td></tr>` : ''}
             ${users.map(u => {
-              const userBranchId = u.branch ? (u.branch._id || u.branch) : 'hq';
-              const searchStr = (u.fullName + ' ' + u.username + ' ' + (u.empId || '') + ' ' + u.email + ' ' + (u.branch ? u.branch.name : 'ส่วนกลาง')).toLowerCase();
-              return `
+      const userBranchId = u.branch ? (u.branch._id || u.branch) : 'hq';
+      const searchStr = (u.fullName + ' ' + u.username + ' ' + (u.empId || '') + ' ' + u.email + ' ' + (u.branch ? u.branch.name : 'ส่วนกลาง')).toLowerCase();
+      return `
                 <tr class="emp-row" data-search="${searchStr}" data-branch-id="${userBranchId}" data-role="${u.role}">
                   <td><strong style="color:var(--accent-secondary); font-family:monospace;">${u.empId || 'EMP-' + u._id.slice(-4)}</strong></td>
                   <td>
@@ -8958,7 +9664,7 @@ async function renderEmployeeManagementView() {
                   ` : ''}
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -8984,7 +9690,7 @@ function filterEmployeeTable() {
     const searchData = row.getAttribute('data-search') || '';
     const rowBranchId = row.getAttribute('data-branch-id') || '';
     const rowRole = row.getAttribute('data-role') || '';
-    
+
     let matchSearch = searchData.includes(query);
     let matchBranch = true;
     let matchRole = true;
@@ -9012,7 +9718,7 @@ async function openAddEmpModal(branchesList = [], rolesList = []) {
         const res = await apiRequest('/roles');
         roles = res.roles || [];
         window.masterRolesCache = roles;
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 
@@ -9134,7 +9840,7 @@ async function openEditEmpModal(id, fullName, role, branchId, isActive) {
       const res = await apiRequest('/roles');
       roles = res.roles || [];
       window.masterRolesCache = roles;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const defaultOptions = [
@@ -9369,7 +10075,7 @@ function exportSalesHistoryToExcel() {
 function exportFinanceReportToExcel() {
   const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
   const reportContainer = document.getElementById('printable-finance-report');
-  
+
   if (!reportContainer) {
     showToast('กรุณารอโหลดตารางตัวอย่างรายงานในหน้าต่าง POP-UP ก่อนกดส่งออก', 'warning');
     return;
@@ -9439,7 +10145,7 @@ function exportFinanceReportToExcel() {
 function openPrintFinanceReportModal() {
   const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
   const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
-  
+
   // Set modal card width to large for printing preview screen
   const modalCard = document.querySelector('#app-modal .modal-card');
   if (modalCard) {
@@ -9451,7 +10157,7 @@ function openPrintFinanceReportModal() {
   const branchSelect = document.getElementById('fin-branch-filter');
   const startDateInput = document.getElementById('fin-start-date');
   const endDateInput = document.getElementById('fin-end-date');
-  
+
   const selectedBranchId = branchSelect ? branchSelect.value : '';
   const selectedStartDate = startDateInput ? startDateInput.value : '';
   const selectedEndDate = endDateInput ? endDateInput.value : '';
@@ -9529,7 +10235,7 @@ function openPrintFinanceReportModal() {
   `;
 
   openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
-  
+
   // Call preview function right after opening modal to draw the initial table!
   setTimeout(() => {
     updatePrintFinanceReportPreview();
@@ -9538,7 +10244,7 @@ function openPrintFinanceReportModal() {
 
 async function updatePrintFinanceReportPreview() {
   const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
-  
+
   // Show loading indicator inside the print preview area
   const previewArea = document.getElementById('printable-finance-report-container');
   if (previewArea) {
@@ -9555,7 +10261,7 @@ async function updatePrintFinanceReportPreview() {
   const startDateInput = document.getElementById('print-start-date');
   const endDateInput = document.getElementById('print-end-date');
   const searchInput = document.getElementById('fin-search-input'); // main keyword filter
-  
+
   const branchId = branchSelect ? branchSelect.value : '';
   const startDate = startDateInput ? startDateInput.value : '';
   const endDate = endDateInput ? endDateInput.value : '';
@@ -9569,7 +10275,7 @@ async function updatePrintFinanceReportPreview() {
   if (branchId) filterParams.branchId = branchId;
   if (startDate) filterParams.startDate = startDate;
   if (endDate) filterParams.endDate = endDate;
-  
+
   // Keep paymentMethod and payoutStatus from main page filters for query completeness
   const paymentSelectVal = paymentSelect ? paymentSelect.value : '';
   if (paymentSelectVal) filterParams.paymentMethod = paymentSelectVal;
@@ -9582,22 +10288,22 @@ async function updatePrintFinanceReportPreview() {
     const res = await apiRequest(`/pos/finance-report?${queryParams}`);
     const sales = res.sales || [];
     const expenses = res.expenses || [];
-    
+
     // Cache the new data back to state caches to keep things in sync
     state.salesCache = sales;
     state.expensesCache = expenses;
 
     // Filter by keyword client-side if needed
     const query = keyword.toLowerCase().trim();
-    
+
     let filteredSales = sales;
     if (query) {
       filteredSales = sales.filter(s => {
         const searchStr = (
-          s.receiptNumber + ' ' + 
-          (s.branch ? s.branch.name : '') + ' ' + 
-          (s.customer ? s.customer.name : '') + ' ' + 
-          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + 
+          s.receiptNumber + ' ' +
+          (s.branch ? s.branch.name : '') + ' ' +
+          (s.customer ? s.customer.name : '') + ' ' +
+          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' +
           (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')
         ).toLowerCase();
         return searchStr.includes(query);
@@ -9633,13 +10339,13 @@ async function updatePrintFinanceReportPreview() {
         const isVoided = s.status === 'voided';
         const receiptNumber = s.receiptNumber || '';
         const docNumber = receiptNumber.replace('SC-', 'RC-');
-        
+
         const dateObj = new Date(s.createdAt);
         const dateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
-        
+
         const customerName = s.customer ? s.customer.name : 'ทั่วไป';
         const customerPhone = s.customer ? s.customer.phone || '-' : '-';
-        
+
         let paymentStr = '-';
         if (s.paymentMethod === 'cash') {
           paymentStr = 'เงินสด';
@@ -9765,7 +10471,7 @@ async function updatePrintFinanceReportPreview() {
       `;
 
       let grandTotalExpenses = 0;
-      
+
       const categoryFilter = document.getElementById('exp-category-filter') ? document.getElementById('exp-category-filter').value : '';
       const recordedByFilter = document.getElementById('exp-recorded-by-filter') ? document.getElementById('exp-recorded-by-filter').value : '';
       const minAmount = document.getElementById('exp-min-amount') && document.getElementById('exp-min-amount').value ? Number(document.getElementById('exp-min-amount').value) : null;
@@ -9777,7 +10483,7 @@ async function updatePrintFinanceReportPreview() {
         const rowCategory = exp.category || '';
         const rowRecordedBy = exp.recordedBy ? (exp.recordedBy._id || exp.recordedBy) : '';
         const rowAmount = exp.amount || 0;
-        
+
         let matchSearch = !query || searchStr.includes(query);
         let matchCategory = !categoryFilter || rowCategory === categoryFilter;
         let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
@@ -9795,7 +10501,7 @@ async function updatePrintFinanceReportPreview() {
           const categoryThai = exp.category || 'อื่นๆ';
           const recName = exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน';
           grandTotalExpenses += exp.amount || 0;
-          
+
           return `
             <tr style="color:#000; border-bottom:1px solid #000;">
               <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;"><strong>${exp.expenseNumber}</strong><br>${dateValStr}</td>
@@ -9854,7 +10560,7 @@ async function updatePrintFinanceReportPreview() {
 function openPrintFinanceReportModal() {
   const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
   const isAdminOrHq = ['admin', 'hq_stock_staff', 'purchase_staff'].includes((state.user ? state.user.role : 'admin'));
-  
+
   // Set modal card width to large for printing preview screen
   const modalCard = document.querySelector('#app-modal .modal-card');
   if (modalCard) {
@@ -9866,7 +10572,7 @@ function openPrintFinanceReportModal() {
   const branchSelect = document.getElementById('fin-branch-filter');
   const startDateInput = document.getElementById('fin-start-date');
   const endDateInput = document.getElementById('fin-end-date');
-  
+
   const selectedBranchId = branchSelect ? branchSelect.value : '';
   const selectedStartDate = startDateInput ? startDateInput.value : '';
   const selectedEndDate = endDateInput ? endDateInput.value : '';
@@ -9938,7 +10644,7 @@ function openPrintFinanceReportModal() {
   `;
 
   openModal('พิมพ์รายงานสรุปผลการดำเนินงาน', bodyHtml, footerHtml);
-  
+
   // Call preview function right after opening modal to draw the initial table!
   setTimeout(() => {
     updatePrintFinanceReportPreview();
@@ -9947,7 +10653,7 @@ function openPrintFinanceReportModal() {
 
 async function updatePrintFinanceReportPreview() {
   const isSalesActive = document.getElementById('fin-sales-panel') && document.getElementById('fin-sales-panel').style.display !== 'none';
-  
+
   // Show loading indicator inside the print preview area
   const previewArea = document.getElementById('printable-finance-report-container');
   if (previewArea) {
@@ -9964,7 +10670,7 @@ async function updatePrintFinanceReportPreview() {
   const startDateInput = document.getElementById('print-start-date');
   const endDateInput = document.getElementById('print-end-date');
   const searchInput = document.getElementById('fin-search-input'); // main keyword filter
-  
+
   const branchId = branchSelect ? branchSelect.value : '';
   const startDate = startDateInput ? startDateInput.value : '';
   const endDate = endDateInput ? endDateInput.value : '';
@@ -9978,7 +10684,7 @@ async function updatePrintFinanceReportPreview() {
   if (branchId) filterParams.branchId = branchId;
   if (startDate) filterParams.startDate = startDate;
   if (endDate) filterParams.endDate = endDate;
-  
+
   // Keep paymentMethod and payoutStatus from main page filters for query completeness
   const paymentSelectVal = paymentSelect ? paymentSelect.value : '';
   if (paymentSelectVal) filterParams.paymentMethod = paymentSelectVal;
@@ -9991,22 +10697,22 @@ async function updatePrintFinanceReportPreview() {
     const res = await apiRequest(`/pos/finance-report?${queryParams}`);
     const sales = res.sales || [];
     const expenses = res.expenses || [];
-    
+
     // Cache the new data back to state caches to keep things in sync
     state.salesCache = sales;
     state.expensesCache = expenses;
 
     // Filter by keyword client-side if needed
     const query = keyword.toLowerCase().trim();
-    
+
     let filteredSales = sales;
     if (query) {
       filteredSales = sales.filter(s => {
         const searchStr = (
-          s.receiptNumber + ' ' + 
-          (s.branch ? s.branch.name : '') + ' ' + 
-          (s.customer ? s.customer.name : '') + ' ' + 
-          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' + 
+          s.receiptNumber + ' ' +
+          (s.branch ? s.branch.name : '') + ' ' +
+          (s.customer ? s.customer.name : '') + ' ' +
+          (s.items ? s.items.map(item => item.productName + ' ' + item.imei).join(' ') : '') + ' ' +
           (s.soldBy ? s.soldBy.fullName || s.soldBy.username : '')
         ).toLowerCase();
         return searchStr.includes(query);
@@ -10042,13 +10748,13 @@ async function updatePrintFinanceReportPreview() {
         const isVoided = s.status === 'voided';
         const receiptNumber = s.receiptNumber || '';
         const docNumber = receiptNumber.replace('SC-', 'RC-');
-        
+
         const dateObj = new Date(s.createdAt);
         const dateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
-        
+
         const customerName = s.customer ? s.customer.name : 'ทั่วไป';
         const customerPhone = s.customer ? s.customer.phone || '-' : '-';
-        
+
         let paymentStr = '-';
         if (s.paymentMethod === 'cash') {
           paymentStr = 'เงินสด';
@@ -10174,7 +10880,7 @@ async function updatePrintFinanceReportPreview() {
       `;
 
       let grandTotalExpenses = 0;
-      
+
       const categoryFilter = document.getElementById('exp-category-filter') ? document.getElementById('exp-category-filter').value : '';
       const recordedByFilter = document.getElementById('exp-recorded-by-filter') ? document.getElementById('exp-recorded-by-filter').value : '';
       const minAmount = document.getElementById('exp-min-amount') && document.getElementById('exp-min-amount').value ? Number(document.getElementById('exp-min-amount').value) : null;
@@ -10186,7 +10892,7 @@ async function updatePrintFinanceReportPreview() {
         const rowCategory = exp.category || '';
         const rowRecordedBy = exp.recordedBy ? (exp.recordedBy._id || exp.recordedBy) : '';
         const rowAmount = exp.amount || 0;
-        
+
         let matchSearch = !query || searchStr.includes(query);
         let matchCategory = !categoryFilter || rowCategory === categoryFilter;
         let matchRecordedBy = !recordedByFilter || rowRecordedBy === recordedByFilter;
@@ -10204,7 +10910,7 @@ async function updatePrintFinanceReportPreview() {
           const categoryThai = exp.category || 'อื่นๆ';
           const recName = exp.recordedBy ? exp.recordedBy.fullName || exp.recordedBy.username : 'พนักงาน';
           grandTotalExpenses += exp.amount || 0;
-          
+
           return `
             <tr style="color:#000; border-bottom:1px solid #000;">
               <td style="padding:6px; border:1px solid #000; font-size:0.75rem; vertical-align:top;"><strong>${exp.expenseNumber}</strong><br>${dateValStr}</td>
@@ -10298,7 +11004,33 @@ function exportTransfersHistoryToExcel() {
 document.addEventListener('DOMContentLoaded', () => {
   initAppSession();
   initSidebarKeyboard();
+  initHeaderChips();
 });
+
+// The header carries three readings. None of them is decorative: if the
+// connection drops or the last response is stale, the strip has to say so.
+function initHeaderChips() {
+  const today = document.getElementById('chip-today');
+  if (today) today.innerText = thaiDate(new Date());
+  updateConnectionChip();
+  window.addEventListener('online', updateConnectionChip);
+  window.addEventListener('offline', updateConnectionChip);
+}
+
+function updateConnectionChip() {
+  const chip = document.getElementById('chip-connection');
+  if (!chip) return;
+  const online = navigator.onLine;
+  chip.innerHTML =
+    '<span class="chip-dot" style="background:' + (online ? 'var(--positive)' : 'var(--negative)') + '" aria-hidden="true"></span> ' +
+    (online ? 'ระบบออนไลน์' : 'ไม่ได้เชื่อมต่อ');
+}
+
+// Called from apiRequest on every response that actually came back.
+function markSynced() {
+  const el = document.getElementById('chip-last-sync');
+  if (el) el.innerText = thaiTime(new Date());
+}
 
 // The sidebar is a CSS-only checkbox drawer, and <label> is not in the tab
 // order. This makes the label behave like the button it already looks like,
@@ -10374,7 +11106,7 @@ async function renderRolesPermissionsView() {
       <!-- Top Overview Stat Cards -->
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
         <div class="card" style="background:var(--canvas-elevated); border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
-          <div style="width:48px; height:48px; border-radius:10px; background:var(--hairline); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:var(--hairline); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
             <i class="fa-solid fa-user-shield" aria-hidden="true"></i>
           </div>
           <div>
@@ -10384,7 +11116,7 @@ async function renderRolesPermissionsView() {
         </div>
 
         <div class="card" style="background:var(--canvas-elevated); border:1px solid var(--border-color); padding:1.2rem; border-radius:12px; display:flex; align-items:center; gap:1rem;">
-          <div style="width:48px; height:48px; border-radius:10px; background:var(--surface-tile-2); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+          <div style="width:48px; height:48px; border-radius:10px; background:var(--surface-tile-2); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
             <i class="fa-solid fa-lock" aria-hidden="true"></i>
           </div>
           <div>
@@ -10425,11 +11157,11 @@ async function renderRolesPermissionsView() {
       <!-- Roles Grid -->
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:1.2rem;">
         ${roles.map(r => {
-          const allowedCount = (r.allowedMenus || []).length;
-          const totalMenus = systemMenus.length;
-          const pct = Math.round((allowedCount / totalMenus) * 100);
+      const allowedCount = (r.allowedMenus || []).length;
+      const totalMenus = systemMenus.length;
+      const pct = Math.round((allowedCount / totalMenus) * 100);
 
-          return `
+      return `
             <div class="card" style="background:var(--canvas-elevated); border:1px solid var(--border-color); border-radius:14px; padding:1.4rem; display:flex; flex-direction:column; justify-content:space-between; transition:all 0.25s ease;">
               <div>
                 <!-- Role Header -->
@@ -10444,7 +11176,7 @@ async function renderRolesPermissionsView() {
                   </div>
 
                   ${r.isSystemDefault ? `
-                    <span style="font-size:0.75rem; font-weight:700; background:var(--surface-tile-2); color:var(--primary); border:1px solid var(--surface-tile-2); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
+                    <span style="font-size:0.75rem; font-weight:700; background:var(--surface-tile-2); color:var(--accent-ink); border:1px solid var(--surface-tile-2); padding:0.25rem 0.6rem; border-radius:20px; display:inline-flex; align-items:center; gap:0.3rem;">
                       <i class="fa-solid fa-lock" style="font-size:0.7rem;" aria-hidden="true"></i> หลักของระบบ
                     </span>
                   ` : `
@@ -10477,13 +11209,13 @@ async function renderRolesPermissionsView() {
                   <!-- Menu Pill List -->
                   <div style="display:flex; flex-wrap:wrap; gap:0.35rem; max-height:110px; overflow-y:auto; padding-right:0.2rem;">
                     ${systemMenus.map(m => {
-                      const isPermitted = (r.allowedMenus || []).includes(m.key);
-                      return `
+        const isPermitted = (r.allowedMenus || []).includes(m.key);
+        return `
                         <span style="font-size:0.74rem; font-weight:600; padding:0.22rem 0.55rem; border-radius:6px; display:inline-flex; align-items:center; gap:0.35rem; ${isPermitted ? 'background:var(--surface-tile-2); color:var(--ink); border:1px solid var(--surface-tile-2);' : 'background:var(--divider-soft); color:var(--body-muted); border:1px solid var(--border-color); text-decoration:line-through;'}">
                           <i class="fa-solid ${m.icon}" style="font-size:0.7rem; ${isPermitted ? 'color:var(--ink);' : 'color:var(--body-muted);'}" aria-hidden="true"></i> ${m.name}
                         </span>
                       `;
-                    }).join('')}
+      }).join('')}
                   </div>
                 </div>
               </div>
@@ -10501,7 +11233,7 @@ async function renderRolesPermissionsView() {
               </div>
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
     `;
   } catch (err) {
@@ -10589,7 +11321,7 @@ async function submitCreateRole() {
       closeModal();
       renderRolesPermissionsView();
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function openEditRoleModal(roleId) {
@@ -10636,8 +11368,8 @@ async function openEditRoleModal(roleId) {
 
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.6rem; max-height:300px; overflow-y:auto; padding-right:0.3rem;">
             ${systemMenus.map(m => {
-              const isChecked = currentMenus.includes(m.key);
-              return `
+      const isChecked = currentMenus.includes(m.key);
+      return `
                 <label style="display:flex; align-items:center; gap:0.6rem; background:var(--canvas-elevated); padding:0.6rem 0.8rem; border-radius:8px; border:1px solid var(--border-color); cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--text-main); transition:all 0.15s ease;">
                   <input type="checkbox" class="role-menu-checkbox" value="${m.key}" ${isChecked ? 'checked' : ''} style="accent-color:var(--accent-primary); width:17px; height:17px; cursor:pointer;">
                   <span style="display:flex; align-items:center; gap:0.4rem;">
@@ -10645,7 +11377,7 @@ async function openEditRoleModal(roleId) {
                   </span>
                 </label>
               `;
-            }).join('')}
+    }).join('')}
           </div>
         </div>
       </form>
@@ -10689,7 +11421,7 @@ async function submitEditRole(roleId) {
 
       renderRolesPermissionsView();
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function deleteRoleAction(roleId) {
@@ -10701,7 +11433,7 @@ async function deleteRoleAction(roleId) {
       showToast(res.message);
       renderRolesPermissionsView();
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 
@@ -10831,15 +11563,15 @@ async function submitEditStock(stockId) {
     if (res.success) {
       showToast(res.message);
       closeModal();
-      
+
       const branchSelect = document.getElementById('bi-branch-select');
       const statusSelect = document.getElementById('bi-status-select');
       const brandSelect = document.getElementById('bi-brand-select');
-      
+
       const currentBranchId = branchSelect ? branchSelect.value : null;
       const currentStatus = statusSelect ? statusSelect.value : 'in_stock';
       const currentBrand = brandSelect ? brandSelect.value : 'all';
-      
+
       renderBranchInventoryView(currentBranchId, currentStatus, currentBrand);
     }
   } catch (err) {
@@ -10849,7 +11581,7 @@ async function submitEditStock(stockId) {
 function openSingleReleaseStockModal(imei, productName) {
   const bodyHtml = `
     <div style="background:var(--surface-tile-2); border:1px solid var(--hairline); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
-      <div style="font-weight:800; font-size:1.05rem; color:var(--primary); margin-bottom:0.3rem;">
+      <div style="font-weight:800; font-size:1.05rem; color:var(--accent-ink); margin-bottom:0.3rem;">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ยืนยันการจ่ายออกสินค้าค้างสต็อก
       </div>
       <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-top:0.4rem;">
@@ -10875,13 +11607,13 @@ function openSingleReleaseStockModal(imei, productName) {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-warning" onclick="submitReleaseStock(['${imei}'])" style="background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700;">
+    <button class="btn btn-warning" onclick="submitReleaseStock(['${imei}'])" style="background:var(--primary); border:none; color:var(--on-primary); font-weight:700;">
       <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกสินค้า
     </button>
   `;
 
   openModal(`จ่ายออกสินค้า IMEI: ${imei}`, bodyHtml, footerHtml);
-  
+
   setTimeout(() => {
     const input = document.getElementById('release-remark-input');
     if (input) input.focus();
@@ -10891,7 +11623,7 @@ function openSingleReleaseStockModal(imei, productName) {
 function openBatchReleaseStockModal() {
   const bodyHtml = `
     <div style="background:var(--surface-tile-2); border:1px solid var(--hairline); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
-      <div style="font-weight:800; font-size:1.05rem; color:var(--primary); margin-bottom:0.3rem;">
+      <div style="font-weight:800; font-size:1.05rem; color:var(--accent-ink); margin-bottom:0.3rem;">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> จ่ายออกสินค้าค้างสต็อกแบบกลุ่ม
       </div>
       <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.5;">
@@ -10920,13 +11652,13 @@ function openBatchReleaseStockModal() {
 
   const footerHtml = `
     <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-warning" onclick="submitBatchReleaseStock()" style="background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700;">
+    <button class="btn btn-warning" onclick="submitBatchReleaseStock()" style="background:var(--primary); border:none; color:var(--on-primary); font-weight:700;">
       <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกทั้งหมด
     </button>
   `;
 
   openModal(`จ่ายออกสินค้าค้างสต็อก (แบบกลุ่ม)`, bodyHtml, footerHtml);
-  
+
   setTimeout(() => {
     const input = document.getElementById('release-imeis-input');
     if (input) input.focus();
@@ -10972,14 +11704,14 @@ async function submitReleaseStock(imeis) {
     if (res.success) {
       showToast(res.message);
       closeModal();
-      
+
       const selectEl = document.getElementById('bi-branch-select');
       const currentBranchId = selectEl ? selectEl.value : null;
       const statusEl = document.getElementById('bi-status-select');
       const currentStatus = statusEl ? statusEl.value : 'in_stock';
       const brandEl = document.getElementById('bi-brand-select');
       const currentBrand = brandEl ? brandEl.value : 'all';
-      
+
       renderBranchInventoryView(currentBranchId, currentStatus, currentBrand);
     }
   } catch (err) {
@@ -11059,19 +11791,19 @@ async function renderSystemLogsView() {
           <tbody>
             ${logs.length === 0 ? `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบประวัติกิจกรรมใดๆ ในระบบ</td></tr>` : ''}
             ${logs.map(l => {
-              const dateObj = new Date(l.createdAt);
-              const dt = dateObj.toLocaleString('th-TH');
-              const isoDate = dateObj.toISOString().split('T')[0];
-              const usrStr = `<strong>${l.username}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">${l.userRole}</span>`;
-              const actionBadge = `<span class="badge" style="background:${getLogActionBg(l.action)}; color:var(--canvas-elevated); font-weight:700;">${l.action}</span>`;
-              const entityStr = `<strong>${l.entity || '-'}</strong><br><span style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;">ID: ${l.entityId || '-'}</span>`;
-              const detailsHtml = formatLogDetails(l);
-              
-              // Extract plain text details for search matching
-              const detailsText = detailsHtml.replace(/<[^>]*>/g, ' ');
-              const searchStr = (l.username + ' ' + l.userRole + ' ' + l.action + ' ' + (l.entity || '') + ' ' + (l.entityId || '') + ' ' + detailsText).toLowerCase();
+      const dateObj = new Date(l.createdAt);
+      const dt = dateObj.toLocaleString('th-TH');
+      const isoDate = dateObj.toISOString().split('T')[0];
+      const usrStr = `<strong>${l.username}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">${l.userRole}</span>`;
+      const actionBadge = `<span class="badge ${getLogActionBadgeClass(l.action)}" style="font-weight:700;">${escapeHtml(l.action)}</span>`;
+      const entityStr = `<strong>${l.entity || '-'}</strong><br><span style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;">ID: ${l.entityId || '-'}</span>`;
+      const detailsHtml = formatLogDetails(l);
 
-              return `
+      // Extract plain text details for search matching
+      const detailsText = detailsHtml.replace(/<[^>]*>/g, ' ');
+      const searchStr = (l.username + ' ' + l.userRole + ' ' + l.action + ' ' + (l.entity || '') + ' ' + (l.entityId || '') + ' ' + detailsText).toLowerCase();
+
+      return `
                 <tr class="sl-row" data-action="${l.action}" data-role="${l.userRole || ''}" data-search="${searchStr}" data-date="${isoDate}">
                   <td style="font-size:0.82rem; color:var(--text-muted);">${dt}</td>
                   <td>${usrStr}</td>
@@ -11080,7 +11812,7 @@ async function renderSystemLogsView() {
                   <td>${detailsHtml}</td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -11090,16 +11822,16 @@ async function renderSystemLogsView() {
   }
 }
 
-function getLogActionBg(action) {
+function getLogActionBadgeClass(action) {
   switch (action) {
-    case 'EDIT_BRANCH_STOCK': return 'var(--primary)'; // Gold
-    case 'CREATE_TRANSFER': return 'var(--primary)'; // Blue
-    case 'TRANSFER_STATUS_COMPLETED': return 'var(--ink)'; // Green
-    case 'TRANSFER_STATUS_REJECTED': return 'var(--ink)'; // Red
-    case 'SUBMIT_GOODS_RECEIPT': return 'var(--primary)'; // Indigo
-    case 'CONFIRM_GOODS_RECEIPT': return 'var(--primary)'; // Teal
-    case 'CREATE_ROLE': return 'var(--primary)'; // Purple
-    default: return 'var(--body-muted)'; // Gray
+    case 'EDIT_BRANCH_STOCK': return 'badge-yellow';
+    case 'CREATE_TRANSFER': return 'badge-blue';
+    case 'TRANSFER_STATUS_COMPLETED': return 'badge-green';
+    case 'TRANSFER_STATUS_REJECTED': return 'badge-red';
+    case 'SUBMIT_GOODS_RECEIPT': return 'badge-purple';
+    case 'CONFIRM_GOODS_RECEIPT': return 'badge-green';
+    case 'CREATE_ROLE': return 'badge-purple';
+    default: return 'badge-gray';
   }
 }
 
@@ -11184,12 +11916,12 @@ function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
         <span>ต้นทุนเดิมระบบ: ฿${Number(costAmount).toLocaleString()}</span>
       </div>
       <div style="display:flex; flex-direction:column; gap:0.4rem;">
-        <label for="cr-actual-cost" style="font-weight:700; color:var(--primary); font-size:0.92rem;">
+        <label for="cr-actual-cost" style="font-weight:700; color:var(--accent-ink); font-size:0.92rem;">
           ยอดเงินต้นทุนที่โอนคืนจริง (Actual Cost Returned):
         </label>
         <div style="position:relative; display:flex; align-items:center;">
           <span style="position:absolute; left:10px; font-weight:800; color:var(--ink);">฿</span>
-          <input type="number" id="cr-actual-cost" class="form-control" value="${costAmount}" style="padding-left:1.8rem; font-weight:800; font-size:1.15rem; color:var(--primary); background:var(--canvas-elevated); border:1.5px solid var(--border-color);" required min="0" step="0.01">
+          <input type="number" id="cr-actual-cost" class="form-control" value="${costAmount}" style="padding-left:1.8rem; font-weight:800; font-size:1.15rem; color:var(--accent-ink); background:var(--canvas-elevated); border:1.5px solid var(--border-color);" required min="0" step="0.01">
         </div>
       </div>
     </div>
@@ -11290,7 +12022,7 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
     const sales = res.sales || [];
     state.salesCache = sales;
 
-    const currentBranchName = branchIdParam === 'all' ? 'ทุกสาขา' : 
+    const currentBranchName = branchIdParam === 'all' ? 'ทุกสาขา' :
       (state.masterOptions.branches && state.masterOptions.branches.find(b => b._id === branchIdParam) ? state.masterOptions.branches.find(b => b._id === branchIdParam).name : 'สาขาของคุณ');
 
     container.innerHTML = `
@@ -11358,18 +12090,18 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
           <tbody>
             ${sales.length === 0 ? `<tr><td colspan="${branchIdParam === 'all' ? 10 : 9}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบข้อมูลประวัติการขายสินค้า</td></tr>` : ''}
             ${sales.map((sale, idx) => {
-              const customer = sale.customer || {};
-              const seller = sale.soldBy || {};
-              const branch = sale.branch || {};
-              const formattedDate = new Date(sale.createdAt).toLocaleDateString('th-TH') + ' ' + new Date(sale.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+      const customer = sale.customer || {};
+      const seller = sale.soldBy || {};
+      const branch = sale.branch || {};
+      const formattedDate = new Date(sale.createdAt).toLocaleDateString('th-TH') + ' ' + new Date(sale.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
 
-              let payMethodText = '-';
-              if (sale.paymentMethod === 'cash') payMethodText = 'เงินสด';
-              else if (sale.paymentMethod === 'transfer') payMethodText = 'โอนเงิน';
-              else if (sale.paymentMethod === 'credit_card') payMethodText = 'บัตรเครดิต';
-              else if (sale.paymentMethod === 'finance') payMethodText = `จัดไฟแนนซ์ (${sale.financeDetails ? sale.financeDetails.companyName : ''})`;
+      let payMethodText = '-';
+      if (sale.paymentMethod === 'cash') payMethodText = 'เงินสด';
+      else if (sale.paymentMethod === 'transfer') payMethodText = 'โอนเงิน';
+      else if (sale.paymentMethod === 'credit_card') payMethodText = 'บัตรเครดิต';
+      else if (sale.paymentMethod === 'finance') payMethodText = `จัดไฟแนนซ์ (${sale.financeDetails ? sale.financeDetails.companyName : ''})`;
 
-              return `
+      return `
                 <tr class="sh-row" data-search="${(sale.receiptNumber + ' ' + (customer.name || '') + ' ' + (customer.phone || '') + ' ' + (sale.items ? sale.items.map(item => item.imei).join(' ') : '')).toLowerCase()}">
                   <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
                   <td><strong style="color:var(--ink); font-family:monospace;">${sale.receiptNumber}</strong></td>
@@ -11407,7 +12139,7 @@ async function renderSalesHistoryView(selectedBranchId = null, filterStatus = ''
                   </td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -11425,7 +12157,7 @@ function voidSaleAction(saleId, receiptNumber) {
 
   const bodyHtml = `
     <div style="text-align:center; padding:0.5rem 0;">
-      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:var(--primary); margin-bottom:0.8rem; display:block;" aria-hidden="true"></i>
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:3.2rem; color:var(--accent-ink); margin-bottom:0.8rem; display:block;" aria-hidden="true"></i>
       <h4 style="font-size:1.1rem; font-weight:800; color:var(--text-main); margin-bottom:0.6rem;">คุณแน่ใจหรือไม่ที่จะยกเลิกบิลขายนี้?</h4>
       <div style="font-size:1.15rem; font-weight:800; color:var(--accent-primary); font-family:monospace; background:var(--divider-soft); border:1px solid var(--border-color); padding:0.5rem; border-radius:6px; margin:0.8rem auto; max-width:320px; letter-spacing:0.5px;">
         ${receiptNumber}
@@ -11526,7 +12258,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
       <!-- Summary Info Cards -->
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1.2rem; margin-bottom:1.5rem; text-align:left;">
         <div class="card" style="display:flex; align-items:center; gap:1rem; padding:1.2rem;">
-          <div style="background:var(--hairline); color:var(--primary); padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
+          <div style="background:var(--hairline); color:var(--accent-ink); padding:0.8rem; border-radius:10px; font-size:1.5rem; width:50px; height:50px; display:flex; justify-content:center; align-items:center;">
             <i class="fa-solid fa-circle-minus" aria-hidden="true"></i>
           </div>
           <div>
@@ -11565,7 +12297,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
                 <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:var(--ink);">*</span></label>
                 <input type="text" id="db-release-single-remark" class="form-control" placeholder="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" aria-label="ระบุเหตุผล เช่น ค้างสต็อกเกิน 90 วัน, ตกรุ่นส่งคืนคลัง" required style="margin-top:0.4rem; padding:0.55rem; background:var(--canvas-elevated);">
               </div>
-              <button class="btn btn-warning" type="submit" style="width:100%; background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700; padding:0.6rem;">
+              <button class="btn btn-warning" type="submit" style="width:100%; background:var(--primary); border:none; color:var(--on-primary); font-weight:700; padding:0.6rem;">
                 <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกเครื่องเดี่ยว
               </button>
             </form>
@@ -11596,7 +12328,7 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
               <label style="font-size:0.85rem; font-weight:700; color:var(--text-main);">หมายเหตุการจ่ายออก <span style="color:var(--ink);">*</span></label>
               <input type="text" id="db-release-batch-remark" class="form-control" placeholder="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" aria-label="ระบุเหตุผล เช่น สินค้าค้างสต็อกครบกำหนดล็อตใหญ่" required style="margin-top:0.4rem; padding:0.55rem; background:var(--canvas-elevated);">
             </div>
-            <button class="btn btn-warning" type="submit" style="width:100%; background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700; padding:0.6rem;">
+            <button class="btn btn-warning" type="submit" style="width:100%; background:var(--primary); border:none; color:var(--on-primary); font-weight:700; padding:0.6rem;">
               <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันจ่ายออกสินค้าเป็นกลุ่ม
             </button>
           </form>
@@ -11660,14 +12392,14 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
                   </tr>
                 ` : ''}
                 ${history.map((h, idx) => {
-                  const dateStr = new Date(h.createdAt).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
-                  return `
+      const dateStr = new Date(h.createdAt).toLocaleDateString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      return `
                     <tr class="release-history-row" data-search="${(h.imei + ' ' + h.productName + ' ' + h.branchName + ' ' + h.remarks + ' ' + h.username).toLowerCase()}">
                       <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
                       <td style="white-space:nowrap; font-size:0.83rem;">${dateStr}</td>
@@ -11679,14 +12411,14 @@ async function renderReleaseStockView(selectedBranchId = null, startDate = '', e
                       <td><span class="badge badge-gray">${h.username}</span></td>
                       ${isAdminOrHq ? `
                         <td class="no-print" style="text-align:center;">
-                          <button class="btn btn-red btn-sm" onclick="revertReleasedStock('${h.id}', '${h.imei}')" style="background:var(--ink); color:var(--canvas-elevated); border:none; padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:4px; cursor:pointer;">
+                          <button class="btn btn-red btn-sm" onclick="revertReleasedStock('${h.id}', '${h.imei}')" style="background:var(--ink); color:var(--surface); border:none; padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:4px; cursor:pointer;">
                             <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ยกเลิกจ่ายออก
                           </button>
                         </td>
                       ` : ''}
                     </tr>
                   `;
-                }).join('')}
+    }).join('')}
               </tbody>
             </table>
           </div>
@@ -11784,7 +12516,7 @@ async function submitReleaseStock(imeis) {
 
     const previewBodyHtml = `
       <div style="background:var(--surface-tile-2); border:1px solid var(--hairline); padding:1rem; border-radius:8px; margin-bottom:1.2rem; text-align:left;">
-        <div style="font-weight:800; font-size:1.05rem; color:var(--primary); margin-bottom:0.3rem;">
+        <div style="font-weight:800; font-size:1.05rem; color:var(--accent-ink); margin-bottom:0.3rem;">
           <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ตรวจสอบข้อมูลสินค้าก่อนยืนยันจ่ายออก
         </div>
         <div style="font-size:0.83rem; color:var(--text-muted);">
@@ -11828,7 +12560,7 @@ async function submitReleaseStock(imeis) {
 
     const previewFooterHtml = `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-warning" id="btn-execute-release" style="background:var(--primary); border:none; color:var(--canvas-elevated); font-weight:700;">
+      <button class="btn btn-warning" id="btn-execute-release" style="background:var(--primary); border:none; color:var(--on-primary); font-weight:700;">
         <i class="fa-solid fa-circle-minus" aria-hidden="true"></i> ยืนยันทำรายการจ่ายออก
       </button>
     `;
@@ -11839,7 +12571,7 @@ async function submitReleaseStock(imeis) {
       try {
         closeModal();
         showPageLoading();
-        
+
         const verifiedImeis = items.map(it => it.imei);
         const res = await apiRequest('/stock/release', 'POST', {
           imeis: verifiedImeis,
@@ -11850,7 +12582,7 @@ async function submitReleaseStock(imeis) {
 
         if (res.success) {
           showToast(res.message);
-          
+
           const dbSingleImei = document.getElementById('db-release-imei');
           if (dbSingleImei) dbSingleImei.value = '';
           const dbSingleRemark = document.getElementById('db-release-single-remark');
@@ -11894,7 +12626,7 @@ function addBatchImeiField() {
   `;
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
-  
+
   const inputs = div.getElementsByTagName('input');
   if (inputs.length > 0) inputs[0].focus();
 }
@@ -11903,7 +12635,7 @@ function removeBatchImeiField(button) {
   const container = document.getElementById('batch-imei-fields-container');
   if (!container) return;
   const row = button.closest('.batch-imei-row');
-  
+
   const rows = container.querySelectorAll('.batch-imei-row');
   if (rows.length <= 1) {
     const input = row.querySelector('input');
@@ -11911,7 +12643,7 @@ function removeBatchImeiField(button) {
     showToast('ต้องมีช่องกรอกหมายเลข IMEI อย่างน้อย 1 ช่อง', 'warning');
     return;
   }
-  
+
   row.remove();
 }
 
@@ -11962,17 +12694,17 @@ function printReleasedStockReport() {
         <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
         <style>
           @page { size: landscape; }
-          body { font-family: 'Sarabun', sans-serif; padding: 25px; color: var(--ink); line-height: 1.5; }
-          h2 { margin-bottom: 5px; font-weight: 800; font-size: 1.45rem; color: var(--ink); }
-          p { font-size: 0.85rem; color: var(--body-muted); margin-top: 0; margin-bottom: 20px; }
+          body { font-family: 'Sarabun', sans-serif; padding: 25px; color: #000; line-height: 1.5; }
+          h2 { margin-bottom: 5px; font-weight: 800; font-size: 1.45rem; color: #000; }
+          p { font-size: 0.85rem; color: #333; margin-top: 0; margin-bottom: 20px; }
           table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.82rem; }
-          th { background-color: var(--surface-tile-2); color: var(--body-muted); font-weight: 700; border: 1px solid var(--hairline); padding: 10px; text-align: left; }
-          td { border: 1px solid var(--hairline); padding: 10px; color: var(--body-muted); }
-          strong { color: var(--ink); }
-          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: var(--hairline); color: var(--body-muted); }
+          th { background-color: #f2f2f2; color: #333; font-weight: 700; border: 1px solid #999; padding: 10px; text-align: left; }
+          td { border: 1px solid #999; padding: 10px; color: #333; }
+          strong { color: #000; }
+          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: #999; color: #333; }
           .text-right { text-align: right; }
           .no-print { display: none !important; }
-          .footer { margin-top: 40px; border-top: 1px solid var(--hairline); padding-top: 15px; font-size: 0.78rem; text-align: right; color: var(--body-muted); }
+          .footer { margin-top: 40px; border-top: 1px solid #999; padding-top: 15px; font-size: 0.78rem; text-align: right; color: #333; }
         </style>
       </head>
       <body>
@@ -12015,7 +12747,7 @@ function viewGoodsReceiptDetails(receiptId) {
   const branchName = receipt.branch ? receipt.branch.name : 'สาขาทั่วไป';
   const receivedBy = receipt.receivedBy ? (receipt.receivedBy.fullName || receipt.receivedBy.username) : '-';
   const confirmedBy = receipt.confirmedBy ? (receipt.confirmedBy.fullName || receipt.confirmedBy.username) : '-';
-  
+
   const createdDate = receipt.createdAt ? new Date(receipt.createdAt).toLocaleString('th-TH') : '-';
   const confirmedDate = receipt.confirmedAt ? new Date(receipt.confirmedAt).toLocaleString('th-TH') : '-';
 
@@ -12146,7 +12878,7 @@ function openEditSalePricesModal(saleId) {
     return `
       <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:0.8rem; border-radius:6px; margin-bottom:0.8rem;">
         <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.4rem; color:var(--text-main);">
-          ${idx + 1}. ${item.productName} <span style="font-family:monospace; color:var(--primary); font-size:0.78rem;">(${item.imei || '-'})</span>
+          ${idx + 1}. ${item.productName} <span style="font-family:monospace; color:var(--accent-ink); font-size:0.78rem;">(${item.imei || '-'})</span>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
           <div>
@@ -12197,7 +12929,7 @@ function openEditSalePricesModal(saleId) {
   `;
 
   openModal(`แก้ไขราคาขายบิล: ${sale.receiptNumber}`, bodyHtml, footerHtml);
-  
+
   // Load and show previous edit history
   fetchSaleAuditHistory(saleId);
 }
@@ -12205,7 +12937,7 @@ function openEditSalePricesModal(saleId) {
 async function submitEditSalePrices(saleId) {
   const inputs = document.querySelectorAll('.edit-sale-item-price');
   const items = [];
-  
+
   for (const input of inputs) {
     const itemId = input.getAttribute('data-item-id');
     const unitPrice = Number(input.value);
@@ -12229,17 +12961,17 @@ async function submitEditSalePrices(saleId) {
     if (res.success) {
       showToast(res.message);
       closeModal();
-      
+
       // Reload financial view using current active filters
       const branchSelect = document.getElementById('fin-branch-filter');
       const startDateInput = document.getElementById('fin-start-date');
       const endDateInput = document.getElementById('fin-end-date');
-      
+
       const filterParams = {};
       if (branchSelect && branchSelect.value) filterParams.branchId = branchSelect.value;
       if (startDateInput && startDateInput.value) filterParams.startDate = startDateInput.value;
       if (endDateInput && endDateInput.value) filterParams.endDate = endDateInput.value;
-      
+
       const paymentSelect = document.getElementById('fin-payment-filter');
       if (paymentSelect && paymentSelect.value) filterParams.paymentMethod = paymentSelect.value;
       const payoutSelect = document.getElementById('fin-payout-filter');
@@ -12255,7 +12987,7 @@ async function submitEditSalePrices(saleId) {
 async function fetchSaleAuditHistory(saleId) {
   const historyList = document.getElementById('sale-edit-history-list');
   if (!historyList) return;
-  
+
   try {
     const res = await apiRequest(`/pos/sales/${saleId}/audit-history`);
     if (res.success && res.logs && res.logs.length > 0) {
@@ -12263,9 +12995,9 @@ async function fetchSaleAuditHistory(saleId) {
       const filteredLogs = res.logs.filter(log => {
         if (log.action !== 'UPDATE_SALE_SELLING_PRICES') return false;
         const det = log.details || {};
-        return det.originalGrandTotal !== undefined && 
-               det.newGrandTotal !== undefined && 
-               det.originalGrandTotal !== det.newGrandTotal;
+        return det.originalGrandTotal !== undefined &&
+          det.newGrandTotal !== undefined &&
+          det.originalGrandTotal !== det.newGrandTotal;
       });
 
       if (filteredLogs.length > 0) {
@@ -12302,7 +13034,7 @@ async function fetchSaleAuditHistory(saleId) {
    ========================================================================== */
 function updateBranchAuditBadgeFromCache() {
   if (!state.expectedStockCache) return;
-  
+
   let pendingCount = 0;
   state.expectedStockCache.forEach(item => {
     if (item.expectedCount > 0) {
@@ -12325,8 +13057,8 @@ function updateBranchAuditBadgeFromCache() {
         badge.style.display = 'inline-flex';
         badge.style.alignItems = 'center';
         badge.style.justifyContent = 'center';
-        badge.style.background = 'var(--ink)';
-        badge.style.color = 'var(--canvas-elevated)';
+        badge.style.background = 'var(--nav-badge-bg)';
+        badge.style.color = 'var(--nav-badge-fg)';
         badge.style.fontSize = '0.72rem';
         badge.style.fontWeight = '800';
         badge.style.borderRadius = '20px';
@@ -12385,8 +13117,8 @@ async function updateBranchAuditBadge() {
           badge.style.display = 'inline-flex';
           badge.style.alignItems = 'center';
           badge.style.justifyContent = 'center';
-          badge.style.background = 'var(--ink)';
-          badge.style.color = 'var(--canvas-elevated)';
+          badge.style.background = 'var(--nav-badge-bg)';
+          badge.style.color = 'var(--nav-badge-fg)';
           badge.style.fontSize = '0.72rem';
           badge.style.fontWeight = '800';
           badge.style.borderRadius = '20px';

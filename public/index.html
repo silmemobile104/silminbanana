@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Silmin Banana POS</title>
   <meta name="description" content="ระบบบริหารคลังสินค้าหลายสาขา พร้อมระบบตรวจสอบสต็อกประจำวัน และออกใบเสร็จรับเงิน">
-  
+
   <!-- Favicon Icon -->
   <link rel="icon" type="image/png" href="/image/icon_silminbanana.png">
-  
+
   <!-- Chart.js / SheetJS are fetched on demand, so only warm this one up -->
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 
@@ -29,9 +30,189 @@
   <!-- Sarabun @font-face is inlined: it saves a round trip and lets the browser
        discover the font files during the first HTML parse. Source of truth is
        public/css/sarabun.css — regenerate both together. -->
-  <style>@font-face{font-family:'Sarabun';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/sarabun-400-thai.woff2) format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}@font-face{font-family:'Sarabun';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/sarabun-400-vietnamese.woff2) format('woff2');unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB}@font-face{font-family:'Sarabun';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/sarabun-400-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Sarabun';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/sarabun-400-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Sarabun';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/sarabun-500-thai.woff2) format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}@font-face{font-family:'Sarabun';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/sarabun-500-vietnamese.woff2) format('woff2');unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB}@font-face{font-family:'Sarabun';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/sarabun-500-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Sarabun';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/sarabun-500-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Sarabun';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/sarabun-600-thai.woff2) format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}@font-face{font-family:'Sarabun';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/sarabun-600-vietnamese.woff2) format('woff2');unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB}@font-face{font-family:'Sarabun';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/sarabun-600-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Sarabun';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/sarabun-600-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Sarabun';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/sarabun-700-thai.woff2) format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}@font-face{font-family:'Sarabun';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/sarabun-700-vietnamese.woff2) format('woff2');unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB}@font-face{font-family:'Sarabun';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/sarabun-700-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Sarabun';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/sarabun-700-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Sarabun';font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/sarabun-800-thai.woff2) format('woff2');unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}@font-face{font-family:'Sarabun';font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/sarabun-800-vietnamese.woff2) format('woff2');unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB}@font-face{font-family:'Sarabun';font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/sarabun-800-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Sarabun';font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/sarabun-800-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style>
-  <link rel="stylesheet" href="/css/fontawesome.min.css?v=640sub">
-  <link rel="stylesheet" href="/css/styles.css?v=20260829dark">
+  <style>
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/sarabun-400-thai.woff2) format('woff2');
+      unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/sarabun-400-vietnamese.woff2) format('woff2');
+      unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/sarabun-400-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(/fonts/sarabun-400-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/sarabun-500-thai.woff2) format('woff2');
+      unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/sarabun-500-vietnamese.woff2) format('woff2');
+      unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/sarabun-500-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url(/fonts/sarabun-500-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url(/fonts/sarabun-600-thai.woff2) format('woff2');
+      unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url(/fonts/sarabun-600-vietnamese.woff2) format('woff2');
+      unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url(/fonts/sarabun-600-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url(/fonts/sarabun-600-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(/fonts/sarabun-700-thai.woff2) format('woff2');
+      unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(/fonts/sarabun-700-vietnamese.woff2) format('woff2');
+      unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(/fonts/sarabun-700-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(/fonts/sarabun-700-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 800;
+      font-display: swap;
+      src: url(/fonts/sarabun-800-thai.woff2) format('woff2');
+      unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 800;
+      font-display: swap;
+      src: url(/fonts/sarabun-800-vietnamese.woff2) format('woff2');
+      unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 800;
+      font-display: swap;
+      src: url(/fonts/sarabun-800-latin-ext.woff2) format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF
+    }
+
+    @font-face {
+      font-family: 'Sarabun';
+      font-style: normal;
+      font-weight: 800;
+      font-display: swap;
+      src: url(/fonts/sarabun-800-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+    }
+  </style>
+  <link rel="stylesheet" href="/css/fontawesome.min.css?v=640sub3">
+  <link rel="stylesheet" href="/css/styles.css?v=20260831a">
 
   <!--
     Chart.js and SheetJS used to load here on every page view: ~375KB gzip of
@@ -39,6 +220,7 @@
     app.js now fetches each one on first use (loadChartJs / loadXlsx).
   -->
 </head>
+
 <body>
   <!-- Skip straight to the page content, past the 20-item sidebar -->
   <a href="#page-heading" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -64,7 +246,8 @@
       <div class="auth-card">
         <div class="brand-header">
           <div class="brand-logo" style="display:flex; align-items:center; justify-content:center; gap:0.6rem;">
-            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:40px; width:40px; object-fit:contain;"> Silmin Banana
+            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo"
+              style="height:40px; width:40px; object-fit:contain;"> Silmin Banana
           </div>
           <p class="brand-subtitle">ระบบบริหารคลังสินค้าหลายสาขา & ตรวจสอบสต็อกประจำวัน</p>
         </div>
@@ -90,15 +273,17 @@
       <!-- Sidebar Navigation -->
       <aside class="sidebar" id="sidebar-nav" role="navigation" aria-label="เมนูหลัก">
         <div class="sidebar-header">
-          <div class="brand-logo" style="font-size: 1.35rem; justify-content: flex-start; display:flex; align-items:center; gap:0.6rem;">
-            <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:32px; width:32px; object-fit:contain;"> Silmin Banana
+          <div class="brand-logo" style="display:flex; align-items:center; gap:10px;">
+            <img src="/image/icon_silminbanana.png" alt="" width="28" height="28" style="object-fit:contain;"> Silmin
+            Banana
           </div>
         </div>
 
         <ul class="sidebar-menu">
+          <li class="nav-section">ภาพรวม</li>
           <li>
             <a class="nav-link active" href="javascript:void(0)" data-view="dashboard">
-              <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+              <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
               <span class="nav-text">แดชบอร์ด</span>
             </a>
           </li>
@@ -108,64 +293,12 @@
               <span class="nav-text">แดชบอร์ดพนักงาน</span>
             </a>
           </li>
+
+          <li class="nav-section">การขาย</li>
           <li>
             <a class="nav-link" href="javascript:void(0)" data-view="pos">
               <i class="fa-solid fa-cash-register" aria-hidden="true"></i>
               <span class="nav-text">ขายสินค้า</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="branch-inventory">
-              <i class="fa-solid fa-boxes-packing" aria-hidden="true"></i>
-              <span class="nav-text">สต็อกสินค้า</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="sales-history">
-              <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
-              <span class="nav-text">ประวัติการขายสินค้า</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="finance">
-              <i class="fa-solid fa-coins" aria-hidden="true"></i>
-              <span class="nav-text">รายงานการเงิน</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="hq-audit">
-              <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
-              <span class="nav-text">ตรวจสอบสต็อกประจำวัน</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="branch-audit">
-              <i class="fa-solid fa-barcode" aria-hidden="true"></i>
-              <span class="nav-text">นับสต็อกประจำวัน</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="goods-receipt">
-              <i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i>
-              <span class="nav-text">แจ้งนำเข้าสินค้าเข้าสต็อก</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="purchase-orders">
-              <i class="fa-solid fa-cart-flatbed" aria-hidden="true"></i>
-              <span class="nav-text">สั่งซื้อสินค้าลงสาขา</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="receipt-verification">
-              <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
-              <span class="nav-text">ตรวจสอบรายการรับสินค้าเข้าสต็อก</span>
-            </a>
-          </li>
-          <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="transfers">
-              <i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i>
-              <span class="nav-text">โอนย้ายสินค้า</span>
             </a>
           </li>
           <li>
@@ -175,33 +308,97 @@
             </a>
           </li>
           <li>
-            <a class="nav-link" href="javascript:void(0)" data-view="master-settings">
-              <i class="fa-solid fa-sliders" aria-hidden="true"></i>
-              <span class="nav-text">ตั้งค่าตัวเลือกสินค้า</span>
+            <a class="nav-link" href="javascript:void(0)" data-view="sales-history">
+              <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+              <span class="nav-text">ประวัติการขาย</span>
+            </a>
+          </li>
+
+          <li class="nav-section">สต็อกสินค้า</li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="branch-inventory">
+              <i class="fa-solid fa-boxes-packing" aria-hidden="true"></i>
+              <span class="nav-text">สต็อกสินค้า</span>
             </a>
           </li>
           <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="hq-audit">
+              <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+              <span class="nav-text">ตรวจสอบสต็อก</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="branch-audit">
+              <i class="fa-solid fa-barcode" aria-hidden="true"></i>
+              <span class="nav-text">นับสต็อกประจำวัน</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="transfers">
+              <i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i>
+              <span class="nav-text">โอนย้ายสินค้า</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="goods-receipt">
+              <i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i>
+              <span class="nav-text">แจ้งสินค้าเข้าสาขา</span>
+            </a>
+          </li>
+
+          <li class="nav-section">จัดซื้อ</li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="purchase-orders">
+              <i class="fa-solid fa-cart-flatbed" aria-hidden="true"></i>
+              <span class="nav-text">สั่งซื้อสินค้ากับสาขา</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="receipt-verification">
+              <i class="fa-solid fa-file-invoice" aria-hidden="true"></i>
+              <span class="nav-text">ตรวจสอบการรับสินค้า</span>
+            </a>
+          </li>
+
+          <li class="nav-section">การเงิน</li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="finance">
+              <i class="fa-solid fa-coins" aria-hidden="true"></i>
+              <span class="nav-text">รายงานการเงิน</span>
+            </a>
+          </li>
+
+          <li class="nav-section">การจัดการ</li>
+          <li>
             <a class="nav-link" href="javascript:void(0)" data-view="branches">
               <i class="fa-solid fa-store" aria-hidden="true"></i>
-              <span class="nav-text">จัดการสาขา</span>
+              <span class="nav-text">สาขา</span>
             </a>
           </li>
           <li>
             <a class="nav-link" href="javascript:void(0)" data-view="employees">
               <i class="fa-solid fa-users-gear" aria-hidden="true"></i>
-              <span class="nav-text">จัดการพนักงาน</span>
+              <span class="nav-text">พนักงาน</span>
             </a>
           </li>
           <li>
             <a class="nav-link" href="javascript:void(0)" data-view="roles-permissions">
               <i class="fa-solid fa-user-shield" aria-hidden="true"></i>
-              <span class="nav-text">จัดการสิทธิ์และตำแหน่ง</span>
+              <span class="nav-text">สิทธิ์และตำแหน่ง</span>
             </a>
           </li>
+
+          <li class="nav-section">ระบบ</li>
           <li>
             <a class="nav-link" href="javascript:void(0)" data-view="system-logs">
               <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
-              <span class="nav-text">ประวัติกิจกรรมระบบ</span>
+              <span class="nav-text">ประวัติกิจกรรม</span>
+            </a>
+          </li>
+          <li>
+            <a class="nav-link" href="javascript:void(0)" data-view="master-settings">
+              <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+              <span class="nav-text">ตั้งค่าตัวเลือกสินค้า</span>
             </a>
           </li>
         </ul>
@@ -214,7 +411,7 @@
               <div class="user-role" id="current-user-role">สิทธิ์การใช้งาน</div>
             </div>
           </div>
-          <button id="logout-btn" class="btn btn-secondary btn-sm" title="ออกจากระบบ" aria-label="ออกจากระบบ" style="padding: 0.4rem 0.6rem;">
+          <button id="logout-btn" class="btn" title="ออกจากระบบ" aria-label="ออกจากระบบ">
             <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
           </button>
         </div>
@@ -227,10 +424,8 @@
         <header class="top-bar">
           <!-- Keeps the CSS-only checkbox mechanism, but reachable by keyboard:
                tabindex puts it in the tab order, and app.js handles Enter/Space. -->
-          <label for="sidebar-toggle" class="sidebar-toggle-label"
-                 id="sidebar-toggle-btn" role="button" tabindex="0"
-                 aria-controls="sidebar-nav" aria-expanded="false"
-                 aria-label="เปิดเมนูหลัก">
+          <label for="sidebar-toggle" class="sidebar-toggle-label" id="sidebar-toggle-btn" role="button" tabindex="0"
+            aria-controls="sidebar-nav" aria-expanded="false" aria-label="เปิดเมนูหลัก">
             <i class="fa-solid fa-bars" aria-hidden="true"></i>
           </label>
           <div class="page-title">
@@ -238,8 +433,25 @@
             <h1 id="page-heading" tabindex="-1">ภาพรวมระบบคลังสินค้า</h1>
             <p id="page-subheading">สรุปสถานะคลังสินค้าและการตรวจสอบสต็อกของทั้ง 5 สาขา</p>
           </div>
-          <div id="branch-indicator-badge" class="branch-indicator">
-            <i class="fa-solid fa-store" aria-hidden="true"></i> <span id="current-branch-name">สาขาหลัก (สีลม)</span>
+          <div class="header-status">
+            <!-- Three readings, one segmented pill. Every value here is live:
+                 the dot follows the connection, the time is the last call that
+                 actually came back, the date is today. -->
+            <div class="chip-group">
+              <span class="chip" id="chip-connection">
+                <span class="chip-dot" aria-hidden="true"></span> ระบบออนไลน์
+              </span>
+              <span class="chip">
+                <i class="fa-solid fa-clock" aria-hidden="true"></i> ข้อมูลล่าสุด <b id="chip-last-sync">—</b>
+              </span>
+              <span class="chip">
+                <i class="fa-solid fa-calendar-day" aria-hidden="true"></i> ข้อมูลวันนี้ <b id="chip-today">—</b>
+              </span>
+            </div>
+            <div id="branch-indicator-badge" class="branch-indicator">
+              <i class="fa-solid fa-building" aria-hidden="true"></i>
+              <span id="current-branch-name">สาขาหลัก (สีลม)</span>
+            </div>
           </div>
         </header>
 
@@ -261,12 +473,13 @@
   <!-- The overlay hides with opacity, not display, so it stays in the focus
        order while closed. `inert` takes it out of both focus and the
        accessibility tree; openModal/closeModal toggle it. -->
-  <div id="app-modal" class="modal-overlay" role="dialog" aria-modal="true"
-       aria-labelledby="modal-title" aria-hidden="true" inert>
+  <div id="app-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title"
+    aria-hidden="true" inert>
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modal-title">หัวข้อป๊อปอัป</h3>
-        <button id="modal-close" class="btn btn-secondary btn-sm" aria-label="ปิดหน้าต่าง" style="border:none; background:transparent;">
+        <button id="modal-close" class="btn btn-secondary btn-sm" aria-label="ปิดหน้าต่าง"
+          style="border:none; background:transparent;">
           <i class="fa-solid fa-xmark" style="font-size: 1.2rem;" aria-hidden="true"></i>
         </button>
       </div>
@@ -280,7 +493,7 @@
   </div>
 
   <!-- Application Script Bundles -->
-  <script defer src="/js/app.js?v=20260829dark"></script>
+  <script defer src="/js/app.js?v=20260831a"></script>
   <!-- UI Interaction Helper (Hamburger Auto-Close) -->
   <script>
     document.addEventListener('click', (e) => {
@@ -291,4 +504,5 @@
     });
   </script>
 </body>
+
 </html>

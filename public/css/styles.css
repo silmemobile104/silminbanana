@@ -1,167 +1,282 @@
 /* ==========================================================================
    Silmin Banana — Design System
-   Dark canvas, single Signal Yellow accent. Implements DESIGN.md.
 
-   Two rules govern everything below and have no exceptions:
-     1. #FFE169 means "you can act on this". Nothing else is ever this colour,
-        and no second accent hue exists — including for status.
-     2. Text on yellow is #1d1d1f. White on #FFE169 is 1.3:1 and unreadable.
+   A light operations console with a dark navigation rail. The reference
+   composition (DESIGN.md) governs every value below.
+
+   Three rules run through the whole file:
+     1. The canvas is light and the rail is dark. That single inversion is the
+        product's structure: navigation is fixed furniture, content is paper
+        laid on top of it.
+     2. Colour classifies, it does not decorate. Every hue in the system is a
+        category plate, a status, or a link. Nothing is tinted for mood.
+     3. Yellow is the brand, not the interface. It fills the mark, the primary
+        button, the active rail marker and the revenue curve — and stops there.
+        Text on yellow is always #1d1d1f; white on it is 1.3:1.
    ========================================================================== */
 
-/* The Google Fonts request used to live here as an @import, which forced the
-   browser to download and parse this file before it could even discover the
-   font stylesheet — a four-level serial chain. It is now a <link> in
-   index.html so it downloads in parallel with this file. */
+/* Sarabun @font-face is inlined in index.html so the browser discovers the
+   font files during the first HTML parse. Source of truth: css/sarabun.css. */
 
 :root {
-  /* --- Accent — the only interactive colour in the system --------------- */
+  /* --- Brand ------------------------------------------------------------
+     --primary fills. --primary-graphic is the same yellow given enough
+     density to survive as a 2px line or a 16px glyph on white.
+     --primary-ink is the accent when it has to be *read*. */
   --primary: #FFE169;
+  --primary-graphic: #F2C230;
   --primary-pressed: #F5D24E;
-  --primary-focus: #FFD43B;
-  --primary-muted: rgba(255, 225, 105, 0.40);
-  --primary-wash: rgba(255, 225, 105, 0.10);
+  --primary-ink: #7A5A00;
+  --primary-wash: #FFF8E1;
+  --primary-focus: #B8860B;
   --on-primary: #1d1d1f;
 
-  /* --- Surfaces — background colour is the divider ---------------------- */
-  --canvas: #000000;
-  --canvas-elevated: #1d1d1f;
-  --surface-tile-2: #232325;
-  --surface-tile-3: #161618;
-  --surface-chip: #2a2a2c;
-  --surface-chip-translucent: rgba(60, 60, 64, 0.72);
+  /* --- Surfaces --------------------------------------------------------- */
+  --canvas: #F6F6F7;
+  --surface: #FFFFFF;
+  --surface-sunken: #FAFAFB;
+  --surface-hover: #F4F4F5;
+  --surface-chip: #FFFFFF;
 
-  /* --- Text ladder ----------------------------------------------------- */
-  --ink: #f5f5f7;
-  --body-muted: #a1a1a6;
-  --ink-muted-48: #6e6e73;
+  /* --- Text ladder ------------------------------------------------------ */
+  --ink: #17171A;
+  --ink-2: #3F3F46;
+  --body-muted: #6B6B73;
 
-  /* --- Lines ----------------------------------------------------------- */
-  --hairline: #38383a;
-  --divider-soft: rgba(255, 255, 255, 0.08);
+  /* --- Lines ------------------------------------------------------------ */
+  --hairline: #E8E8EA;
+  --hairline-strong: #DBDBDF;
+  --divider-soft: #F0F0F2;
 
-  /* --- Depth — one shadow in the system, product imagery only ---------- */
-  --product-shadow: rgba(0, 0, 0, 0.55) 3px 5px 30px 0;
-  --backdrop: saturate(180%) blur(20px);
+  /* --- Depth — one card shadow, kept below the threshold of notice ------ */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
 
-  /* --- Shape ----------------------------------------------------------- */
-  --radius-none: 0;
-  --radius-xs: 5px;
+  /* --- Navigation rail — a dark island inside a light page -------------- */
+  --nav-bg: #141416;
+  --nav-ink: #FFFFFF;
+  --nav-muted: #9A9AA2;
+  --nav-section: #83838D;
+  --nav-hover: #1E1E22;
+  --nav-active: #26262B;
+  --nav-hairline: #2A2A2F;
+  --nav-badge-bg: #FFE169;
+  --nav-badge-fg: #1d1d1f;
+
+  /* --- Status ----------------------------------------------------------- */
+  --positive: #15803D;
+  --negative: #B3261E;
+  --link: #1A6DCB;
+
+  /* --- Category plates --------------------------------------------------
+     Each pairs a wash with a glyph colour that clears 3:1 on its own wash,
+     so the icon stays legible at 16px. */
+  --tile-violet-bg: #EEEAFD;
+  --tile-violet-fg: #6D45E8;
+  --tile-green-bg: #E6F7EC;
+  --tile-green-fg: #10924A;
+  --tile-amber-bg: #FDF2D9;
+  --tile-amber-fg: #A9750A;
+  --tile-orange-bg: #FDEEE0;
+  --tile-orange-fg: #B85F14;
+  --tile-rose-bg: #FDECEE;
+  --tile-rose-fg: #C4364A;
+  --tile-blue-bg: #E8F1FD;
+  --tile-blue-fg: #1F62D4;
+  --tile-slate-bg: #EEF0F3;
+  --tile-slate-fg: #55606F;
+
+  /* The 'context' series in a two-series chart. A plate wash is too pale to
+     read as a filled bar on white, so the chart gets its own slate. */
+  --chart-context: #C7CDD6;
+  --chart-context-line: #A6B0BC;
+
+  /* --- Shape ------------------------------------------------------------ */
+  --radius-xs: 6px;
   --radius-sm: 8px;
-  --radius-md: 11px;
-  --radius-lg: 18px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
   --radius-pill: 9999px;
   --radius-full: 50%;
 
-  /* --- Rhythm — 8px base ----------------------------------------------- */
+  /* --- Rhythm — 4px base ------------------------------------------------ */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
-  --space-9: 80px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --space-9: 64px;
 
-  --sidebar-w: 268px;
-  --topbar-h: 72px;
-  --content-max: 1440px;
-  --tap: 44px;
+  --sidebar-w: 244px;
+  --topbar-h: 76px;
+  --content-max: auto;
+  --tap: 40px;
 
   --font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --transition-fast: 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  --transition-fast: 0.18s cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* Legacy aliases — app.js still writes these in inline styles. Pointing
-     them at the new tokens keeps 2,000+ inline declarations coherent. */
+  /* --- Legacy aliases ---------------------------------------------------
+     app.js writes these names in ~2,000 inline declarations. Pointing them at
+     the tokens above is what lets one stylesheet re-skin all twenty views. */
+  --canvas-elevated: var(--surface);
+  --surface-tile-2: var(--surface-sunken);
+  --surface-tile-3: var(--surface-sunken);
   --bg-primary: var(--canvas);
-  --bg-secondary: var(--canvas-elevated);
-  --bg-card: var(--canvas-elevated);
-  --bg-card-hover: var(--surface-tile-2);
-  --bg-glass: rgba(29, 29, 31, 0.80);
+  --bg-secondary: var(--surface);
+  --bg-card: var(--surface);
+  --bg-card-hover: var(--surface-hover);
+  --bg-glass: rgba(255, 255, 255, 0.82);
   --border-color: var(--hairline);
-  --accent-primary: var(--primary);
+  --accent-primary: var(--primary-ink);
   --accent-primary-hover: var(--primary-pressed);
-  --accent-secondary: var(--primary);
-  --accent-gold: var(--primary);
+  --accent-secondary: var(--primary-ink);
+  --accent-gold: var(--primary-ink);
+  --accent-ink: var(--primary-ink);
   --text-main: var(--ink);
   --text-muted: var(--body-muted);
-  --text-dim: var(--ink-muted-48);
-  --radius-full: 9999px;
+  --text-dim: var(--body-muted);
+  --ink-muted-48: var(--body-muted);
+  --primary-muted: var(--hairline-strong);
 }
 
 /* ==========================================================================
    Reset & base
    ========================================================================== */
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-family);
-  /* DESIGN.md §3 — body runs 17px / 400 / 1.47 / -0.374px, unchanged */
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 400;
-  line-height: 1.47;
-  letter-spacing: -0.374px;
-  /* Light text on a dark ground blooms optically and reads too heavy
-     without this; negative tracking then crowds the glyphs. */
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin: 0;
-  font-weight: 600;
-  letter-spacing: -0.022em;
-  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   text-wrap: balance;
   color: var(--ink);
 }
 
-p { margin: 0; }
+p {
+  margin: 0;
+}
 
 a {
-  color: var(--primary);
+  color: var(--link);
   text-decoration: none;
 }
-/* Yellow mid-paragraph reads as highlighted text, not as a link, so prose
-   links get an underline (DESIGN.md §6). Navigation and anything shaped like
-   a button already reads as interactive and stays clean. */
-p a, td a, li a { text-decoration: underline; text-underline-offset: 3px; }
-.nav-link, .btn, .skip-link, a.badge, a:has(> .btn) { text-decoration: none; }
 
-img { max-width: 100%; }
-
-/* --- Browser surfaces we did not draw but still own --------------------- */
-::selection { background: var(--primary); color: var(--on-primary); }
-input, textarea, select, button { font-family: inherit; }
-input, textarea { caret-color: var(--primary); }
-
-* { scrollbar-width: thin; scrollbar-color: var(--surface-chip) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-  background: var(--surface-chip);
-  border-radius: var(--radius-pill);
-  border: 2px solid var(--canvas);
+/* A link inside prose needs an underline; navigation and anything shaped like
+   a button already reads as interactive. */
+p a,
+td a,
+li a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-*::-webkit-scrollbar-thumb:hover { background: #3a3a3d; }
 
-/* Yellow is bright enough that the focus ring must go darker, not lighter,
-   and the offset is what keeps it from merging into the control. */
+.nav-link,
+.btn,
+.skip-link,
+a.badge,
+.link-quiet,
+a:has(> .btn) {
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+input,
+textarea,
+select {
+  caret-color: var(--ink);
+}
+
+/* A light page deserves a light scrollbar; the browser default is a dark
+   groove that reads as a seam down the side of the content. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #C9C9CE transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #C9C9CE;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #ADADB4;
+  background-clip: content-box;
+}
+
+.sidebar {
+  scrollbar-color: #3A3A40 transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #3A3A40;
+  background-clip: content-box;
+}
+
+/* One focus ring, everywhere, drawn in the accent's readable form so it is
+   visible on white and on the dark rail alike. */
 :focus-visible {
   outline: 2px solid var(--primary-focus);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
-:focus:not(:focus-visible) { outline: none; }
+
+.sidebar :focus-visible {
+  outline-color: var(--primary);
+}
 
 /* ==========================================================================
-   Shell — sidebar, top bar, content column
+   Shell — navigation rail, header, content column
    ========================================================================== */
 
 .app-wrapper {
@@ -170,17 +285,17 @@ input, textarea { caret-color: var(--primary); }
   background: var(--canvas);
 }
 
-/* Decorative ambience is gone: DESIGN.md forbids gradients outright, and the
-   atmosphere is meant to come from the surfaces themselves. */
-.bg-glow-1, .bg-glow-2 { display: none; }
+.bg-glow-1,
+.bg-glow-2 {
+  display: none;
+}
 
 .sidebar {
   width: var(--sidebar-w);
-  background: var(--canvas-elevated);
-  border-right: 1px solid var(--hairline);
+  background: var(--nav-bg);
   display: flex;
   flex-direction: column;
-  padding: var(--space-5) var(--space-3) var(--space-4);
+  padding: var(--space-6) var(--space-3) var(--space-3);
   position: fixed;
   top: 0;
   bottom: 0;
@@ -192,15 +307,13 @@ input, textarea { caret-color: var(--primary); }
 
 .sidebar-header {
   padding: 0 var(--space-2) var(--space-5);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--hairline);
 }
 
 .brand-logo {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--ink);
+  letter-spacing: -0.02em;
+  color: var(--nav-ink);
 }
 
 .sidebar-menu {
@@ -209,57 +322,90 @@ input, textarea { caret-color: var(--primary); }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   flex: 1;
 }
 
+/* Group labels. Seven of them carry the whole rail's information
+   architecture, so they are set quiet but never below 4.5:1 on the rail. */
+.nav-section {
+  padding: var(--space-4) var(--space-3) 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--nav-section);
+}
+
+.sidebar-menu>.nav-section:first-child {
+  padding-top: 0;
+}
+
 .nav-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--tap);
+  min-height: 32px;
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
-  color: var(--body-muted);
-  font-size: 15px;
+  color: var(--nav-muted);
+  font-size: 13.5px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .nav-link i {
-  width: 20px;
+  width: 18px;
   flex: none;
   text-align: center;
-  font-size: 15px;
-  color: var(--ink-muted-48);
+  font-size: 14px;
+  color: var(--nav-section);
   transition: color var(--transition-fast);
 }
 
 .nav-link:hover {
-  background: var(--surface-tile-2);
-  color: var(--ink);
+  background: var(--nav-hover);
+  color: var(--nav-ink);
 }
-.nav-link:hover i { color: var(--body-muted); }
 
-/* The active item is the one place in the sidebar that earns the accent. */
+.nav-link:hover i {
+  color: var(--nav-muted);
+}
+
+/* The one place in the rail that earns the brand yellow. */
 .nav-link.active {
-  background: var(--surface-tile-2);
-  color: var(--ink);
+  background: var(--nav-active);
+  color: var(--nav-ink);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--primary);
 }
-.nav-link.active i { color: var(--primary); }
 
-.nav-text { flex: 1; min-width: 0; }
+.nav-link.active i {
+  color: var(--primary);
+}
 
+.nav-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-notification-badge {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rail carries 18 destinations under 7 labels — taller than a 900px
+   laptop viewport. The identity row stays put while the list scrolls under
+   it, so sign-out is always one click away. */
 .sidebar-user {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--hairline);
+  padding: var(--space-4) var(--space-2) var(--space-3);
+  background: var(--nav-bg);
+  border-top: 1px solid var(--nav-hairline);
 }
 
 .user-badge {
@@ -271,8 +417,8 @@ input, textarea { caret-color: var(--primary); }
 }
 
 .user-avatar {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   flex: none;
   border-radius: var(--radius-full);
   background: var(--primary);
@@ -280,27 +426,45 @@ input, textarea { caret-color: var(--primary); }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
-.user-info { min-width: 0; }
+.user-info {
+  min-width: 0;
+}
+
 .user-name {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--nav-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* --ink-muted-48 lands at 3.4:1 on an elevated surface, which DESIGN.md §9
-   reserves for fine print. A role label is read, so it takes --body-muted. */
+
 .user-role {
   font-size: 12px;
-  color: var(--body-muted);
+  color: var(--nav-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#logout-btn {
+  flex: none;
+  min-height: 32px;
+  width: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--nav-section);
+  border-radius: var(--radius-sm);
+}
+
+#logout-btn:hover {
+  background: var(--nav-hover);
+  color: var(--nav-ink);
 }
 
 .main-content {
@@ -311,8 +475,9 @@ input, textarea { caret-color: var(--primary); }
   background: var(--canvas);
 }
 
-/* Nav and canvas are the same colour family now, so the bar separates itself
-   with a hairline and a blur rather than with contrast (DESIGN.md §6). */
+/* The header sits on the canvas with no rule under it — the gap to the first
+   card is the separation. It takes the canvas colour so content scrolling
+   beneath it disappears cleanly. */
 .top-bar {
   position: sticky;
   top: 0;
@@ -321,27 +486,80 @@ input, textarea { caret-color: var(--primary); }
   align-items: center;
   gap: var(--space-4);
   min-height: var(--topbar-h);
-  padding: var(--space-4) var(--space-6);
-  background: rgba(0, 0, 0, 0.80);
-  backdrop-filter: var(--backdrop);
-  -webkit-backdrop-filter: var(--backdrop);
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--space-6) var(--space-7) var(--space-4);
+  background: var(--canvas);
 }
 
-.page-title { flex: 1; min-width: 0; }
+.page-title {
+  flex: 1;
+  min-width: 0;
+}
 
 .page-title h1 {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 23px;
+  font-weight: 700;
   letter-spacing: -0.028em;
   color: var(--ink);
 }
 
 .page-title p {
-  margin-top: var(--space-1);
-  font-size: 14px;
+  margin-top: 3px;
+  font-size: 13.5px;
   color: var(--body-muted);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
+}
+
+/* --- Header status strip ------------------------------------------------
+   Three readings that do not change during a session sit in one segmented
+   pill; the branch picker is separate because it is the only control. */
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.chip-group {
+  display: flex;
+  align-items: stretch;
+  height: 38px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  font-size: 12.5px;
+  color: var(--body-muted);
+  white-space: nowrap;
+}
+
+.chip+.chip {
+  border-left: 1px solid var(--divider-soft);
+}
+
+.chip i {
+  font-size: 12px;
+  color: var(--body-muted);
+}
+
+.chip b {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--positive);
 }
 
 .branch-indicator {
@@ -349,20 +567,31 @@ input, textarea { caret-color: var(--primary); }
   align-items: center;
   gap: var(--space-2);
   flex: none;
-  height: 36px;
+  height: 38px;
   padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--surface-chip);
-  border: 1px solid var(--divider-soft);
-  color: var(--body-muted);
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-card);
+  color: var(--ink-2);
+  font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
-.branch-indicator i { color: var(--ink-muted-48); }
+
+.branch-indicator i {
+  color: var(--body-muted);
+  font-size: 12px;
+}
+
+.branch-indicator .fa-chevron-down {
+  font-size: 10px;
+  margin-left: var(--space-1);
+}
 
 #content-container {
   max-width: var(--content-max);
-  padding: var(--space-6) var(--space-6) var(--space-9);
+  padding: 0 var(--space-7) var(--space-8);
 }
 
 /* ==========================================================================
@@ -370,19 +599,24 @@ input, textarea { caret-color: var(--primary); }
    ========================================================================== */
 
 .card {
-  background: var(--canvas-elevated);
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
 }
 
-/* Nested surfaces step up, never down — a card inside a card would be a
-   depth system built out of containers. */
+/* A surface inside a surface steps down to the sunken tone and loses its
+   shadow — depth is stated once per card, not once per box. */
 .card .card,
-.audit-card, .gr-history-card, .gr-manual-form-card, .gr-pending-po-card {
-  background: var(--surface-tile-2);
+.audit-card,
+.gr-history-card,
+.gr-manual-form-card,
+.gr-pending-po-card {
+  background: var(--surface-sunken);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
 }
 
 .stat-item {
@@ -406,10 +640,603 @@ input, textarea { caret-color: var(--primary); }
   gap: var(--space-4);
 }
 
+/* --- Card header — title left, at most one control cluster right -------- */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: 1rem;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.card-title i {
+  font-size: 14px;
+  color: var(--body-muted);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.link-quiet {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--body-muted);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link-quiet:hover {
+  color: var(--ink);
+}
+
+/* --- Inverted card -------------------------------------------------------
+   The revenue hero is the page's one headline figure, and a dark ground is
+   how a cover carries a headline. Nothing inside is styled by hand: the card
+   re-points its own tokens, so the label, the figure, the delta, the axis and
+   the select all follow from the same ladder they use everywhere else. */
+.card-invert {
+  --surface: #1d1d1f;
+  --surface-sunken: #2a2a2c;
+  --surface-hover: #2a2a2c;
+  --ink: #ffffff;
+  --ink-2: #e8e8ea;
+  --body-muted: #b0b0b8;
+  --hairline: rgba(255, 255, 255, 0.14);
+  --hairline-strong: rgba(255, 255, 255, 0.22);
+  --divider-soft: rgba(255, 255, 255, 0.10);
+  /* Status hues re-pitched for a dark ground; every one clears 7:1 on #1d1d1f. */
+  --positive: #55D98A;
+  --negative: #FF9A90;
+  --link: #8FC2FF;
+  background: #1d1d1f;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+.card-invert .card-head { margin-bottom: 0; }
+/* The chevron is baked into a data URI, so it needs its own light version. */
+.card-invert .form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23B0B0B8' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+}
+.card-invert .form-select option { background: #1d1d1f; color: #ffffff; }
+.card-invert :focus-visible { outline-color: var(--primary); }
+
+/* --- Category icon plate ------------------------------------------------ */
+.tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-lg);
+  font-size: 16px;
+  background: var(--tile-slate-bg);
+  color: var(--tile-slate-fg);
+}
+
+.tile-sm {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.tile-xs {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.tile-violet {
+  background: var(--tile-violet-bg);
+  color: var(--tile-violet-fg);
+}
+
+.tile-green {
+  background: var(--tile-green-bg);
+  color: var(--tile-green-fg);
+}
+
+.tile-amber {
+  background: var(--tile-amber-bg);
+  color: var(--tile-amber-fg);
+}
+
+.tile-orange {
+  background: var(--tile-orange-bg);
+  color: var(--tile-orange-fg);
+}
+
+.tile-rose {
+  background: var(--tile-rose-bg);
+  color: var(--tile-rose-fg);
+}
+
+.tile-blue {
+  background: var(--tile-blue-bg);
+  color: var(--tile-blue-fg);
+}
+
+.tile-slate {
+  background: var(--tile-slate-bg);
+  color: var(--tile-slate-fg);
+}
+
+/* --- Metrics ------------------------------------------------------------ */
+.metric-label {
+  font-size: 13px;
+  color: var(--body-muted);
+}
+
+.metric-value {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-hero {
+  font-size: 46px;
+  letter-spacing: -0.045em;
+}
+
+.metric-phrase {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.metric-unit {
+  font-size: 13px;
+  color: var(--body-muted);
+  margin-top: var(--space-1);
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--body-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#dash-revenue-delat .delta {
+  color: white;
+}
+
+
+.delta b {
+  font-weight: 600;
+}
+
+.delta-up b,
+.delta-up i {
+  color: var(--positive);
+}
+
+.delta-down b,
+.delta-down i {
+  color: var(--negative);
+}
+
+.delta-flat b,
+.delta-flat i {
+  color: var(--body-muted);
+}
+
+.metric-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--link);
+}
+
+.metric-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --- Revenue sparkline -------------------------------------------------- */
+.spark-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.spark-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  font-size: 10.5px;
+  color: var(--body-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Row lists ----------------------------------------------------------
+   Three shapes, one grammar: plate, two-line label, trailing value. */
+.row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.action-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--hairline-strong);
+}
+
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--body-muted);
+}
+
+.row-go {
+  flex: none;
+  font-size: 13px;
+  color: var(--body-muted);
+}
+
+.row-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--body-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.rank-num {
+  flex: none;
+  width: 16px;
+  font-size: 12px;
+  color: var(--body-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-thumb {
+  flex: none;
+  width: 30px;
+  height: 34px;
+  border-radius: var(--radius-xs);
+  object-fit: contain;
+  background: var(--surface-sunken);
+}
+
+.rank-name {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-count {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--link);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+/* --- Empty state -------------------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.empty-art {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  color: var(--body-muted);
+}
+
+.empty-art span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  font-size: 18px;
+}
+
+.empty-art span:last-child {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.empty-sub {
+  font-size: 12.5px;
+  color: var(--body-muted);
+}
+
+.empty-state .btn {
+  margin-top: var(--space-3);
+}
+
+/* --- Pieces the dashboard markup leans on ------------------------------- */
+
+/* A stat card leads with its plate, so its header aligns left rather than
+   pushing a control to the far edge. */
+.card-head.lead {
+  justify-content: flex-start;
+}
+
+/* Two-line labels stack whether their parent is a flex row or a table cell. */
+.row-title,
+.row-sub {
+  display: block;
+}
+
+/* The KPI cards carry the same curve at a glance size. */
+.spark-sm { display: block; width: 100%; height: 34px; }
+
+/* The revenue curve fills whatever width the card gives it. */
+.spark {
+  display: block;
+  width: 100%;
+  height: 118px;
+}
+
+/* --- Executive dashboard ------------------------------------------------
+   A wide reading column with a narrow standing rail beside it. The rail is
+   fixed-width because its job — what needs attention, what just happened —
+   does not get better with more room. */
+.exec-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: var(--space-4); align-items: start; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.kpi-row > * { min-width: 0; }
+.exec-main, .exec-rail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.exec-duo { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+.exec-duo > * { min-width: 0; }
+
+/* A toolbar that scopes the whole page: which branch, which day, and the way out. */
+.toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Panel titles ('ผลการดำเนินงานยอดขาย'). Wide tracking is what set these
+   apart from running text in the reference; Thai combining marks (tone signs,
+   vowels above/below the consonant) drift off their base glyph under heavy
+   letter-spacing, so the tracking stays much tighter than the Latin original
+   and uppercase — meaningless on a script with no case — is dropped. */
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.section-label .sub { text-transform: none; letter-spacing: -0.01em; font-weight: 400; color: var(--body-muted); }
+
+/* --- KPI card ----------------------------------------------------------- */
+.kpi { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+.kpi-head { display: flex; align-items: flex-start; gap: var(--space-3); }
+.kpi-body { min-width: 0; flex: 1; }
+.kpi-label { font-size: 12.5px; color: var(--body-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-value {
+  margin-top: 2px;
+  white-space: nowrap;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.kpi-value small { font-size: 15px; font-weight: 600; color: var(--body-muted); letter-spacing: -0.01em; }
+.kpi-foot { margin-top: auto; font-size: 11.5px; color: var(--body-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- Segmented control --------------------------------------------------
+   Two of them sit in the same header, so they share one shape and differ
+   only in what they switch. */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.seg-btn {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--body-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.seg-btn:hover { color: var(--ink); }
+.seg-btn[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+
+/* --- Ranked rows -------------------------------------------------------- */
+.rank-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* Below the podium the rank is a label, not a highlight. */
+.rank-chip.rank-rest { background: var(--surface-sunken); color: var(--body-muted); border: 1px solid var(--hairline); }
+
+.bar-track { display: block; width: 100%; min-width: 60px; height: 6px; border-radius: var(--radius-pill); background: var(--surface-sunken); overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--primary-graphic); }
+
+/* --- Status dot --------------------------------------------------------- */
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: var(--radius-full); flex: none; }
+.dot-ok { background: var(--positive); }
+.dot-warn { background: #B87A00; }
+.dot-bad { background: var(--negative); }
+.status-inline { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.status-ok { color: var(--positive); }
+.status-warn { color: #8A5E05; }
+.status-bad { color: var(--negative); }
+
+/* --- Attention rail -----------------------------------------------------
+   Three severities, each a tinted card. The tint is the classification; the
+   count badge is the size of the problem. */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+.alert:hover { filter: brightness(0.985); }
+.alert-body { display: block; flex: 1; min-width: 0; }
+.alert-kind { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
+.alert-title { display: block; margin-top: 4px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.alert-meta { display: block; font-size: 11.5px; color: var(--body-muted); }
+.alert-detail {
+  display: block;
+  font-size: 11.5px;
+  color: var(--body-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alert-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.alert-go { flex: none; color: var(--body-muted); font-size: 13px; }
+
+.alert-critical { background: #FDF3F3; border-color: #F4D7D7; }
+.alert-critical .alert-kind { color: var(--negative); }
+.alert-critical .alert-count { background: var(--negative); }
+
+.alert-warning { background: #FDF8EC; border-color: #F1E3C2; }
+.alert-warning .alert-kind { color: #8A5E05; }
+.alert-warning .alert-count { background: #8A5E05; }
+
+.alert-pending { background: #F1F6FE; border-color: #D7E4F8; }
+.alert-pending .alert-kind { color: var(--link); }
+.alert-pending .alert-count { background: var(--link); }
+
+/* Nothing outstanding is a state worth showing calmly, not a fourth severity. */
+.alert-clear { background: var(--surface-sunken); border-color: var(--hairline); cursor: default; }
+.alert-clear .alert-kind { color: var(--body-muted); }
+.alert-clear .alert-count { background: var(--hairline-strong); color: var(--ink); }
+.alert-clear:hover { filter: none; }
+
+/* --- Activity rail ------------------------------------------------------ */
+.act-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+.act-time { flex: none; width: 38px; font-size: 11.5px; color: var(--body-muted); font-variant-numeric: tabular-nums; }
+
+/* --- Sales performance chart -------------------------------------------- */
+.chart-frame { position: relative; height: 260px; }
+
 /* ==========================================================================
-   Buttons
-   One solid button per tile. Everything beside it is a ghost — yellow on
-   black carries far more than the old blue on white did (DESIGN.md §6).
+   Buttons — one solid button per card; everything beside it is an outline.
    ========================================================================== */
 
 .btn {
@@ -418,25 +1245,29 @@ input, textarea { caret-color: var(--primary); }
   justify-content: center;
   gap: var(--space-2);
   min-height: var(--tap);
-  padding: 11px 22px;
+  padding: 9px 18px;
   border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   font-family: inherit;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
   transition: background var(--transition-fast), border-color var(--transition-fast),
-              color var(--transition-fast), transform var(--transition-fast);
+    color var(--transition-fast), transform var(--transition-fast);
 }
 
-.btn:active { transform: scale(0.95); }
-.btn:disabled, .btn[disabled] {
-  background: var(--surface-chip);
-  border-color: transparent;
-  color: var(--ink-muted-48);
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled,
+.btn[disabled] {
+  background: var(--surface-sunken);
+  border-color: var(--hairline);
+  color: var(--body-muted);
   cursor: not-allowed;
   transform: none;
 }
@@ -445,62 +1276,67 @@ input, textarea { caret-color: var(--primary); }
   background: var(--primary);
   color: var(--on-primary);
 }
-.btn-primary:hover { background: #FFE885; }
-.btn-primary:active { background: var(--primary-pressed); }
 
+.btn-primary:hover {
+  background: #FFE885;
+}
+
+.btn-primary:active {
+  background: var(--primary-pressed);
+}
+
+/* The workhorse. Every "ดูทั้งหมด", every secondary action on a card. */
 .btn-secondary {
-  background: transparent;
-  color: var(--primary);
-  border-color: var(--primary-muted);
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--hairline-strong);
 }
+
 .btn-secondary:hover {
-  background: var(--primary-wash);
-  border-color: var(--primary);
+  background: var(--surface-hover);
+  border-color: #C9C9CE;
 }
 
-/* The old palette carried a green "success" and a red "danger". Both would be
-   a second accent, which this system does not have. They become utility
-   surfaces; the label and the icon carry the meaning, and destructive actions
-   are still gated by their confirm dialog. */
-.btn-success {
-  background: var(--surface-chip);
+.btn-success,
+.btn-warning,
+.btn-info {
+  background: var(--surface);
   color: var(--ink);
-  border-color: var(--divider-soft);
-}
-.btn-success:hover { background: #343437; border-color: var(--hairline); }
-
-.btn-danger {
-  background: transparent;
-  color: var(--body-muted);
-  border-color: var(--hairline);
-}
-.btn-danger:hover {
-  background: var(--surface-chip);
-  color: var(--ink);
-  border-color: var(--body-muted);
+  border-color: var(--hairline-strong);
 }
 
-/* Utility actions. These exist so that a tile can offer several things to do
-   without any of them competing with its one solid button. */
-.btn-warning, .btn-info {
-  background: var(--surface-chip);
-  color: var(--ink);
-  border-color: var(--divider-soft);
+.btn-success:hover,
+.btn-warning:hover,
+.btn-info:hover {
+  background: var(--surface-hover);
+  border-color: #C9C9CE;
 }
-.btn-warning:hover, .btn-info:hover { background: #343437; border-color: var(--hairline); }
 
+/* Destructive actions read as destructive, but stay outlined so they never
+   compete with the card's primary button. The confirm dialog is still the
+   real guard. */
+.btn-danger,
 .btn-red {
-  background: transparent;
-  color: var(--body-muted);
-  border-color: var(--hairline);
+  background: var(--surface);
+  color: var(--negative);
+  border-color: #F0CFCC;
 }
-.btn-red:hover { background: var(--surface-chip); color: var(--ink); border-color: var(--body-muted); }
+
+.btn-danger:hover,
+.btn-red:hover {
+  background: #FDF2F1;
+  border-color: var(--negative);
+}
 
 .btn-sm {
   min-height: 32px;
-  padding: 7px 14px;
-  font-size: 13px;
+  padding: 6px 12px;
+  font-size: 12.5px;
   border-radius: var(--radius-sm);
+}
+
+.btn-block {
+  width: 100%;
 }
 
 /* ==========================================================================
@@ -515,128 +1351,197 @@ input, textarea { caret-color: var(--primary); }
 }
 
 .form-group label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--body-muted);
+  color: var(--ink-2);
   letter-spacing: -0.005em;
 }
 
-.form-control, .form-select {
+.form-control,
+.form-select {
   width: 100%;
   min-height: var(--tap);
-  padding: 10px 16px;
-  background: var(--surface-chip);
-  border: 1px solid var(--divider-soft);
-  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 13.5px;
   font-family: inherit;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.form-control::placeholder { color: var(--ink-muted-48); }
+.form-control::placeholder {
+  color: var(--body-muted);
+}
 
-.form-control:hover, .form-select:hover { border-color: var(--hairline); }
+.form-control:hover,
+.form-select:hover {
+  border-color: #C9C9CE;
+}
 
-.form-control:focus, .form-select:focus {
+.form-control:focus,
+.form-select:focus {
   outline: none;
-  background: var(--surface-tile-3);
-  border-color: var(--primary-focus);
+  border-color: var(--primary-graphic);
+  box-shadow: 0 0 0 3px var(--primary-wash);
 }
-.form-control:focus-visible, .form-select:focus-visible {
+
+.form-control:focus-visible,
+.form-select:focus-visible {
   outline: 2px solid var(--primary-focus);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .form-select {
   appearance: none;
-  padding-right: 40px;
-  /* Chevron drawn as a mask so it inherits the token colour instead of
-     shipping a baked-in hex. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a1a1a6' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236B6B73' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 16px;
-}
-.form-select option { background: var(--canvas-elevated); color: var(--ink); }
-
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.72);
-  cursor: pointer;
+  background-position: right 12px center;
+  background-size: 15px;
 }
 
-input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
+.form-select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* Compact select used inside card headers ("เทียบกับ เมื่อวาน", "วันนี้"). */
+.select-inline {
+  min-height: 34px;
+  max-width: 240px;
+  padding: 6px 30px 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  width: auto;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary-graphic);
+}
 
 /* ==========================================================================
    Tables — where the work actually happens in this product
    ========================================================================== */
 
 .table-container {
-  background: var(--canvas-elevated);
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
+  overflow-x: auto;
 }
 
-.table-container > table { border-radius: 0; }
-
-/* Wide tables scroll inside their own container; the page never does. */
-.table-container { overflow-x: auto; }
+.table-container>table {
+  border-radius: 0;
+}
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .data-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface-tile-2);
+  background: var(--surface-sunken);
   padding: var(--space-3) var(--space-4);
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   color: var(--body-muted);
   white-space: nowrap;
   border-bottom: 1px solid var(--hairline);
 }
 
 .data-table td {
-  padding: var(--space-3) var(--space-4);
+  padding: 6px;
   border-bottom: 1px solid var(--divider-soft);
   color: var(--ink);
   vertical-align: middle;
 }
 
-.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
 
-.data-table tbody tr { transition: background var(--transition-fast); }
-.data-table tbody tr:hover { background: var(--surface-tile-2); }
+.data-table tbody tr {
+  transition: background var(--transition-fast);
+}
 
-/* Figures that stack in a column must line up. */
-.data-table td, .data-table th { font-variant-numeric: tabular-nums; }
+.data-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.data-table td,
+.data-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A table living inside a card borrows the card's paper and drops its own
+   chrome — the card already drew the border. */
+.card>.table-container,
+.table-flush {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.table-flush th {
+  background: transparent;
+  padding-left: 0;
+  padding-right: var(--space-3);
+}
+
+.table-flush td {
+  padding-left: 0;
+  padding-right: var(--space-3);
+  border-bottom: 0;
+}
+
+.table-flush th:last-child,
+.table-flush td:last-child {
+  padding-right: 0;
+}
+
+.table-flush tbody tr:hover {
+  background: transparent;
+}
+
+/* The column that absorbs the slack. Without a width to shrink from, a cell
+   sizes to its content and a long branch name pushes the numeric columns off
+   the card. */
+.data-table td.cell-flex {
+  max-width: 0;
+  width: 100%;
+}
 
 /* ==========================================================================
    Badges
 
-   DESIGN.md §10 leaves status colour deliberately unspecified and warns that
-   adding one makes it the system's second accent — and that yellow cannot be
-   borrowed for it, because yellow already means "clickable". Status is
-   therefore carried by icon, wording, and weight. The one distinction drawn
-   in surface is between a settled state and one that needs a human.
+   Status is carried by hue here — the reference composition uses colour to
+   classify, and an operator scanning a variance column needs the outlier to
+   surface without being read word by word. Every pair below clears 4.5:1.
    ========================================================================== */
 
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
+  gap: 5px;
+  padding: 4px 10px;
   border-radius: var(--radius-pill);
-  background: var(--surface-chip);
-  border: 1px solid var(--divider-soft);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
   color: var(--body-muted);
   font-size: 12px;
   font-weight: 600;
@@ -644,37 +1549,47 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   white-space: nowrap;
 }
 
-.badge i { font-size: 11px; }
-
-/* Settled, nothing to do */
-.badge-green, .badge-gr-confirmed {
-  background: var(--surface-chip);
-  border-color: var(--divider-soft);
-  color: var(--ink);
+.badge i {
+  font-size: 10.5px;
 }
 
-/* Closed out, no longer live. Quieter than ink, but still above 4.5:1 —
-   --ink-muted-48 would drop this to 3.4:1 and it is not fine print. */
+.badge-green,
+.badge-gr-confirmed {
+  background: var(--tile-green-bg);
+  border-color: #CBEBD8;
+  color: #0F7038;
+}
+
+.badge-blue {
+  background: var(--tile-blue-bg);
+  border-color: #D2E3FA;
+  color: #1B58BC;
+}
+
+.badge-purple {
+  background: var(--tile-violet-bg);
+  border-color: #DED5FB;
+  color: #5B33D6;
+}
+
+.badge-yellow,
+.badge-gold,
+.badge-gr-pending {
+  background: var(--tile-amber-bg);
+  border-color: #F3E2B8;
+  color: #8A5E05;
+}
+
+.badge-red {
+  background: var(--tile-rose-bg);
+  border-color: #F7D5D9;
+  color: #B3263A;
+}
+
 .badge-gray {
-  background: transparent;
+  background: var(--surface-sunken);
   border-color: var(--hairline);
   color: var(--body-muted);
-}
-
-/* Settled but noteworthy — an outcome, not a task */
-.badge-blue, .badge-purple {
-  background: var(--surface-chip);
-  border-color: var(--divider-soft);
-  color: var(--body-muted);
-}
-
-/* Needs a person: brighter text, firmer edge, heavier weight. Reads as
-   "unresolved" without borrowing a hue. */
-.badge-red, .badge-yellow, .badge-gold, .badge-gr-pending {
-  background: var(--surface-tile-3);
-  border-color: var(--body-muted);
-  color: var(--ink);
-  font-weight: 700;
 }
 
 /* ==========================================================================
@@ -689,15 +1604,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(23, 23, 26, 0.42);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast);
 }
 
-.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 .modal-card {
   width: 100%;
@@ -705,9 +1623,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  background: var(--canvas-elevated);
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
 
@@ -716,27 +1635,31 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-5);
+  padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--hairline);
 }
 
 .modal-header h3 {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.022em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 #modal-close {
-  min-height: 36px;
-  width: 36px;
+  min-height: 34px;
+  width: 34px;
   padding: 0;
   border-radius: var(--radius-full);
   color: var(--body-muted);
 }
-#modal-close:hover { background: var(--surface-chip); color: var(--ink); }
+
+#modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
 
 .modal-body {
-  padding: var(--space-5);
+  padding: var(--space-6);
   overflow-y: auto;
   color: var(--ink);
 }
@@ -746,9 +1669,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--hairline);
-  background: var(--surface-tile-3);
+  background: var(--surface-sunken);
 }
 
 /* ==========================================================================
@@ -757,7 +1680,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 
 .toast-container {
   position: fixed;
-  bottom: var(--space-5);
+  bottom: var(--space-6);
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000;
@@ -772,20 +1695,29 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
-  background: var(--surface-tile-2);
-  border: 1px solid var(--hairline);
+  background: var(--nav-bg);
   border-radius: var(--radius-pill);
-  color: var(--ink);
-  font-size: 14px;
+  color: #fff;
+  font-size: 13.5px;
   font-weight: 600;
+  box-shadow: var(--shadow-pop);
   animation: toast-rise 0.32s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.toast i { color: var(--body-muted); }
+.toast i {
+  color: var(--primary);
+}
 
 @keyframes toast-rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ==========================================================================
@@ -797,32 +1729,34 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: var(--space-6);
+  padding: var(--space-7);
   background: var(--canvas);
 }
 
 .auth-card {
   width: 100%;
-  max-width: 420px;
-  padding: var(--space-7) var(--space-6);
-  background: var(--canvas-elevated);
+  max-width: 400px;
+  padding: var(--space-8) var(--space-7);
+  background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
 }
 
 .brand-header {
   text-align: center;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-7);
 }
 
 .auth-card .brand-logo {
-  font-size: 28px;
-  letter-spacing: -0.035em;
+  font-size: 25px;
+  letter-spacing: -0.03em;
   margin-bottom: var(--space-2);
+  color: var(--ink);
 }
 
 .brand-subtitle {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--body-muted);
 }
 
@@ -837,11 +1771,14 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(246, 246, 247, 0.72);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
-.page-loading-overlay.active { display: flex; }
+
+.page-loading-overlay.active {
+  display: flex;
+}
 
 .page-loading-content {
   display: flex;
@@ -851,66 +1788,170 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 }
 
 .page-loading-spinner {
-  width: 34px;
-  height: 34px;
-  border: 2px solid var(--hairline);
-  border-top-color: var(--primary);
+  width: 32px;
+  height: 32px;
+  border: 2.5px solid var(--hairline);
+  border-top-color: var(--primary-graphic);
   border-radius: var(--radius-full);
   animation: pageSpinnerRotate 0.7s linear infinite;
 }
 
 .page-loading-text {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--body-muted);
 }
 
-@keyframes pageSpinnerRotate { to { transform: rotate(360deg); } }
+@keyframes pageSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* ==========================================================================
    Goods-receipt IMEI entry
    ========================================================================== */
 
 .gr-imei-input-box {
-  background: var(--surface-tile-3);
-  border: 1px solid var(--divider-soft);
-  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
 .gr-imei-input-box:focus {
   outline: none;
-  border-color: var(--primary-focus);
-  background: var(--canvas);
+  border-color: var(--primary-graphic);
+  box-shadow: 0 0 0 3px var(--primary-wash);
 }
 
-.gr-table-row { border-bottom: 1px solid var(--divider-soft); }
+.gr-table-row {
+  border-bottom: 1px solid var(--divider-soft);
+}
 
 /* ==========================================================================
-   Grid helpers — 8px gutters, collapsing 4 → 2 → 1
+   Grid helpers
    ========================================================================== */
 
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(272px, 1fr));
-  gap: var(--space-5);
-  margin-bottom: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
-.grid-2col { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
-.grid-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
-.grid-4col { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
-.grid-1_3-1 { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--space-5); }
-.grid-1_5-1 { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-5); }
-.grid-2_5-1 { display: grid; grid-template-columns: 2.5fr 1fr; gap: var(--space-5); }
-.grid-form-row { display: grid; grid-template-columns: 1.2fr 2fr 1fr auto; gap: var(--space-3); }
-.audit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: var(--space-5); }
+.grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+.grid-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+.grid-4col {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.grid-1_3-1 {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: var(--space-4);
+}
+
+.grid-1_5-1 {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--space-4);
+}
+
+.grid-2_5-1 {
+  display: grid;
+  grid-template-columns: 2.5fr 1fr;
+  gap: var(--space-4);
+}
+
+.grid-form-row {
+  display: grid;
+  grid-template-columns: 1.2fr 2fr 1fr auto;
+  gap: var(--space-3);
+}
+
+/* Grid tracks default to min-width:auto, so any non-shrinking child — a wide
+   select, a nowrap table, a long unbroken IMEI string — pushes the whole row
+   past the viewport instead of the track shrinking to fit. Every general
+   grid helper gets permission to shrink; it does not force it. */
+.grid-2col > *, .grid-3col > *, .grid-4col > *,
+.grid-1_3-1 > *, .grid-1_5-1 > *, .grid-2_5-1 > *,
+.grid-form-row > * { min-width: 0; }
+
+.audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: var(--space-4);
+}
+
+/* --- Dashboard composition ---------------------------------------------
+   Three bands, each with its own column rhythm, measured off the reference. */
+.dash-band {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  align-items: stretch;
+}
+
+/* Grid items default to min-width:auto, so a nowrap table column can shove a
+   whole band past the viewport. Every band child is allowed to shrink and
+   scroll its own overflow instead. */
+.dash-band>* {
+  min-width: 0;
+}
+
+.dash-band-1 {
+  grid-template-columns: 2.66fr 1fr 1fr 1.06fr;
+}
+
+.dash-band-2 {
+  grid-template-columns: 2.05fr 1fr 1.37fr;
+}
+
+.dash-band-3 {
+  grid-template-columns: 1.29fr 1fr;
+}
+
+.dash-band-3-full {
+  grid-template-columns: 1fr;
+}
+
+.hero-split {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 1.6fr;
+  gap: var(--space-5);
+  align-items: end;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card .card-head {
+  margin-bottom: var(--space-4);
+}
 
 /* ==========================================================================
    Sidebar drawer (CSS-only, driven by the hidden checkbox)
    ========================================================================== */
 
-.sidebar-toggle-checkbox { display: none; }
+.sidebar-toggle-checkbox {
+  display: none;
+}
 
 .sidebar-toggle-label {
   display: none;
@@ -919,17 +1960,22 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   width: var(--tap);
   height: var(--tap);
   flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--surface-chip);
-  border: 1px solid var(--divider-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
   color: var(--ink);
-  font-size: 17px;
+  font-size: 15px;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.sidebar-toggle-label:hover { background: #343437; }
 
-.sidebar-overlay { display: none; }
+.sidebar-toggle-label:hover {
+  background: var(--surface-hover);
+}
+
+.sidebar-overlay {
+  display: none;
+}
 
 /* ==========================================================================
    Utility
@@ -946,7 +1992,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   font-weight: 600;
   border-radius: 0 0 var(--radius-sm) 0;
 }
-.skip-link:focus { left: 0; }
+
+.skip-link:focus {
+  left: 0;
+}
 
 .sr-only {
   position: absolute;
@@ -960,18 +2009,49 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   border: 0;
 }
 
-/* #page-heading receives focus after every SPA view change so screen readers
-   land in the new content. It is a destination, not a control, so it takes no
-   visible ring — sighted users already saw the page change. */
 #page-heading:focus,
-#page-heading:focus-visible { outline: none; }
+#page-heading:focus-visible {
+  outline: none;
+}
 
 /* ==========================================================================
-   Responsive — 5 → 4 → 3 → 2 → 1, touch targets hold at 44px throughout
+   Responsive
    ========================================================================== */
 
+@media (max-width: 1440px) {
+  .dash-band-1 {
+    grid-template-columns: 1.6fr 1fr 1fr;
+  }
+
+  .dash-band-1> :nth-child(1) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1560px) {
+  /* Beside a 330px rail there is no longer room for four readings across, and
+     a truncated label is worse than a taller block. */
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .exec-duo { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1180px) {
+  /* Below this the rail stops being a rail and becomes the last two panels. */
+  .exec-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 1280px) {
-  .grid-4col { grid-template-columns: repeat(2, 1fr); }
+  .grid-4col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dash-band-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dash-band-2> :nth-child(1) {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -979,69 +2059,179 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
     left: calc(-1 * var(--sidebar-w) - 2px);
     transition: left 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
-  #sidebar-toggle:checked ~ .sidebar { left: 0; }
 
-  #sidebar-toggle:checked ~ .sidebar-overlay {
+  #sidebar-toggle:checked~.sidebar {
+    left: 0;
+  }
+
+  #sidebar-toggle:checked~.sidebar-overlay {
     display: block;
     position: fixed;
     inset: 0;
     z-index: 90;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(23, 23, 26, 0.45);
     backdrop-filter: blur(2px);
   }
 
-  .main-content { margin-left: 0; }
-  .sidebar-toggle-label { display: inline-flex; }
+  .main-content {
+    margin-left: 0;
+  }
 
-  .top-bar { padding: var(--space-3) var(--space-4); }
-  #content-container { padding: var(--space-5) var(--space-4) var(--space-8); }
+  .sidebar-toggle-label {
+    display: inline-flex;
+  }
 
-  .grid-3col, .grid-1_3-1, .grid-1_5-1, .grid-2_5-1 { grid-template-columns: 1fr; }
+  .top-bar {
+    padding: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  #content-container {
+    padding: 0 var(--space-4) var(--space-8);
+  }
+
+  .grid-3col,
+  .grid-1_3-1,
+  .grid-1_5-1,
+  .grid-2_5-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-band-1,
+  .dash-band-2,
+  .dash-band-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-band-1> :nth-child(1),
+  .dash-band-2> :nth-child(1) {
+    grid-column: auto;
+  }
+
+  .header-status {
+    width: 100%;
+    overflow-x: auto;
+  }
 }
 
 @media (max-width: 768px) {
-  body { font-size: 16px; }
-  .page-title h1 { font-size: 21px; }
-  .page-title p { display: none; }
-  .branch-indicator { display: none; }
+  .page-title h1 {
+    font-size: 20px;
+  }
 
-  .grid-2col, .grid-4col { grid-template-columns: 1fr; }
-  .grid-form-row { grid-template-columns: 1fr; }
+  .page-title p {
+    display: none;
+  }
 
-  .data-table { font-size: 13px; }
-  .data-table th, .data-table td { padding: var(--space-3); }
+  .chip-group {
+    display: none;
+  }
+
+  .grid-2col,
+  .grid-4col {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-split {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .metric-hero {
+    font-size: 38px;
+  }
+
+  .data-table {
+    font-size: 13px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: var(--space-3);
+  }
 }
 
 @media (max-width: 576px) {
-  #content-container { padding: var(--space-4) var(--space-3) var(--space-7); }
-  .card { padding: var(--space-4); border-radius: var(--radius-md); }
-  .auth-card { padding: var(--space-6) var(--space-5); }
-  .modal-card { max-height: 92vh; }
-  .toast-container { left: var(--space-3); right: var(--space-3); transform: none; }
-  .toast { width: 100%; }
+  #content-container {
+    padding: 0 var(--space-3) var(--space-7);
+  }
+
+  .card {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
+  .auth-card {
+    padding: var(--space-7) var(--space-5);
+  }
+
+  .modal-card {
+    max-height: 92vh;
+  }
+
+  .toast-container {
+    left: var(--space-3);
+    right: var(--space-3);
+    transform: none;
+  }
+
+  .toast {
+    width: 100%;
+  }
 }
 
 /* ==========================================================================
-   Print — documents leave the dark world behind
+   Print — documents are black on white and owe the screen theme nothing
    ========================================================================== */
 
 @media print {
-  body { background: #fff; color: #000; -webkit-print-color-adjust: exact; }
+  body {
+    background: #fff;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+  }
 
-  .sidebar, .top-bar, .sidebar-overlay, .toast-container,
-  .page-loading-overlay, .skip-link, .no-print { display: none !important; }
+  .sidebar,
+  .top-bar,
+  .sidebar-overlay,
+  .toast-container,
+  .page-loading-overlay,
+  .skip-link,
+  .no-print {
+    display: none !important;
+  }
 
-  .main-content { margin-left: 0; }
-  #content-container { max-width: none; padding: 0; }
+  .main-content {
+    margin-left: 0;
+  }
 
-  .card, .table-container, .modal-card {
+  #content-container {
+    max-width: none;
+    padding: 0;
+  }
+
+  .card,
+  .table-container,
+  .modal-card {
     background: #fff;
     border: 1px solid #000;
     border-radius: 0;
+    box-shadow: none;
   }
 
-  .data-table th { background: #f2f2f2; color: #000; }
-  .data-table td { color: #000; border-bottom: 1px solid #999; }
+  .data-table th {
+    background: #f2f2f2;
+    color: #000;
+  }
+
+  .data-table td {
+    color: #000;
+    border-bottom: 1px solid #999;
+  }
 
   .badge {
     background: transparent;
@@ -1056,13 +2246,30 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
     backdrop-filter: none;
     padding: 0;
   }
-  #app-modal .modal-card { max-width: none; max-height: none; border: 0; }
-  #app-modal .modal-header, #app-modal .modal-footer { display: none; }
-  #app-modal .modal-body { padding: 0; overflow: visible; }
+
+  #app-modal .modal-card {
+    max-width: none;
+    max-height: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  #app-modal .modal-header,
+  #app-modal .modal-footer {
+    display: none;
+  }
+
+  #app-modal .modal-body {
+    padding: 0;
+    overflow: visible;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

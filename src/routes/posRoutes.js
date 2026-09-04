@@ -14,6 +14,7 @@ router.put('/void/:id', authenticateToken, posController.voidSale);
 router.put('/sales/:id/prices', authenticateToken, posController.updateSalePrices);
 router.get('/sales/:id/audit-history', authenticateToken, posController.getSaleAuditHistory);
 router.get('/executive-dashboard', authenticateToken, posController.getExecutiveDashboard);
+router.get('/sales-series', authenticateToken, posController.getSalesSeries);
 router.get('/executive-report', authenticateToken, posController.getExecutiveReportRange);
 router.get('/staff-dashboard', authenticateToken, posController.getStaffDashboard);
 
