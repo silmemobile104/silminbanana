@@ -2177,6 +2177,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
 
     state.branchStockCache = res.stock || [];
     const currentBranch = res.branch || { _id: 'all', name: 'ทุกสาขา' };
+    state.currentInventoryBranch = currentBranch;
 
     let statusLabel = 'พร้อมขาย';
     if (selectedStatus === 'sold') statusLabel = 'ขายแล้ว';
@@ -2248,11 +2249,13 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
           <thead>
             <tr>
               <th scope="col" style="width:50px; text-align:center;">#</th>
-              <th scope="col">หมายเลข IMEI</th>
-              <th scope="col">รายการสินค้า</th>
+              <th scope="col">รหัสสินค้า</th>
+              <th scope="col">ชื่อสินค้า</th>
               <th scope="col">ยี่ห้อ / ชื่อรุ่น</th>
               <th scope="col">ความจุ / สีสินค้า</th>
-              ${currentBranch._id === 'all' ? '<th scope="col">สาขา</th>' : ''}
+              ${currentBranch._id === 'all' ? '<th scope="col">ที่เก็บ</th>' : ''}
+              <th scope="col" style="text-align:center; width:65px;">จำนวน</th>
+              <th scope="col" style="text-align:center; width:75px;">หน่วยนับ</th>
               <th scope="col">ราคาต้นทุน</th>
               <th scope="col">ราคาขาย</th>
               <th scope="col" style="text-align:center;">สถานะสต็อก</th>
@@ -2260,7 +2263,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
             </tr>
           </thead>
           <tbody>
-            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 10 : 9) : (canEdit ? 9 : 8)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 12 : 11) : (canEdit ? 11 : 10)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
       const p = st.product || {};
       const imeiStr = st.imei;
@@ -2270,6 +2273,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
       const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
       const costPriceNum = st.purchase_price !== undefined ? st.purchase_price : (p.purchase_price || 0);
       const priceNum = st.selling_price || p.selling_price || 0;
+      const qtyNum = st.quantity || 1;
 
       // Render beautiful localized badges
       let badgeHtml = '';
@@ -2290,13 +2294,15 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
       }
 
       return `
-                <tr class="bi-row" data-search="${(imeiStr + ' ' + prodName + ' ' + brandStr + ' ' + modelStr + ' ' + specStr).toLowerCase()}">
+                <tr class="bi-row" data-quantity="${qtyNum}" data-unit="เครื่อง" data-search="${(imeiStr + ' ' + prodName + ' ' + brandStr + ' ' + modelStr + ' ' + specStr).toLowerCase()}">
                   <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${idx + 1}</td>
                   <td><strong style="color:var(--ink); font-family:ui-monospace,monospace; font-size:0.95rem; font-variant-numeric:tabular-nums; letter-spacing:0.02em;">${imeiStr}</strong></td>
                   <td><strong>${prodName}</strong></td>
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
                   ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
+                  <td style="text-align:center; font-weight:700; color:var(--ink);">${qtyNum}</td>
+                  <td style="text-align:center;"><span class="badge badge-gray">เครื่อง</span></td>
                   <td><span style="color:var(--text-muted);">฿${costPriceNum.toLocaleString()}</span></td>
                   <td><strong style="color:var(--ink);">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
@@ -3445,12 +3451,14 @@ async function renderFinanceView(filterParams = {}) {
       const isVoided = s.status === 'voided';
       const isPending = isFinance && finDetails.payoutStatus === 'pending_payout';
 
-      let costTotal = s.totalCost || 0;
+      let origCost = s.totalCost || 0;
+      if (!origCost && s.items) {
+        origCost = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
+      }
+      let costTotal = origCost;
       const isReturnedCost = s.costReturnedStatus === 'returned' && s.actualCostReturned !== undefined && s.actualCostReturned !== 0;
       if (isReturnedCost) {
         costTotal = s.actualCostReturned;
-      } else if (!costTotal && s.items) {
-        costTotal = s.items.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.quantity || 1)), 0);
       }
       const profitTotal = isReturnedCost ? (s.grandTotal - costTotal) : (s.totalProfit !== undefined ? s.totalProfit : (s.grandTotal - costTotal));
 
@@ -3508,8 +3516,8 @@ async function renderFinanceView(filterParams = {}) {
                           <span class="badge badge-green"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> โอนทุนคืนแล้ว (฿${(s.actualCostReturned || s.totalCost || 0).toLocaleString()})</span><br>
                           <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.15rem; line-height:1.35;">
                             วันที่คืน: ${s.costReturnedDate ? new Date(s.costReturnedDate).toLocaleDateString('th-TH') : '-'}<br>
-                            ${s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== costTotal ? `
-                              <span style="color:var(--accent-ink); font-weight:700;">ส่วนต่างทุน: ฿${(s.actualCostReturned - costTotal).toLocaleString()}</span>
+                            ${s.actualCostReturned !== undefined && s.actualCostReturned !== 0 && s.actualCostReturned !== origCost ? `
+                              <span style="color:var(--accent-ink); font-weight:700;">ส่วนต่างทุน: ฿${(s.actualCostReturned - origCost).toLocaleString()}</span>
                             ` : ''}
                           </span>
                         `}
@@ -9395,57 +9403,107 @@ async function submitCreateProduct() {
    ========================================================================== */
 async function renderBranchManagementView() {
   const container = document.getElementById('content-container');
-  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;" aria-hidden="true"></i> กำลังโหลดรายการสาขา...</div>`;
+  container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--body-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.8rem;" aria-hidden="true"></i> กำลังโหลดรายการสาขา...</div>`;
 
   try {
     const res = await apiRequest('/branches');
     const branches = res.branches || [];
+    state.branchesCache = branches;
 
-    const isAdmin = (state.user ? state.user.role : 'admin') === 'admin';
+    const isAdmin = (state.user ? state.user.role : 'admin') === 'admin' || (state.user && state.user.role === 'manager');
+
+    const totalBranches = branches.length;
+    const activeBranches = branches.filter(b => b.isActive).length;
+    const totalCreditLimit = branches.reduce((sum, b) => sum + (b.creditLimit || 0), 0);
+    const totalUsedCredit = branches.reduce((sum, b) => sum + (b.usedCredit || 0), 0);
+    const totalRemainingCredit = Math.max(0, totalCreditLimit - totalUsedCredit);
 
     container.innerHTML = `
-      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
+      <!-- Header & Summary Strip -->
+      <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
         <div>
-          <h3 style="font-size:1.1rem; font-weight:700;">จัดการข้อมูลสาขา</h3>
-          <p style="font-size:0.85rem; color:var(--text-muted);">รายการสาขาทั้งหมดในระบบ และการเปิด/ปิดใช้งานสาขา</p>
+          <h3 style="font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; color:var(--ink);">
+            <i class="fa-solid fa-store" style="color:var(--body-muted);" aria-hidden="true"></i> จัดการข้อมูลสาขา
+          </h3>
+          <p style="font-size:0.85rem; color:var(--body-muted); margin-top:0.25rem;">
+            รายการสาขาทั้งหมดในระบบและการเปิด/ปิดใช้งาน (${totalBranches} สาขา • เปิดใช้งาน ${activeBranches} สาขา)
+          </p>
+          <div style="font-size:0.85rem; margin-top:0.6rem; display:flex; gap:0.85rem; align-items:center; flex-wrap:wrap; color:var(--ink-2);">
+            <span>วงเงินอนุมัติรวม: <strong style="color:var(--ink); font-variant-numeric:tabular-nums;">฿${totalCreditLimit.toLocaleString()}</strong></span>
+            <span style="color:var(--hairline-strong);">|</span>
+            <span>ใช้วงเงินไปแล้ว: <span style="color:var(--body-muted); font-variant-numeric:tabular-nums;">฿${totalUsedCredit.toLocaleString()}</span></span>
+            <span style="color:var(--hairline-strong);">|</span>
+            <span>วงเงินคงเหลือรวม: <strong style="color:var(--positive); font-variant-numeric:tabular-nums;">฿${totalRemainingCredit.toLocaleString()}</strong></span>
+          </div>
         </div>
-        ${isAdmin ? `
-          <button class="btn btn-primary btn-sm" id="add-new-branch-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มสาขาใหม่</button>
-        ` : ''}
+
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          ${isAdmin ? `
+            <button class="btn btn-primary btn-sm" id="add-new-branch-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> เพิ่มสาขาใหม่</button>
+          ` : ''}
+        </div>
       </div>
 
+      <!-- Branch Table -->
       <div class="table-container">
-        <table class="data-table">
+        <table class="data-table" id="branch-table">
           <thead>
             <tr>
-              <th scope="col">รหัสสาขา</th>
-              <th scope="col">ชื่อสาขา</th>
+              <th scope="col" style="width: 50px; text-align: center;">#</th>
+              <th scope="col" style="min-width: 90px;">รหัสสาขา</th>
+              <th scope="col" style="min-width: 150px;">ชื่อสาขา</th>
               <th scope="col">ที่ตั้ง / เบอร์ติดต่อ</th>
-              <th scope="col">สถานะ</th>
-              ${isAdmin ? `<th scope="col">การจัดการ</th>` : ''}
+              <th scope="col" style="text-align: right; min-width: 120px;">วงเงินอนุมัติ</th>
+              <th scope="col" style="text-align: right; min-width: 120px;">ใช้วงเงินไปแล้ว</th>
+              <th scope="col" style="text-align: right; min-width: 120px;">วงเงินคงเหลือ</th>
+              <th scope="col" style="text-align: center; width: 100px;">สถานะ</th>
+              ${isAdmin ? `<th scope="col" style="text-align: center; min-width: 160px;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
-            ${branches.length === 0 ? `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">ไม่พบข้อมูลสาขาในระบบ</td></tr>` : ''}
-            ${branches.map(b => `
-              <tr>
-                <td><strong>${b.code || b.branchCode}</strong></td>
-                <td><strong>${b.name || b.branchName}</strong></td>
-                <td>${b.address || ''} ${b.phone ? '• Tel: ' + b.phone : ''}</td>
-                <td>
-                  <span class="badge badge-${b.isActive ? 'green' : 'red'}">
-                    ${b.isActive ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
-                  </span>
-                </td>
-                ${isAdmin ? `
-                  <td>
-                    <button class="btn btn-secondary btn-sm" onclick="openEditBranchModal('${b._id}', '${b.name}', '${b.address}', '${b.phone}', ${b.isActive})">
-                      <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
-                    </button>
+            ${branches.length === 0 ? `<tr><td colspan="${isAdmin ? 9 : 8}" style="text-align:center; color:var(--body-muted); padding:2rem;">ไม่พบข้อมูลสาขาในระบบ</td></tr>` : ''}
+            ${branches.map((b, idx) => {
+              const credit = b.creditLimit || 0;
+              const used = b.usedCredit || 0;
+              const remaining = b.remainingCredit !== undefined ? b.remainingCredit : Math.max(0, credit - used);
+
+              return `
+                <tr>
+                  <td style="text-align: center; color: var(--body-muted); font-size: 0.85rem;">${idx + 1}</td>
+                  <td><strong style="color: var(--ink); font-family: ui-monospace, monospace; font-size: 0.95rem; font-variant-numeric: tabular-nums;">${b.code || b.branchCode}</strong></td>
+                  <td><strong style="color: var(--ink);">${b.name || b.branchName}</strong></td>
+                  <td style="font-size: 0.85rem; color: var(--body-muted);">${b.address || '-'}${b.phone ? ` • Tel: ${b.phone}` : ''}</td>
+                  <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                    <strong style="color: var(--ink);">฿${credit.toLocaleString()}</strong>
                   </td>
-                ` : ''}
-              </tr>
-            `).join('')}
+                  <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                    <span style="color: var(--body-muted);">฿${used.toLocaleString()}</span>
+                  </td>
+                  <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                    <strong style="color: ${remaining > 0 ? 'var(--positive)' : 'var(--body-muted)'};">
+                      ฿${remaining.toLocaleString()}
+                    </strong>
+                  </td>
+                  <td style="text-align: center;">
+                    <span class="badge badge-${b.isActive ? 'green' : 'gray'}">
+                      ${b.isActive ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                    </span>
+                  </td>
+                  ${isAdmin ? `
+                    <td style="text-align: center; white-space: nowrap;">
+                      <div style="display: inline-flex; gap: 0.35rem;">
+                        <button class="btn btn-secondary btn-sm" onclick="openAdjustCreditModal('${b._id}')" title="ปรับวงเงินสาขา">
+                          <i class="fa-solid fa-coins" aria-hidden="true"></i> ปรับวงเงิน
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="openEditBranchModal('${b._id}')" title="แก้ไขข้อมูลสาขา">
+                          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> แก้ไข
+                        </button>
+                      </div>
+                    </td>
+                  ` : ''}
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -9455,21 +9513,32 @@ async function renderBranchManagementView() {
       document.getElementById('add-new-branch-btn').addEventListener('click', openAddBranchModal);
     }
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--ink);">${err.message}</div>`;
+    container.innerHTML = `<div style="color:var(--negative); padding:2rem;">เกิดข้อผิดพลาด: ${err.message}</div>`;
   }
 }
 
 function openAddBranchModal() {
   const bodyHtml = `
-    <form id="new-branch-form">
+    <form id="new-branch-form" onsubmit="event.preventDefault(); submitAddBranch();">
       <div class="form-group">
-        <label for="mb-code">รหัสสาขา (Branch Code)</label>
+        <label for="mb-code">รหัสสาขา (Branch Code) <span style="color:var(--negative);">*</span></label>
         <input type="text" id="mb-code" class="form-control" placeholder="เช่น BR-N006" aria-label="เช่น BR-N006" required>
       </div>
 
       <div class="form-group">
-        <label for="mb-name">ชื่อสาขา (Branch Name)</label>
-        <input type="text" id="mb-name" class="form-control" placeholder="เช่น สาขาภาคตะวันออกเฉียงเหนือ (ขอนแก่น)" aria-label="เช่น สาขาภาคตะวันออกเฉียงเหนือ (ขอนแก่น)" required>
+        <label for="mb-name">ชื่อสาขา (Branch Name) <span style="color:var(--negative);">*</span></label>
+        <input type="text" id="mb-name" class="form-control" placeholder="เช่น บานาน่า หาดใหญ่" aria-label="เช่น บานาน่า หาดใหญ่" required>
+      </div>
+
+      <div class="form-group">
+        <label for="mb-credit-limit">
+          วงเงินอนุมัติเริ่มต้น (Credit Limit)
+        </label>
+        <div style="position:relative;">
+          <input type="number" id="mb-credit-limit" class="form-control" value="300000" min="0" step="1000" placeholder="300000" required>
+          <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--body-muted); font-size:0.85rem;">บาท</span>
+        </div>
+        <small style="display:block; margin-top:0.25rem; color:var(--body-muted);">* วงเงินที่อนุญาตให้สาขาสั่งซื้อสินค้าเข้าคลัง</small>
       </div>
 
       <div class="form-group">
@@ -9479,17 +9548,17 @@ function openAddBranchModal() {
 
       <div class="form-group">
         <label for="mb-phone">เบอร์โทรศัพท์ติดต่อ (Contact Phone)</label>
-        <input type="text" id="mb-phone" class="form-control" placeholder="เช่น 043-111-222" aria-label="เช่น 043-111-222">
+        <input type="text" id="mb-phone" class="form-control" placeholder="เช่น 074-123-456" aria-label="เช่น 074-123-456">
       </div>
     </form>
   `;
 
   const footerHtml = `
-    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitAddBranch()"><i class="fa-solid fa-check" aria-hidden="true"></i> บันทึกเพิ่มสาขาใหม่</button>
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="button" class="btn btn-primary" onclick="submitAddBranch()"><i class="fa-solid fa-check" aria-hidden="true"></i> บันทึกเพิ่มสาขาใหม่</button>
   `;
 
-  openModal('เพิ่มสาขาใหม่ (Add New Branch)', bodyHtml, footerHtml);
+  openModal('เพิ่มสาขาใหม่', bodyHtml, footerHtml);
 }
 
 async function submitAddBranch() {
@@ -9497,6 +9566,7 @@ async function submitAddBranch() {
   const branchName = document.getElementById('mb-name').value.trim();
   const address = document.getElementById('mb-address').value.trim();
   const phone = document.getElementById('mb-phone').value.trim();
+  const creditLimit = parseFloat(document.getElementById('mb-credit-limit').value) || 0;
 
   if (!branchCode || !branchName) {
     showToast('กรุณากรอกรหัสสาขาและชื่อสาขาให้ครบถ้วน', 'error');
@@ -9508,50 +9578,179 @@ async function submitAddBranch() {
       branchCode,
       branchName,
       address,
-      phone
+      phone,
+      creditLimit
     });
 
     if (res.success) {
-      showToast('เพิ่มสาขาใหม่สำเร็จ');
+      showToast('เพิ่มสาขาใหม่สำเร็จ', 'success');
       closeModal();
       renderBranchManagementView();
     }
   } catch (err) {
-    // Handled
+    // Handled in apiRequest
   }
 }
 
-function openEditBranchModal(id, name, address, phone, isActive) {
+// Quick Adjust Credit Modal
+function openAdjustCreditModal(branchId) {
+  const branch = (state.branchesCache || []).find(b => String(b._id) === String(branchId));
+  if (!branch) {
+    showToast('ไม่พบข้อมูลสาขา', 'error');
+    return;
+  }
+
+  const currentLimit = branch.creditLimit || 0;
+  const currentUsed = branch.usedCredit || 0;
+  const currentRemaining = branch.remainingCredit !== undefined ? branch.remainingCredit : Math.max(0, currentLimit - currentUsed);
+
   const bodyHtml = `
-    <form id="edit-branch-form">
+    <div style="margin-bottom:1.25rem; padding:0.9rem 1rem; background:var(--surface-sunken); border-radius:var(--radius-sm); border:1px solid var(--hairline);">
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.88rem;">
+        <span style="color:var(--body-muted);">รหัสสาขา:</span>
+        <strong style="font-family:ui-monospace, monospace; color:var(--ink);">${branch.code || branch.branchCode}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.6rem; font-size:0.88rem;">
+        <span style="color:var(--body-muted);">ชื่อสาขา:</span>
+        <strong style="color:var(--ink);">${branch.name || branch.branchName}</strong>
+      </div>
+      <hr style="border:none; border-top:1px solid var(--hairline); margin:0.5rem 0;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem; font-size:0.85rem;">
+        <div>
+          <span style="color:var(--body-muted); display:block;">ใช้วงเงินไปแล้ว:</span>
+          <strong style="color:var(--ink-2); font-size:0.95rem;">฿${currentUsed.toLocaleString()}</strong>
+        </div>
+        <div>
+          <span style="color:var(--body-muted); display:block;">วงเงินคงเหลือปัจจุบัน:</span>
+          <strong style="color:var(--positive); font-size:0.95rem;">฿${currentRemaining.toLocaleString()}</strong>
+        </div>
+      </div>
+    </div>
+
+    <form id="adjust-credit-form" onsubmit="event.preventDefault(); submitAdjustCredit('${branch._id}');">
       <div class="form-group">
-        <label for="eb-name">ชื่อสาขา (Branch Name)</label>
-        <input type="text" id="eb-name" class="form-control" value="${name}" required>
+        <label for="ac-credit-limit" style="font-weight:600; color:var(--ink);">
+          กำหนดวงเงินอนุมัติใหม่ (บาท) <span style="color:var(--negative);">*</span>
+        </label>
+        <div style="position:relative;">
+          <input type="number" id="ac-credit-limit" class="form-control" value="${currentLimit}" min="0" step="1000" required style="font-size:1.05rem; font-weight:700; padding:0.55rem 0.75rem; color:var(--ink);" oninput="updateAdjustCreditPreview(${currentUsed})">
+          <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--body-muted); font-size:0.85rem;">บาท</span>
+        </div>
+        <small style="display:block; margin-top:0.35rem; color:var(--body-muted);">
+          * วงเงินนี้ใช้ควบคุมเพดานการสั่งซื้อสินค้าของสาขากับสำนักงานใหญ่
+        </small>
+      </div>
+
+      <div id="ac-preview-box" style="margin-top:0.85rem; padding:0.75rem 1rem; border-radius:var(--radius-sm); background:var(--surface-sunken); border:1px solid var(--hairline); display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--body-muted);">วงเงินคงเหลือใหม่ที่จะได้รับ:</span>
+        <strong id="ac-new-remaining" style="font-size:1.05rem; color:var(--positive);">฿${currentRemaining.toLocaleString()}</strong>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="button" class="btn btn-primary" onclick="submitAdjustCredit('${branch._id}')">
+      <i class="fa-solid fa-check" aria-hidden="true"></i> บันทึกวงเงิน
+    </button>
+  `;
+
+  openModal(`ปรับวงเงินสาขา: ${branch.name || branch.branchName}`, bodyHtml, footerHtml);
+}
+
+function updateAdjustCreditPreview(currentUsed) {
+  const input = document.getElementById('ac-credit-limit');
+  const preview = document.getElementById('ac-new-remaining');
+  if (!input || !preview) return;
+  const newLimit = parseFloat(input.value) || 0;
+  const newRemaining = Math.max(0, newLimit - currentUsed);
+  preview.innerText = `฿${newRemaining.toLocaleString()}`;
+}
+
+async function submitAdjustCredit(branchId) {
+  const input = document.getElementById('ac-credit-limit');
+  if (!input) return;
+  const creditLimit = parseFloat(input.value);
+  if (isNaN(creditLimit) || creditLimit < 0) {
+    showToast('กรุณาระบุวงเงินที่ถูกต้อง (ต้องไม่น้อยกว่า 0)', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/branches/${branchId}`, 'PUT', { creditLimit });
+    if (res.success) {
+      if (state.user && state.user.branch && String(state.user.branch._id || state.user.branch) === String(branchId)) {
+        state.user.branch.creditLimit = creditLimit;
+        state.user.branch.remainingCredit = Math.max(0, creditLimit - (state.user.branch.usedCredit || 0));
+      }
+      showToast(res.message || 'ปรับวงเงินสาขาสำเร็จ', 'success');
+      closeModal();
+      renderBranchManagementView();
+    }
+  } catch (err) {
+    // Handled in apiRequest
+  }
+}
+
+function openEditBranchModal(id) {
+  const branch = (state.branchesCache || []).find(b => String(b._id) === String(id));
+  if (!branch) {
+    showToast('ไม่พบข้อมูลสาขา', 'error');
+    return;
+  }
+
+  const currentLimit = branch.creditLimit || 0;
+  const currentUsed = branch.usedCredit || 0;
+  const currentRemaining = branch.remainingCredit !== undefined ? branch.remainingCredit : Math.max(0, currentLimit - currentUsed);
+
+  const bodyHtml = `
+    <form id="edit-branch-form" onsubmit="event.preventDefault(); submitEditBranch('${branch._id}');">
+      <div class="form-group">
+        <label>รหัสสาขา (Branch Code)</label>
+        <input type="text" class="form-control" value="${branch.code || branch.branchCode}" disabled style="background:var(--surface-sunken); font-family:ui-monospace, monospace; font-weight:600; color:var(--body-muted);">
+      </div>
+
+      <div class="form-group">
+        <label for="eb-name">ชื่อสาขา (Branch Name) <span style="color:var(--negative);">*</span></label>
+        <input type="text" id="eb-name" class="form-control" value="${escapeHtml(branch.name || branch.branchName)}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="eb-credit-limit" style="font-weight:600;">
+          วงเงินอนุมัติ (Credit Limit) <span style="color:var(--negative);">*</span>
+        </label>
+        <div style="position:relative;">
+          <input type="number" id="eb-credit-limit" class="form-control" value="${currentLimit}" min="0" step="1000" required style="font-weight:600; color:var(--ink);">
+          <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--body-muted); font-size:0.85rem;">บาท</span>
+        </div>
+        <div style="font-size:0.78rem; color:var(--body-muted); margin-top:0.3rem;">
+          ใช้วงเงินไปแล้ว: ฿${currentUsed.toLocaleString()} • วงเงินคงเหลือ: ฿${currentRemaining.toLocaleString()}
+        </div>
       </div>
 
       <div class="form-group">
         <label for="eb-address">ที่ตั้งสาขา (Address)</label>
-        <textarea id="eb-address" class="form-control" rows="2">${address || ''}</textarea>
+        <textarea id="eb-address" class="form-control" rows="2">${escapeHtml(branch.address || '')}</textarea>
       </div>
 
       <div class="form-group">
         <label for="eb-phone">เบอร์โทรศัพท์ติดต่อ (Phone)</label>
-        <input type="text" id="eb-phone" class="form-control" value="${phone || ''}">
+        <input type="text" id="eb-phone" class="form-control" value="${escapeHtml(branch.phone || '')}">
       </div>
 
       <div class="form-group">
         <label for="eb-status">สถานะการใช้งานสาขา</label>
         <select id="eb-status" class="form-select">
-          <option value="true" ${isActive ? 'selected' : ''}>เปิดใช้งาน (Active)</option>
-          <option value="false" ${!isActive ? 'selected' : ''}>ปิดใช้งาน (Inactive)</option>
+          <option value="true" ${branch.isActive ? 'selected' : ''}>เปิดใช้งาน (Active)</option>
+          <option value="false" ${!branch.isActive ? 'selected' : ''}>ปิดใช้งาน (Inactive)</option>
         </select>
       </div>
     </form>
   `;
 
   const footerHtml = `
-    <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-    <button class="btn btn-primary" onclick="submitEditBranch('${id}')"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข</button>
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+    <button type="button" class="btn btn-primary" onclick="submitEditBranch('${branch._id}')"><i class="fa-solid fa-save" aria-hidden="true"></i> บันทึกการแก้ไข</button>
   `;
 
   openModal('แก้ไขข้อมูลสาขา', bodyHtml, footerHtml);
@@ -9562,22 +9761,38 @@ async function submitEditBranch(id) {
   const address = document.getElementById('eb-address').value.trim();
   const phone = document.getElementById('eb-phone').value.trim();
   const isActive = document.getElementById('eb-status').value === 'true';
+  const creditLimitInput = document.getElementById('eb-credit-limit');
+  const creditLimit = creditLimitInput ? (parseFloat(creditLimitInput.value) || 0) : undefined;
+
+  if (!branchName) {
+    showToast('กรุณาระบุชื่อสาขา', 'error');
+    return;
+  }
 
   try {
-    const res = await apiRequest(`/branches/${id}`, 'PUT', {
+    const payload = {
       branchName,
       address,
       phone,
       isActive
-    });
+    };
+    if (creditLimit !== undefined) {
+      payload.creditLimit = creditLimit;
+    }
+
+    const res = await apiRequest(`/branches/${id}`, 'PUT', payload);
 
     if (res.success) {
-      showToast('อัปเดตข้อมูลสาขาสำเร็จ');
+      if (state.user && state.user.branch && String(state.user.branch._id || state.user.branch) === String(id)) {
+        if (creditLimit !== undefined) state.user.branch.creditLimit = creditLimit;
+        state.user.branch.name = branchName;
+      }
+      showToast('อัปเดตข้อมูลสาขาสำเร็จ', 'success');
       closeModal();
       renderBranchManagementView();
     }
   } catch (err) {
-    // Handled
+    // Handled in apiRequest
   }
 }
 
@@ -10016,23 +10231,50 @@ function exportExecutiveReportToExcel() {
 
 // 2. Export Branch Inventory
 function exportBranchInventoryToExcel() {
-  const isAllBranch = document.querySelector('#bi-table th:nth-child(6)') && document.querySelector('#bi-table th:nth-child(6)').innerText.includes('สาขา');
+  const th6 = document.querySelector('#bi-table th:nth-child(6)');
+  const isAllBranch = th6 && (th6.innerText.includes('ที่เก็บ') || th6.innerText.includes('สาขา'));
   let totalCost = 0;
   let totalPrice = 0;
-  const itemCount = document.querySelectorAll('.bi-row').length;
+  let totalQty = 0;
 
-  const rows = Array.from(document.querySelectorAll('.bi-row')).map(tr => {
+  // Branch name for single-branch export
+  let singleBranchName = '';
+  if (!isAllBranch) {
+    if (state.currentInventoryBranch && state.currentInventoryBranch.name && state.currentInventoryBranch._id !== 'all') {
+      singleBranchName = state.currentInventoryBranch.name;
+    } else {
+      const select = document.getElementById('bi-branch-select');
+      if (select && select.selectedIndex >= 0) {
+        singleBranchName = select.options[select.selectedIndex].text;
+      } else if (state.user && state.user.branch && state.user.branch.name) {
+        singleBranchName = state.user.branch.name;
+      }
+    }
+  }
+
+  // Filter out any hidden rows (e.g. from search filter)
+  const allRows = Array.from(document.querySelectorAll('.bi-row')).filter(tr => tr.style.display !== 'none');
+  const itemCount = allRows.length;
+
+  const rows = allRows.map(tr => {
     const tds = tr.querySelectorAll('td');
-    let branchName = '';
-    let costIdx = 5;
-    let priceIdx = 6;
-    let statusIdx = 7;
+    let branchName = singleBranchName;
+    let qtyIdx = 5;
+    let unitIdx = 6;
+    let costIdx = 7;
+    let priceIdx = 8;
+    let statusIdx = 9;
     if (isAllBranch) {
       branchName = tds[5] ? tds[5].innerText.trim() : '';
-      costIdx = 6;
-      priceIdx = 7;
-      statusIdx = 8;
+      qtyIdx = 6;
+      unitIdx = 7;
+      costIdx = 8;
+      priceIdx = 9;
+      statusIdx = 10;
     }
+
+    const qtyVal = parseInt(tr.getAttribute('data-quantity') || (tds[qtyIdx] ? tds[qtyIdx].innerText.trim() : '1')) || 1;
+    const unitVal = tr.getAttribute('data-unit') || (tds[unitIdx] ? tds[unitIdx].innerText.trim() : 'เครื่อง') || 'เครื่อง';
 
     const costRaw = tds[costIdx] ? tds[costIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
     const priceRaw = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
@@ -10040,36 +10282,33 @@ function exportBranchInventoryToExcel() {
     const priceNum = parseFloat(priceRaw) || 0;
     totalCost += costNum;
     totalPrice += priceNum;
+    totalQty += qtyVal;
 
     const rowObj = {
-      'หมายเลข IMEI': tds[1] ? tds[1].innerText.trim() : '',
-      'รายการสินค้า': tds[2] ? tds[2].innerText.trim() : '',
-      'ยี่ห้อ / รุ่น': tds[3] ? tds[3].innerText.trim() : '',
-      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : ''
+      'รหัสสินค้า': tds[1] ? tds[1].innerText.trim() : '',
+      'ชื่อสินค้า': tds[2] ? tds[2].innerText.trim() : '',
+      'ที่เก็บ': branchName,
+      'จำนวน': qtyVal,
+      'หน่วยนับ': unitVal,
+      'ราคาต้นทุน (บาท)': costNum,
+      'ราคาขาย (บาท)': priceNum,
+      'สถานะสต็อก': tds[statusIdx] ? tds[statusIdx].innerText.trim() : ''
     };
-    if (isAllBranch) {
-      rowObj['สาขา'] = branchName;
-    }
-    rowObj['ราคาต้นทุน (บาท)'] = costNum;
-    rowObj['ราคาขาย (บาท)'] = priceNum;
-    rowObj['สถานะสต็อก'] = tds[statusIdx] ? tds[statusIdx].innerText.trim() : '';
     return rowObj;
   });
 
   // สรุปยอดรวมด้านล่างตาราง Excel
   if (rows.length > 0) {
     const summaryRow = {
-      'หมายเลข IMEI': 'ยอดรวมทั้งหมด',
-      'รายการสินค้า': `${itemCount} รายการ`,
-      'ยี่ห้อ / รุ่น': '',
-      'ความจุ / สี': ''
+      'รหัสสินค้า': 'ยอดรวมทั้งหมด',
+      'ชื่อสินค้า': `${itemCount} รายการ`,
+      'ที่เก็บ': '',
+      'จำนวน': totalQty,
+      'หน่วยนับ': 'เครื่อง',
+      'ราคาต้นทุน (บาท)': totalCost,
+      'ราคาขาย (บาท)': totalPrice,
+      'สถานะสต็อก': ''
     };
-    if (isAllBranch) {
-      summaryRow['สาขา'] = '';
-    }
-    summaryRow['ราคาต้นทุน (บาท)'] = totalCost;
-    summaryRow['ราคาขาย (บาท)'] = totalPrice;
-    summaryRow['สถานะสต็อก'] = '';
     rows.push(summaryRow);
   }
 
@@ -11992,7 +12231,7 @@ function openRecordCostReturnModal(saleId, receiptNumber, costAmount) {
           <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> เลือกวันที่ โอนเงินต้นทุนคืนบริษัทจริง (จำเป็นต้องเลือก)
         </label>
         <input type="date" id="cr-date" class="form-control" value="" required onclick="if(this.showPicker) this.showPicker();" style="cursor:pointer; font-weight:700; padding:0.5rem; border-radius:6px;">
-        <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาคุณเท่ากับยอดต้นทุนที่โอนคืนจริงนี้ทันที</span>
+        <span style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.3rem;">* เมื่อกดบันทึก ระบบจะคืนวงเงินของสาขาเต็มจำนวนตามต้นทุนสินค้า (วงเงินคงเหลือของสาขาจะได้รับคืนเต็มตามเดิม)</span>
       </div>
 
       <div class="form-group" style="text-align:left;">
@@ -12040,7 +12279,13 @@ async function submitCostReturn(saleId) {
     });
 
     if (res.success) {
-      showToast(res.message);
+      if (res.branch) {
+        if (state.user && state.user.branch && String(state.user.branch._id || state.user.branch) === String(res.branch._id)) {
+          state.user.branch.usedCredit = res.branch.usedCredit;
+          state.user.branch.remainingCredit = res.branch.remainingCredit;
+        }
+      }
+      showToast(res.message, 'success');
       closeModal();
       renderFinanceView(); // Reload finance view to show updated status
     }

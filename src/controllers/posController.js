@@ -884,7 +884,9 @@ const returnCostToHq = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'รายการจัดไฟแนนซ์คืนวงเงินอัตโนมัติแล้ว ไม่ต้องโอนคืนซ้ำ' });
     }
 
-    const returnedAmount = actualCostReturned !== undefined ? Number(actualCostReturned) : (sale.totalCost || 0);
+    const returnedAmount = actualCostReturned !== undefined && actualCostReturned !== null && actualCostReturned !== ''
+      ? Number(actualCostReturned)
+      : (sale.totalCost || 0);
 
     sale.costReturnedStatus = 'returned';
     sale.costReturnedDate = dateVal;
@@ -895,12 +897,57 @@ const returnCostToHq = async (req, res, next) => {
     }
     await sale.save();
 
-    // Adjust branch used credit (restoring credit limit by reducing usedCredit)
-    const branch = sale.branch;
+    // Update BranchPurchaseOrder and Stock if actualCostReturned differs from sale.totalCost
+    // so that accumulated purchase orders (ยอดสั่งซื้อสะสม) and stock reflect the actual cost returned!
+    const BranchPurchaseOrder = require('../models/BranchPurchaseOrder');
+    const costDiff = returnedAmount - (sale.totalCost || 0);
+    if (costDiff !== 0 && sale.items && sale.items.length > 0) {
+      const perItemDiff = Math.round((costDiff / sale.items.length) * 100) / 100;
+      for (const item of sale.items) {
+        if (item.imei) {
+          // Update Stock purchase_price
+          await Stock.updateOne(
+            { imei: item.imei },
+            { $inc: { purchase_price: perItemDiff } }
+          );
+
+          // Update BranchPurchaseOrder items and totalAmount
+          const relatedOrders = await BranchPurchaseOrder.find({
+            'items.imeis': item.imei
+          });
+
+          for (const order of relatedOrders) {
+            let orderUpdated = false;
+            for (const poItem of order.items) {
+              if (poItem.imeis && poItem.imeis.includes(item.imei)) {
+                poItem.unitPrice = Math.max(0, (poItem.unitPrice || 0) + perItemDiff);
+                poItem.totalPrice = Math.max(0, (poItem.quantity || 1) * poItem.unitPrice);
+                orderUpdated = true;
+              }
+            }
+            if (orderUpdated) {
+              order.totalAmount = order.items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
+              await order.save();
+            }
+          }
+        }
+      }
+    }
+
+    // Adjust branch used credit:
+    // When the cost of a sale is returned to HQ, the credit consumed by this sale (sale.totalCost)
+    // is fully released back to the branch, restoring the branch's remaining credit to full!
+    const branchId = sale.branch && sale.branch._id ? sale.branch._id : sale.branch;
+    const branch = await Branch.findById(branchId);
+    let newUsedCredit = 0;
+    let remainingCredit = 0;
+    const creditToRestore = sale.totalCost || 0;
     if (branch) {
       const currentUsed = branch.usedCredit || 0;
-      branch.usedCredit = Math.max(0, currentUsed - returnedAmount);
+      branch.usedCredit = Math.max(0, currentUsed - creditToRestore);
       await branch.save();
+      newUsedCredit = branch.usedCredit;
+      remainingCredit = Math.max(0, (branch.creditLimit || 0) - (branch.usedCredit || 0));
     }
 
     await AuditLog.create({
@@ -913,15 +960,26 @@ const returnCostToHq = async (req, res, next) => {
       details: {
         receiptNumber: sale.receiptNumber,
         branch: branch ? branch.name : 'ไม่ระบุ',
-        refundAmount: sale.totalCost,
-        newUsedCredit: branch ? branch.usedCredit : 0
+        refundAmount: returnedAmount,
+        actualCostReturned: returnedAmount,
+        originalCost: sale.totalCost || 0,
+        creditRestored: creditToRestore,
+        newUsedCredit,
+        remainingCredit
       }
     });
 
     res.json({
       success: true,
-      message: 'บันทึกโอนยอดต้นทุนคืนบริษัทใหญ่ และคืนวงเงินสาขาเรียบร้อยแล้ว',
-      sale
+      message: `บันทึกโอนยอดต้นทุนคืนบริษัทใหญ่ ฿${returnedAmount.toLocaleString()} เรียบร้อยแล้ว (คืนวงเงินให้สาขาเต็มจำนวน ฿${creditToRestore.toLocaleString()} | วงเงินคงเหลือ ฿${remainingCredit.toLocaleString()})`,
+      sale,
+      branch: branch ? {
+        _id: branch._id,
+        name: branch.name,
+        creditLimit: branch.creditLimit,
+        usedCredit: branch.usedCredit,
+        remainingCredit
+      } : null
     });
   } catch (err) {
     next(err);
@@ -959,14 +1017,51 @@ const voidSale = async (req, res, next) => {
     }
 
     // Revert branch credit limit if credit was restored
-    const branch = await Branch.findById(sale.branch);
+    const branchId = sale.branch && sale.branch._id ? sale.branch._id : sale.branch;
+    const branch = await Branch.findById(branchId);
     let creditReverted = 0;
     if (branch) {
-      const restoredCredit = sale.paymentMethod === 'finance' || sale.costReturnedStatus === 'returned';
-      if (restoredCredit) {
-        branch.usedCredit = (branch.usedCredit || 0) + (sale.totalCost || 0);
-        creditReverted = sale.totalCost || 0;
+      const isReturned = sale.costReturnedStatus === 'returned';
+      const isFinance = sale.paymentMethod === 'finance';
+      if (isFinance || isReturned) {
+        const revertAmount = sale.totalCost || 0;
+        branch.usedCredit = (branch.usedCredit || 0) + revertAmount;
+        creditReverted = revertAmount;
         await branch.save();
+      }
+    }
+
+    // If voiding a returned sale that had actualCostReturned diff, revert BranchPurchaseOrder and Stock purchase_price
+    if (sale.costReturnedStatus === 'returned' && sale.actualCostReturned !== undefined && sale.actualCostReturned !== null && sale.actualCostReturned !== 0) {
+      const BranchPurchaseOrder = require('../models/BranchPurchaseOrder');
+      const costDiff = (sale.actualCostReturned || 0) - (sale.totalCost || 0);
+      if (costDiff !== 0 && sale.items && sale.items.length > 0) {
+        const perItemDiff = Math.round((costDiff / sale.items.length) * 100) / 100;
+        for (const item of sale.items) {
+          if (item.imei) {
+            await Stock.updateOne(
+              { imei: item.imei },
+              { $inc: { purchase_price: -perItemDiff } }
+            );
+            const relatedOrders = await BranchPurchaseOrder.find({
+              'items.imeis': item.imei
+            });
+            for (const order of relatedOrders) {
+              let orderUpdated = false;
+              for (const poItem of order.items) {
+                if (poItem.imeis && poItem.imeis.includes(item.imei)) {
+                  poItem.unitPrice = Math.max(0, (poItem.unitPrice || 0) - perItemDiff);
+                  poItem.totalPrice = Math.max(0, (poItem.quantity || 1) * poItem.unitPrice);
+                  orderUpdated = true;
+                }
+              }
+              if (orderUpdated) {
+                order.totalAmount = order.items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
+                await order.save();
+              }
+            }
+          }
+        }
       }
     }
 

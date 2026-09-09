@@ -88,7 +88,7 @@ const updateBranch = async (req, res, next) => {
         action: 'UPDATE_BRANCH',
         entity: 'Branch',
         entityId: branch._id.toString(),
-        details: { code: branch.code, name: branch.name, isActive: branch.isActive }
+        details: { code: branch.code, name: branch.name, creditLimit: branch.creditLimit, isActive: branch.isActive }
       });
     }
 
