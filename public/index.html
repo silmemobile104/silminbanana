@@ -23,6 +23,10 @@
     fallbacks and were downloaded on every visit without ever being used.
   -->
   <link rel="preload" href="/fonts/sarabun-400-thai.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- .brand-logo (sidebar + login) renders at weight 700 on every screen.
+       Without this it's discovered only after CSS parse instead of in
+       parallel with the other critical requests. -->
+  <link rel="preload" href="/fonts/sarabun-700-thai.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
   <!-- The logo is the largest element on the login screen; fetch it with the CSS -->
   <link rel="preload" href="/image/icon_silminbanana.png" as="image" fetchpriority="high">
@@ -212,7 +216,7 @@
     }
   </style>
   <link rel="stylesheet" href="/css/fontawesome.min.css?v=640sub3">
-  <link rel="stylesheet" href="/css/styles.css?v=20260831a">
+  <link rel="stylesheet" href="/css/styles.css?v=20260909c">
 
   <!--
     Chart.js and SheetJS used to load here on every page view: ~375KB gzip of
@@ -342,7 +346,7 @@
           <li>
             <a class="nav-link" href="javascript:void(0)" data-view="goods-receipt">
               <i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i>
-              <span class="nav-text">แจ้งสินค้าเข้าสาขา</span>
+              <span class="nav-text">แจ้งนำเข้าสินค้า</span>
             </a>
           </li>
 
@@ -493,7 +497,7 @@
   </div>
 
   <!-- Application Script Bundles -->
-  <script defer src="/js/app.js?v=20260831a"></script>
+  <script defer src="/js/app.js?v=20260909c"></script>
   <!-- UI Interaction Helper (Hamburger Auto-Close) -->
   <script>
     document.addEventListener('click', (e) => {

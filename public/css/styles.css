@@ -2239,6 +2239,19 @@ input[type="radio"] {
     color: #000;
   }
 
+  /* พิมพ์เฉพาะป๊อปอัปที่เปิดอยู่ (ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบโอนย้าย ฯลฯ)
+     ซ่อนตัวแอปที่อยู่ด้านหลังทั้งหมด ไม่ให้ตารางในหน้าจอติดไปกับกระดาษ */
+  body.modal-open #app,
+  body.modal-open .bg-glow-1,
+  body.modal-open .bg-glow-2 {
+    display: none !important;
+  }
+
+  /* ป๊อปอัปที่ปิดอยู่ต้องไม่โผล่มาในกระดาษเวลาสั่งพิมพ์หน้าปกติ */
+  #app-modal:not(.active) {
+    display: none !important;
+  }
+
   #app-modal.modal-overlay {
     position: static;
     opacity: 1;
@@ -2257,6 +2270,16 @@ input[type="radio"] {
   #app-modal .modal-header,
   #app-modal .modal-footer {
     display: none;
+  }
+
+  /* เอกสารที่จะพิมพ์ (ใบเสร็จ ใบกำกับภาษี ใบสั่งซื้อ ใบโอนย้าย) เขียน box-shadow
+     ไว้เป็น inline style เพื่อให้ดูลอยบนหน้าจอ ตอนพิมพ์ต้องล้างทิ้งด้วย !important
+     ไม่งั้นเงาจะติดไปบนกระดาษเป็นขอบเทา */
+  #app-modal,
+  #app-modal * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
   }
 
   #app-modal .modal-body {

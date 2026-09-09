@@ -258,6 +258,8 @@ function openModal(title, bodyHtml, footerHtml = '') {
   document.getElementById('modal-body').innerHTML = bodyHtml;
   document.getElementById('modal-footer').innerHTML = footerHtml;
   modal.classList.add('active');
+  // ตอนสั่งพิมพ์ ให้พิมพ์เฉพาะเนื้อหาในป๊อปอัป (ดู @media print ใน styles.css)
+  document.body.classList.add('modal-open');
   modal.setAttribute('aria-hidden', 'false');
   modal.removeAttribute('inert');
 
@@ -273,6 +275,7 @@ function closeModal() {
   const wasOpen = isModalOpen();
 
   modal.classList.remove('active');
+  document.body.classList.remove('modal-open');
   modal.setAttribute('aria-hidden', 'true');
   // Blur anything inside before making it inert, or focus is left nowhere.
   if (modal.contains(document.activeElement)) document.activeElement.blur();
@@ -2192,6 +2195,15 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
             <i class="fa-solid fa-boxes-packing" style="color:var(--accent-primary);" aria-hidden="true"></i> รายการสินค้าในคลัง: ${currentBranch.name}
           </h3>
           <p style="font-size:0.85rem; color:var(--text-muted);">แสดงเครื่องสินค้า${statusLabel} (รวมทั้งสิ้น ${activeStockList.length} เครื่อง)</p>
+          ${currentBranch._id !== 'all' && currentBranch.creditLimit ? `
+            <div style="font-size:0.83rem; margin-top:0.35rem; display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap;">
+              <span>วงเงินอนุมัติ: <strong>฿${(currentBranch.creditLimit || 0).toLocaleString()}</strong></span>
+              <span style="color:var(--text-muted);">|</span>
+              <span>ใช้วงเงินไปแล้ว: <strong style="color:var(--tile-amber-fg);">฿${(currentBranch.usedCredit || 0).toLocaleString()}</strong></span>
+              <span style="color:var(--text-muted);">|</span>
+              <span>วงเงินคงเหลือ: <strong style="color:var(--positive);">฿${Math.max(0, (currentBranch.creditLimit || 0) - (currentBranch.usedCredit || 0)).toLocaleString()}</strong></span>
+            </div>
+          ` : ''}
         </div>
 
         <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -2241,13 +2253,14 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
               <th scope="col">ยี่ห้อ / ชื่อรุ่น</th>
               <th scope="col">ความจุ / สีสินค้า</th>
               ${currentBranch._id === 'all' ? '<th scope="col">สาขา</th>' : ''}
+              <th scope="col">ราคาต้นทุน</th>
               <th scope="col">ราคาขาย</th>
               <th scope="col" style="text-align:center;">สถานะสต็อก</th>
               ${canEdit ? `<th scope="col" style="text-align:center;">การจัดการ</th>` : ''}
             </tr>
           </thead>
           <tbody>
-            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 9 : 8) : (canEdit ? 8 : 7)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
+            ${activeStockList.length === 0 ? `<tr><td colspan="${currentBranch._id === 'all' ? (canEdit ? 10 : 9) : (canEdit ? 9 : 8)}" style="text-align:center; color:var(--text-muted); padding:2rem;">ไม่พบรายการสินค้าในคลังสาขานี้</td></tr>` : ''}
             ${activeStockList.map((st, idx) => {
       const p = st.product || {};
       const imeiStr = st.imei;
@@ -2255,6 +2268,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
       const brandStr = st.brand || p.brand || '-';
       const modelStr = st.model || p.model || '';
       const specStr = [st.capacity || p.capacity, st.color || p.color].filter(Boolean).join(' ') || (p.variation || '-');
+      const costPriceNum = st.purchase_price !== undefined ? st.purchase_price : (p.purchase_price || 0);
       const priceNum = st.selling_price || p.selling_price || 0;
 
       // Render beautiful localized badges
@@ -2283,6 +2297,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
                   <td><span class="badge badge-gray">${brandStr}</span> ${modelStr}</td>
                   <td>${specStr}</td>
                   ${currentBranch._id === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${st.branch ? st.branch.name : '-'}</span></td>` : ''}
+                  <td><span style="color:var(--text-muted);">฿${costPriceNum.toLocaleString()}</span></td>
                   <td><strong style="color:var(--ink);">฿${priceNum.toLocaleString()}</strong></td>
                   <td style="text-align:center;">
                     ${badgeHtml}
@@ -2791,9 +2806,9 @@ function openReceiptVoucherModal(sale) {
       <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.8rem; margin-bottom:0.8rem;">
         <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:46px; width:46px; object-fit:contain; margin-bottom:0.3rem;"><br>
         <h2 style="font-size:1.4rem; font-weight:800; margin:0; color:#000;">SILMIN BANANA POS</h2>
-        <div style="font-size:0.85rem; font-weight:700; color:#333; margin-top:0.2rem;">${branch.name || 'สาขาใหญ่ สีลม'}</div>
-        <div style="font-size:0.75rem; color:#555;">ที่อยู่: ${branch.address || '101 อาคารสีลมทาวเวอร์ ถนนสีลม กรุงเทพฯ'}</div>
-        <div style="font-size:0.75rem; color:#555;">เบอร์โทรศัพท์: ${branch.phone || '02-111-2222'}</div>
+        <div style="font-size:0.85rem; font-weight:700; color:#333; margin-top:0.2rem;">${escapeHtml(branch.name || '')}</div>
+        ${branch.address ? `<div style="font-size:0.75rem; color:#555;">ที่อยู่: ${escapeHtml(branch.address)}</div>` : ''}
+        ${branch.phone ? `<div style="font-size:0.75rem; color:#555;">เบอร์โทรศัพท์: ${escapeHtml(branch.phone)}</div>` : ''}
         <div style="font-size:0.85rem; font-weight:800; color:#000; margin-top:0.5rem; text-decoration:underline;">
           ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ
         </div>
@@ -3095,12 +3110,12 @@ function openFullTaxInvoiceModal(sale, tax) {
             <img src="/image/icon_silminbanana.png" alt="Silmin Banana Logo" style="height:50px; width:50px; object-fit:contain;">
             <div>
               <h1 style="font-size:1.6rem; font-weight:900; margin:0; color:#000;">SILMIN BANANA</h1>
-              <span style="font-size:0.72rem; color:#444;">ซิลมีน บานาน่า (สาขาที่: ${branch.code || 'BR-HQ01'})</span>
+              <span style="font-size:0.72rem; color:#444;">ซิลมีน บานาน่า${branch.code ? ` (สาขาที่: ${escapeHtml(branch.code)})` : ''}</span>
             </div>
           </div>
           <div style="font-size:0.8rem; color:#333;">
-            ที่อยู่: ${branch.address || '883 ถ.สิโรรส ต.สะเตง อ.เมือง จ.ยะลา 95000'}<br>
-            โทรศัพท์: ${branch.phone || ''} | เลขประจำตัวผู้เสียภาษีอากร: <strong>1930400058472</strong>
+            ที่อยู่: ${escapeHtml(branch.address || '-')}<br>
+            โทรศัพท์: ${escapeHtml(branch.phone || '-')} | เลขประจำตัวผู้เสียภาษีอากร: <strong>1930400058472</strong>
           </div>
         </div>
         <div style="text-align:right;">
@@ -10001,18 +10016,63 @@ function exportExecutiveReportToExcel() {
 
 // 2. Export Branch Inventory
 function exportBranchInventoryToExcel() {
+  const isAllBranch = document.querySelector('#bi-table th:nth-child(6)') && document.querySelector('#bi-table th:nth-child(6)').innerText.includes('สาขา');
+  let totalCost = 0;
+  let totalPrice = 0;
+  const itemCount = document.querySelectorAll('.bi-row').length;
+
   const rows = Array.from(document.querySelectorAll('.bi-row')).map(tr => {
     const tds = tr.querySelectorAll('td');
-    return {
-      'รหัส SKU': tds[1] ? tds[1].innerText.trim() : '',
+    let branchName = '';
+    let costIdx = 5;
+    let priceIdx = 6;
+    let statusIdx = 7;
+    if (isAllBranch) {
+      branchName = tds[5] ? tds[5].innerText.trim() : '';
+      costIdx = 6;
+      priceIdx = 7;
+      statusIdx = 8;
+    }
+
+    const costRaw = tds[costIdx] ? tds[costIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
+    const priceRaw = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
+    const costNum = parseFloat(costRaw) || 0;
+    const priceNum = parseFloat(priceRaw) || 0;
+    totalCost += costNum;
+    totalPrice += priceNum;
+
+    const rowObj = {
+      'หมายเลข IMEI': tds[1] ? tds[1].innerText.trim() : '',
       'รายการสินค้า': tds[2] ? tds[2].innerText.trim() : '',
       'ยี่ห้อ / รุ่น': tds[3] ? tds[3].innerText.trim() : '',
-      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : '',
-      'ราคาขาย (บาท)': tds[5] ? tds[5].innerText.replace('฿', '').replace(/,/g, '').trim() : '',
-      'สถานะสต็อก': tds[6] ? tds[6].innerText.trim() : '',
-      'รายการ IMEI ทั้งหมด': tr.getAttribute('data-search') || ''
+      'ความจุ / สี': tds[4] ? tds[4].innerText.trim() : ''
     };
+    if (isAllBranch) {
+      rowObj['สาขา'] = branchName;
+    }
+    rowObj['ราคาต้นทุน (บาท)'] = costNum;
+    rowObj['ราคาขาย (บาท)'] = priceNum;
+    rowObj['สถานะสต็อก'] = tds[statusIdx] ? tds[statusIdx].innerText.trim() : '';
+    return rowObj;
   });
+
+  // สรุปยอดรวมด้านล่างตาราง Excel
+  if (rows.length > 0) {
+    const summaryRow = {
+      'หมายเลข IMEI': 'ยอดรวมทั้งหมด',
+      'รายการสินค้า': `${itemCount} รายการ`,
+      'ยี่ห้อ / รุ่น': '',
+      'ความจุ / สี': ''
+    };
+    if (isAllBranch) {
+      summaryRow['สาขา'] = '';
+    }
+    summaryRow['ราคาต้นทุน (บาท)'] = totalCost;
+    summaryRow['ราคาขาย (บาท)'] = totalPrice;
+    summaryRow['สถานะสต็อก'] = '';
+    rows.push(summaryRow);
+  }
+
   exportToExcel(rows, 'Branch_Inventory_Stock', 'สินค้าคงคลังสาขา');
 }
 

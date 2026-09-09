@@ -231,7 +231,7 @@ const getSalesHistory = async (req, res, next) => {
     }
 
     const sales = await Sale.find(query)
-      .populate('branch', 'name code phone')
+      .populate('branch', 'name code phone address')
       .populate('soldBy', 'fullName username')
       .sort({ createdAt: -1 })
       .limit(1000);
@@ -279,7 +279,7 @@ const getFinanceProfitReport = async (req, res, next) => {
     }
 
     const sales = await Sale.find(query)
-      .populate('branch', 'name code phone')
+      .populate('branch', 'name code phone address')
       .populate('soldBy', 'fullName username')
       .sort({ createdAt: -1 });
 

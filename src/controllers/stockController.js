@@ -783,6 +783,67 @@ const updateStock = async (req, res, next) => {
       }
     }
 
+    // Calculate branch credit adjustment if purchase_price or status changed
+    let branchDoc = null;
+    let creditAdjustment = 0;
+    const branchId = stock.branch ? (stock.branch._id || stock.branch) : null;
+
+    if (branchId) {
+      branchDoc = await Branch.findById(branchId);
+    }
+
+    if (branchDoc) {
+      const oldStatus = oldValues.status !== undefined ? oldValues.status : stock.status;
+      const newStatus = newValues.status !== undefined ? newValues.status : stock.status;
+      const oldCost = oldValues.purchase_price !== undefined ? (Number(oldValues.purchase_price) || 0) : (Number(stock.purchase_price) || 0);
+      const newCost = newValues.purchase_price !== undefined ? (Number(newValues.purchase_price) || 0) : (Number(stock.purchase_price) || 0);
+
+      const isCreditBearingStatus = (st) => st === 'in_stock' || st === 'in_transit';
+      const wasBearing = isCreditBearingStatus(oldStatus);
+      const willBear = isCreditBearingStatus(newStatus);
+
+      if (wasBearing && willBear) {
+        creditAdjustment = newCost - oldCost;
+      } else if (wasBearing && !willBear) {
+        creditAdjustment = -oldCost;
+      } else if (!wasBearing && willBear) {
+        creditAdjustment = newCost;
+      } else {
+        creditAdjustment = 0;
+      }
+
+      if (creditAdjustment !== 0) {
+        const oldUsedCredit = branchDoc.usedCredit || 0;
+        branchDoc.usedCredit = Math.max(0, oldUsedCredit + creditAdjustment);
+        await branchDoc.save();
+
+        newValues.branchCreditAdjustment = {
+          branchId: branchDoc._id,
+          branchName: branchDoc.name,
+          oldUsedCredit,
+          newUsedCredit: branchDoc.usedCredit,
+          creditAdjustment
+        };
+      }
+
+      // If purchase_price was updated, also update any linked Purchase Order item with this IMEI
+      if (newValues.purchase_price !== undefined && stock.imei) {
+        const linkedPo = await BranchPurchaseOrder.findOne({
+          branch: branchId,
+          'items.imeis': stock.imei
+        });
+        if (linkedPo) {
+          const poItem = linkedPo.items.find(it => (it.imeis || []).includes(stock.imei));
+          if (poItem) {
+            poItem.unitPrice = Number(newValues.purchase_price) || 0;
+            poItem.totalPrice = poItem.quantity * poItem.unitPrice;
+            linkedPo.totalAmount = linkedPo.items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
+            await linkedPo.save();
+          }
+        }
+      }
+    }
+
     if (Object.keys(newValues).length > 0) {
       await stock.save();
 
@@ -795,7 +856,7 @@ const updateStock = async (req, res, next) => {
         entity: 'Stock',
         entityId: stock._id.toString(),
         details: {
-          branch: stock.branch ? stock.branch.name : 'ไม่ระบุ',
+          branch: stock.branch ? stock.branch.name : (branchDoc ? branchDoc.name : 'ไม่ระบุ'),
           productName: stock.productName,
           imei: stock.imei,
           changes: {
@@ -806,10 +867,23 @@ const updateStock = async (req, res, next) => {
       });
     }
 
+    let successMessage = 'แก้ไขข้อมูลสินค้าและบันทึก LOG เรียบร้อยแล้ว';
+    if (creditAdjustment !== 0 && branchDoc) {
+      const diffSign = creditAdjustment > 0 ? '+' : '';
+      successMessage = `แก้ไขข้อมูลสินค้าและปรับปรุงวงเงินเครดิตสาขา ${branchDoc.name} เรียบร้อยแล้ว (${diffSign}฿${creditAdjustment.toLocaleString()})`;
+    }
+
     res.json({
       success: true,
-      message: 'แก้ไขข้อมูลสินค้าและบันทึก LOG เรียบร้อยแล้ว',
-      stock
+      message: successMessage,
+      stock,
+      branch: branchDoc ? {
+        _id: branchDoc._id,
+        name: branchDoc.name,
+        creditLimit: branchDoc.creditLimit,
+        usedCredit: branchDoc.usedCredit,
+        remainingCredit: Math.max(0, (branchDoc.creditLimit || 0) - (branchDoc.usedCredit || 0))
+      } : null
     });
   } catch (err) {
     next(err);
