@@ -480,6 +480,89 @@ async function updateGoodsReceiptBadge() {
   }
 }
 
+async function updateHqAuditBadge(overrideCount) {
+  try {
+    if (!state.token || !state.user) return;
+
+    // Check if user has permission to view hq-audit
+    const allowedViews = getUserAllowedMenus(state.user.role);
+    if (allowedViews && !allowedViews.includes('hq-audit')) {
+      const navLink = document.querySelector('.sidebar-menu a[data-view="hq-audit"]');
+      if (navLink) {
+        const badge = navLink.querySelector('.menu-notification-badge');
+        if (badge) badge.remove();
+      }
+      return;
+    }
+
+    let pendingCount = 0;
+    if (typeof overrideCount === 'number') {
+      pendingCount = overrideCount;
+    } else {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const res = await apiRequest(`/audit/dashboard?date=${todayStr}`);
+      if (res && res.success && res.summary && Array.isArray(res.summary.branches)) {
+        res.summary.branches.forEach(b => {
+          const items = b.items || [];
+          items.forEach(item => {
+            const decisionsMap = new Map();
+            (item.imeiDecisions || []).forEach(d => {
+              if (d && d.imei) decisionsMap.set(d.imei, d.decision);
+            });
+
+            // Count scanned IMEIs awaiting HQ decision
+            (item.scannedImeis || []).forEach(imei => {
+              if (imei && imei !== '-' && !decisionsMap.has(imei)) {
+                pendingCount++;
+              }
+            });
+
+            // Count reported issues awaiting HQ decision
+            (item.imeiIssues || []).forEach(iss => {
+              if (iss && iss.hasIssue && iss.imei && iss.imei !== '-') {
+                if (!(item.scannedImeis || []).includes(iss.imei) && !decisionsMap.has(iss.imei)) {
+                  pendingCount++;
+                }
+              }
+            });
+          });
+        });
+      }
+    }
+
+    const navLink = document.querySelector('.sidebar-menu a[data-view="hq-audit"]');
+    if (navLink) {
+      let badge = navLink.querySelector('.menu-notification-badge');
+      if (pendingCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'menu-notification-badge';
+          badge.style.display = 'inline-flex';
+          badge.style.alignItems = 'center';
+          badge.style.justifyContent = 'center';
+          badge.style.background = 'var(--negative, #dc2626)';
+          badge.style.color = '#FFFFFF';
+          badge.style.fontSize = '0.72rem';
+          badge.style.fontWeight = '800';
+          badge.style.borderRadius = '20px';
+          badge.style.minWidth = '18px';
+          badge.style.height = '18px';
+          badge.style.padding = '0 6px';
+          badge.style.marginLeft = '8px';
+          badge.style.verticalAlign = 'middle';
+          badge.style.lineHeight = '1';
+          navLink.appendChild(badge);
+        }
+        badge.innerText = pendingCount;
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+  } catch (err) {
+    console.error('Error updating HQ audit badge:', err);
+  }
+}
+
 function updateSidebarMenuByRole(userRole) {
   const allowedViews = getUserAllowedMenus(userRole);
   document.querySelectorAll('.sidebar-menu li').forEach(li => {
@@ -516,6 +599,7 @@ function updateSidebarMenuByRole(userRole) {
   updateReceiptVerificationBadge();
   updateGoodsReceiptBadge();
   updateBranchAuditBadge();
+  updateHqAuditBadge();
 }
 
 // Client Router & View Switcher
@@ -718,16 +802,18 @@ function initAppSession() {
 
   loadMasterOptions();
 
-  // Refresh receipt and goods receipt badges every 30 seconds
+  // Refresh receipt, goods receipt, and stock audit badges every 30 seconds
   if (window.receiptBadgeInterval) clearInterval(window.receiptBadgeInterval);
   window.receiptBadgeInterval = setInterval(() => {
     updateReceiptVerificationBadge();
     updateGoodsReceiptBadge();
     updateBranchAuditBadge();
+    updateHqAuditBadge();
   }, 30000);
   updateReceiptVerificationBadge();
   updateGoodsReceiptBadge();
   updateBranchAuditBadge();
+  updateHqAuditBadge();
 
   const allowedViews = ROLE_ALLOWED_VIEWS[(state.user ? state.user.role : 'admin')] || ['dashboard'];
   navigateTo(allowedViews[0]);
@@ -4390,7 +4476,7 @@ async function renderHqAuditView() {
       </div>
       <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
         <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เลือกวันที่:</label>
-        <input type="date" id="hq-audit-date-picker" aria-label="เลือกวันที่ตรวจสอบสต็อก" class="form-control" style="width:auto;" value="${todayStr}">
+        <input type="date" id="hq-audit-date-picker" aria-label="เลือกวันที่ตรวจสอบสต็อก" class="form-control" style="width:auto;" value="${todayStr}" onchange="if(this.value) loadHqAuditGrid(this.value)">
         <button class="btn btn-primary btn-sm" id="load-hq-audit-btn"><i class="fa-solid fa-rotate" aria-hidden="true"></i> รีเฟรช</button>
         <button class="btn btn-secondary btn-sm" id="toggle-hq-summary-btn" onclick="toggleHqAuditSummaryTable()"><i class="fa-solid fa-eye" aria-hidden="true"></i> แสดงตารางสรุปสาขา</button>
         <button class="btn btn-success btn-sm" onclick="exportBranchAuditToExcel()"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
@@ -4454,16 +4540,40 @@ async function renderHqAuditView() {
     </div>
   `;
 
-  document.getElementById('load-hq-audit-btn').addEventListener('click', () => {
-    const selectedDate = document.getElementById('hq-audit-date-picker').value;
-    loadHqAuditGrid(selectedDate);
-  });
+  const datePicker = document.getElementById('hq-audit-date-picker');
+  if (datePicker) {
+    datePicker.addEventListener('change', (e) => {
+      const selectedDate = e.target.value;
+      if (selectedDate) {
+        loadHqAuditGrid(selectedDate);
+      }
+    });
+  }
+
+  const loadBtn = document.getElementById('load-hq-audit-btn');
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => {
+      const selectedDate = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : todayStr;
+      if (selectedDate) {
+        loadHqAuditGrid(selectedDate);
+      }
+    });
+  }
 
   loadHqAuditGrid(todayStr);
 }
 
 async function loadHqAuditGrid(dateStr) {
   const gridContainer = document.getElementById('hq-audit-grid-container');
+  const detailContainer = document.getElementById('hq-audit-detail-container');
+
+  if (gridContainer) {
+    gridContainer.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;"><i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem; margin-right:0.4rem;" aria-hidden="true"></i> กำลังโหลดข้อมูล...</td></tr>`;
+  }
+  if (detailContainer) {
+    detailContainer.innerHTML = `<div class="card" style="text-align:center; padding:2.5rem 1.5rem; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; margin-bottom:0.8rem; display:block; color:var(--accent-gold);" aria-hidden="true"></i><h4 style="font-weight:700; color:var(--text-main); margin-bottom:0.4rem;">กำลังโหลดข้อมูลของวันที่ ${dateStr}...</h4></div>`;
+  }
+
   try {
     const res = await apiRequest(`/audit/dashboard?date=${dateStr}`);
     if (!res.success) return;
@@ -4521,6 +4631,42 @@ async function loadHqAuditGrid(dateStr) {
       const branchesList = res.summary.branches.map(b => b.branch);
       branchFilter.innerHTML = `<option value="all">-- ทุกสาขา --</option>` +
         branchesList.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    }
+
+    // Calculate pending count across all branches for badge update
+    let allPendingCount = 0;
+    allItems.forEach(item => {
+      const scannedImeis = item.scannedImeis || [];
+      const imeiIssues = item.imeiIssues || [];
+      const handledImeis = new Set();
+
+      scannedImeis.forEach(imei => {
+        if (imei && imei !== '-') {
+          handledImeis.add(imei);
+          const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+          const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+          const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+          if (!isPassed && !isFailed && !isResubmit) {
+            allPendingCount++;
+          }
+        }
+      });
+
+      imeiIssues.forEach(iss => {
+        if (iss && iss.hasIssue && iss.imei && iss.imei !== '-' && !handledImeis.has(iss.imei)) {
+          const isPassed = window.hqAuditInspectionState.verifiedImeis.has(iss.imei);
+          const isFailed = window.hqAuditInspectionState.failedImeis.has(iss.imei);
+          const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(iss.imei);
+          if (!isPassed && !isFailed && !isResubmit) {
+            allPendingCount++;
+          }
+        }
+      });
+    });
+
+    const currentTodayStr = new Date().toISOString().split('T')[0];
+    if (dateStr === currentTodayStr) {
+      updateHqAuditBadge(allPendingCount);
     }
 
     // Now filter and render
@@ -4727,7 +4873,7 @@ function renderHqAuditDetails() {
   let totalPendingVerify = 0;
 
   unitRows.forEach(row => {
-    if (row.isScanned && row.imei !== '-') {
+    if ((row.isScanned || row.hasIssue) && row.imei !== '-') {
       totalToVerify++;
       const imei = row.imei;
       const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
@@ -4745,6 +4891,12 @@ function renderHqAuditDetails() {
       }
     }
   });
+
+  const selectedHqDate = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : '';
+  const isViewingTodayAll = (!selectedHqDate || selectedHqDate === new Date().toISOString().split('T')[0]) && branchFilter === 'all';
+  if (isViewingTodayAll) {
+    updateHqAuditBadge(totalPendingVerify);
+  }
 
   detailContainer.innerHTML = `
     <div class="card" style="border: 1px solid var(--border-color); background: var(--bg-card); scroll-margin-top: 2rem;">
@@ -5084,6 +5236,7 @@ async function setItemDecision(imei, decision) {
 
   closeModal();
   filterHqAuditGrid();
+  updateHqAuditBadge();
 }
 
 /* ==========================================================================
