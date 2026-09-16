@@ -4600,6 +4600,7 @@ async function loadHqAuditGrid(dateStr) {
       viewedPhotos: (window.hqAuditInspectionState && window.hqAuditInspectionState.viewedPhotos) || new Set(),
       verifiedImeis: new Set(),
       failedImeis: new Set(),
+      failedRemarks: new Map(),
       resubmitImeis: new Set(),
       requiredPhotoImeis: new Set(),
       allScannedImeis: new Set()
@@ -4611,6 +4612,9 @@ async function loadHqAuditGrid(dateStr) {
           window.hqAuditInspectionState.verifiedImeis.add(d.imei);
         } else if (d.decision === 'failed') {
           window.hqAuditInspectionState.failedImeis.add(d.imei);
+          if (d.remark) {
+            window.hqAuditInspectionState.failedRemarks.set(d.imei, d.remark);
+          }
         } else if (d.decision === 'resubmit') {
           window.hqAuditInspectionState.resubmitImeis.add(d.imei);
         }
@@ -4945,9 +4949,10 @@ function renderHqAuditDetails() {
     const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
     const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
     const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+    const failRemark = (window.hqAuditInspectionState.failedRemarks && window.hqAuditInspectionState.failedRemarks.get(imei)) || '';
 
     return `
-                <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei + ' ' + row.branchName).toLowerCase()}">
+                <tr class="audit-row-item" data-search="${(row.productName + ' ' + imei + ' ' + row.branchName + ' ' + failRemark).toLowerCase()}">
                   <td>
                     <span class="badge badge-gray" style="font-weight:700;">${row.branchName}</span>
                   </td>
@@ -4975,7 +4980,10 @@ function renderHqAuditDetails() {
                       <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
                         <div>
                           ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ผ่าน</span>' :
-          isFailed ? '<span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ไม่ผ่าน</span>' :
+          isFailed ? `
+            <span class="badge badge-red" style="font-size:0.75rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ไม่ผ่าน</span>
+            ${failRemark ? `<div style="font-size:0.75rem; color:var(--negative, #dc2626); font-weight:700; margin-top:0.25rem;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> หมายเหตุ: ${escapeHtml(failRemark)}</div>` : ''}
+          ` :
             isResubmit ? '<span class="badge badge-yellow" style="font-size:0.75rem;"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ส่งตรวจใหม่</span>' :
               '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
                         </div>
@@ -5088,6 +5096,11 @@ function openImeiInspectionModal(imei, branchId) {
     }
   }
 
+  const isCurrentlyPassed = window.hqAuditInspectionState && window.hqAuditInspectionState.verifiedImeis.has(imei);
+  const isCurrentlyFailed = window.hqAuditInspectionState && window.hqAuditInspectionState.failedImeis.has(imei);
+  const isCurrentlyResubmit = window.hqAuditInspectionState && window.hqAuditInspectionState.resubmitImeis.has(imei);
+  const existingFailRemark = (window.hqAuditInspectionState && window.hqAuditInspectionState.failedRemarks) ? (window.hqAuditInspectionState.failedRemarks.get(imei) || '') : '';
+
   const imgUrl = resolveDriveImageUrl(imgObj);
 
   let fileId = '';
@@ -5139,6 +5152,18 @@ function openImeiInspectionModal(imei, branchId) {
       </div>
     ` : ''}
 
+    ${isCurrentlyFailed ? `
+      <div style="background:rgba(220, 38, 38, 0.08); border:1.5px solid var(--negative, #dc2626); border-radius:8px; padding:0.8rem; margin-bottom:1.2rem; display:flex; gap:0.6rem; align-items:flex-start; text-align:left;">
+        <div style="font-size:1.3rem; color:var(--negative, #dc2626); margin-top:0.1rem;"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i></div>
+        <div>
+          <strong style="color:var(--negative, #dc2626); font-size:0.92rem; display:block;">ผลการตรวจปัจจุบัน: ข้อมูลไม่ผ่าน</strong>
+          <span style="font-size:0.88rem; color:var(--text-main); line-height:1.5; margin-top:0.2rem; display:block;">
+            เหตุผลที่ไม่ผ่าน: <strong>${escapeHtml(existingFailRemark || 'ไม่ได้ระบุเหตุผล')}</strong>
+          </span>
+        </div>
+      </div>
+    ` : ''}
+
     <!-- Center Photo Display -->
     <div style="text-align:center; background:var(--divider-soft); padding:1.2rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid var(--border-color); display:flex; justify-content:center; align-items:center; min-height:240px;">
       ${imgUrl ? `
@@ -5167,21 +5192,95 @@ function openImeiInspectionModal(imei, branchId) {
 
     <div class="grid-3col" style="gap:0.8rem;">
       <button class="btn btn-warning" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700; color:var(--on-primary);" onclick="setItemDecision('${imei}', 'resubmit')">
-        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>  ให้ตรวจสอบใหม่
+        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ตรวจสอบใหม่
       </button>
-      <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'failed')">
+      <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="toggleFailRemarkSection(true, '${imei}')">
         <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ข้อมูลไม่ผ่าน
       </button>
       <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
         <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันว่าถูกต้อง
       </button>
     </div>
+
+    <!-- Collapsible Failure Remark Input Section -->
+    <div id="fail-remark-section" style="display:${isCurrentlyFailed ? 'block' : 'none'}; margin-top:1.2rem; padding:1.2rem; background:var(--surface-tile-2); border:1.5px solid var(--negative, #dc2626); border-radius:8px; text-align:left;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <label style="font-weight:700; color:var(--negative, #dc2626); font-size:0.92rem; margin:0;">
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ระบุเหตุผล / หมายเหตุที่ไม่ผ่าน:
+        </label>
+        <button type="button" class="btn btn-sm btn-link" onclick="toggleFailRemarkSection(false)" style="color:var(--text-muted); padding:0; text-decoration:none; font-size:0.85rem;">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i> ปิด
+        </button>
+      </div>
+
+      <div style="margin-bottom:0.6rem;">
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.35rem;">ตัวเลือกเหตุผลด่วน (คลิกเพื่อเลือก):</div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ชัดเจน / มัว')">📷 รูปถ่ายไม่ชัดเจน</button>
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('เลข IMEI ไม่ตรงกับตัวเครื่อง')">🔢 IMEI ไม่ตรงกับเครื่อง</button>
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สินค้าผิดรุ่น / สี / ความจุ')">🏷️ ผิดรุ่น/สี/ความจุ</button>
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สภาพเครื่องมีตำหนิ / ชำรุด')">⚠️ มีตำหนิ/ชำรุด</button>
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ใช่สินค้าจริง')">🚫 รูปไม่ใช่สินค้าจริง</button>
+          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('ส่งเครื่องคืน')">🗑️ ส่งเครื่องคืน</button>
+        </div>
+      </div>
+
+      <textarea id="fail-remark-textarea" class="form-control" rows="2" placeholder="พิมพ์เหตุผลที่ไม่ผ่าน เช่น รูปถ่ายไม่ชัดเจน, IMEI ไม่ตรง..." style="width:100%; font-size:0.88rem; border-radius:6px; border:1px solid var(--border-color); background:var(--canvas-elevated); margin-bottom:0.6rem;">${escapeHtml(existingFailRemark || '')}</textarea>
+
+      <div style="display:flex; justify-content:flex-end; gap:0.6rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFailRemarkSection(false)">ยกเลิก</button>
+        <button type="button" class="btn btn-danger btn-sm" style="font-weight:700;" onclick="submitFailedWithRemark('${imei}')">
+          <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> บันทึกข้อมูลไม่ผ่าน
+        </button>
+      </div>
+    </div>
   `;
 
   openModal(`ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>`);
 }
 
-async function setItemDecision(imei, decision) {
+function toggleFailRemarkSection(show, imei) {
+  const sec = document.getElementById('fail-remark-section');
+  if (!sec) return;
+  if (show === undefined) {
+    show = sec.style.display === 'none';
+  }
+  sec.style.display = show ? 'block' : 'none';
+  if (show) {
+    const ta = document.getElementById('fail-remark-textarea');
+    if (ta) {
+      ta.focus();
+      ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
+function setFailReasonPreset(presetText) {
+  const ta = document.getElementById('fail-remark-textarea');
+  if (!ta) return;
+  if (ta.value.trim().length > 0) {
+    if (!ta.value.includes(presetText)) {
+      ta.value = ta.value.trim() + ', ' + presetText;
+    }
+  } else {
+    ta.value = presetText;
+  }
+  ta.focus();
+}
+
+function submitFailedWithRemark(imei) {
+  const ta = document.getElementById('fail-remark-textarea');
+  const remark = ta ? ta.value.trim() : '';
+  if (!remark) {
+    if (!confirm('คุณยังไม่ได้ระบุเหตุผลที่ไม่ผ่าน ต้องการบันทึกโดยไม่มีหมายเหตุหรือไม่?')) {
+      if (ta) ta.focus();
+      return;
+    }
+  }
+  setItemDecision(imei, 'failed', remark);
+}
+
+async function setItemDecision(imei, decision, remark = '') {
   if (!window.hqAuditInspectionState) return;
 
   const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
@@ -5209,21 +5308,54 @@ async function setItemDecision(imei, decision) {
     return;
   }
 
+  if (!window.hqAuditInspectionState.failedRemarks) {
+    window.hqAuditInspectionState.failedRemarks = new Map();
+  }
+
   if (decision === 'passed') {
     window.hqAuditInspectionState.verifiedImeis.add(imei);
     window.hqAuditInspectionState.failedImeis.delete(imei);
+    window.hqAuditInspectionState.failedRemarks.delete(imei);
     window.hqAuditInspectionState.resubmitImeis.delete(imei);
     showToast(`ลงความเห็น IMEI ${imei}: ผ่าน (Pass) เรียบร้อยแล้ว`);
   } else if (decision === 'failed') {
     window.hqAuditInspectionState.verifiedImeis.delete(imei);
     window.hqAuditInspectionState.failedImeis.add(imei);
+    if (remark) {
+      window.hqAuditInspectionState.failedRemarks.set(imei, remark);
+    } else {
+      window.hqAuditInspectionState.failedRemarks.delete(imei);
+    }
     window.hqAuditInspectionState.resubmitImeis.delete(imei);
-    showToast(`ลงความเห็น IMEI ${imei}: ไม่ผ่าน (Fail)`, 'error');
+    showToast(`ลงความเห็น IMEI ${imei}: ไม่ผ่าน (Fail)${remark ? ' (' + remark + ')' : ''}`, 'error');
   } else if (decision === 'resubmit') {
     window.hqAuditInspectionState.verifiedImeis.delete(imei);
     window.hqAuditInspectionState.failedImeis.delete(imei);
+    window.hqAuditInspectionState.failedRemarks.delete(imei);
     window.hqAuditInspectionState.resubmitImeis.add(imei);
     showToast(`ลงความเห็น IMEI ${imei}: ให้ส่งตรวจใหม่`, 'warning');
+  }
+
+  // Update in-memory latestHqAuditBranches so switching branch filters or re-rendering keeps the remark
+  if (window.latestHqAuditBranches) {
+    window.latestHqAuditBranches.forEach(b => {
+      (b.items || []).forEach(it => {
+        const hasImei = (it.scannedImeis && it.scannedImeis.includes(imei)) ||
+          (it.expectedImeis && it.expectedImeis.includes(imei));
+        if (hasImei) {
+          it.imeiDecisions = it.imeiDecisions || [];
+          const idx = it.imeiDecisions.findIndex(d => d.imei === imei);
+          const decRemark = decision === 'failed' ? (remark || '') : '';
+          if (idx >= 0) {
+            it.imeiDecisions[idx].decision = decision;
+            it.imeiDecisions[idx].remark = decRemark;
+            it.imeiDecisions[idx].updatedAt = new Date();
+          } else {
+            it.imeiDecisions.push({ imei, decision, remark: decRemark, updatedAt: new Date() });
+          }
+        }
+      });
+    });
   }
 
   try {
@@ -5231,7 +5363,8 @@ async function setItemDecision(imei, decision) {
       auditDate: todayStr,
       branchId,
       imei,
-      decision
+      decision,
+      remark: decision === 'failed' ? (remark || '') : ''
     });
   } catch (err) {
     console.warn('Unable to persist decision:', err);

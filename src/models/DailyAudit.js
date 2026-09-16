@@ -48,6 +48,7 @@ const auditItemSchema = new mongoose.Schema({
   imeiDecisions: [{
     imei: String,
     decision: String, // 'passed', 'failed', 'resubmit'
+    remark: { type: String, default: '' },
     updatedAt: { type: Date, default: Date.now }
   }],
   imeiIssues: [{

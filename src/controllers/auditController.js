@@ -673,7 +673,7 @@ const proxyDriveImage = async (req, res, next) => {
 
 const saveImeiDecision = async (req, res, next) => {
   try {
-    const { auditDate, branchId, imei, decision } = req.body;
+    const { auditDate, branchId, imei, decision, remark } = req.body;
     if (!auditDate || !branchId || !imei || !decision) {
       return res.status(400).json({ success: false, message: 'กรุณาระบุ วันที่, สาขา, IMEI และผลการลงความเห็น' });
     }
@@ -699,11 +699,13 @@ const saveImeiDecision = async (req, res, next) => {
         foundItem = true;
         item.imeiDecisions = item.imeiDecisions || [];
         const existingIdx = item.imeiDecisions.findIndex(d => d.imei === imei);
+        const decisionRemark = decision === 'failed' ? (remark || '') : (decision === 'resubmit' ? (remark || '') : '');
         if (existingIdx >= 0) {
           item.imeiDecisions[existingIdx].decision = decision;
+          item.imeiDecisions[existingIdx].remark = decisionRemark;
           item.imeiDecisions[existingIdx].updatedAt = new Date();
         } else {
-          item.imeiDecisions.push({ imei, decision, updatedAt: new Date() });
+          item.imeiDecisions.push({ imei, decision, remark: decisionRemark, updatedAt: new Date() });
         }
 
         if (decision === 'resubmit') {
@@ -732,7 +734,12 @@ const saveImeiDecision = async (req, res, next) => {
         actualCount: decision === 'resubmit' ? 0 : 1,
         variance: decision === 'resubmit' ? -1 : 0,
         scannedImeis: decision === 'resubmit' ? [] : [imei],
-        imeiDecisions: [{ imei, decision, updatedAt: new Date() }]
+        imeiDecisions: [{
+          imei,
+          decision,
+          remark: decision === 'failed' ? (remark || '') : (decision === 'resubmit' ? (remark || '') : ''),
+          updatedAt: new Date()
+        }]
       });
     }
 
@@ -802,7 +809,7 @@ const saveImeiDecision = async (req, res, next) => {
       action: 'AUDIT_ITEM_DECISION',
       entity: 'DailyAudit',
       entityId: audit._id.toString(),
-      details: { auditDate, imei, decision }
+      details: { auditDate, imei, decision, remark: remark || '' }
     });
 
     res.status(200).json({
