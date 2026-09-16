@@ -4464,6 +4464,16 @@ async function deleteMasterOptionItem(id, valueName) {
 /* ==========================================================================
    VIEW 2: HQ AUDIT DASHBOARD
    ========================================================================== */
+function isHqAuditDateToday(dateStr) {
+  if (!dateStr) return true;
+  const d = new Date();
+  const isoDate = d.toISOString().split('T')[0];
+  const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const tzOffset = 7 * 60; // Bangkok timezone UTC+7
+  const bangkokDate = new Date(d.getTime() + (d.getTimezoneOffset() + tzOffset) * 60000).toISOString().split('T')[0];
+  return dateStr === isoDate || dateStr === localDate || dateStr === bangkokDate;
+}
+
 async function renderHqAuditView() {
   const container = document.getElementById('content-container');
   const todayStr = new Date().toISOString().split('T')[0];
@@ -4668,8 +4678,7 @@ async function loadHqAuditGrid(dateStr) {
       });
     });
 
-    const currentTodayStr = new Date().toISOString().split('T')[0];
-    if (dateStr === currentTodayStr) {
+    if (isHqAuditDateToday(dateStr)) {
       updateHqAuditBadge(allPendingCount);
     }
 
@@ -4898,7 +4907,8 @@ function renderHqAuditDetails() {
   });
 
   const selectedHqDate = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : '';
-  const isViewingTodayAll = (!selectedHqDate || selectedHqDate === new Date().toISOString().split('T')[0]) && branchFilter === 'all';
+  const isToday = isHqAuditDateToday(selectedHqDate);
+  const isViewingTodayAll = isToday && branchFilter === 'all';
   if (isViewingTodayAll) {
     updateHqAuditBadge(totalPendingVerify);
   }
@@ -4911,6 +4921,7 @@ function renderHqAuditDetails() {
             <h3 style="font-size:1.2rem; font-weight:700; color:var(--text-main); margin:0;">
               <i class="fa-solid fa-clipboard-list" style="color:var(--accent-gold); margin-right:0.4rem;" aria-hidden="true"></i>
               รายละเอียดสต็อกรายเครื่อง (${branchFilter === 'all' ? 'ทุกสาขา' : activeBranches[0] ? activeBranches[0].branch.name : '-'})
+              ${!isToday ? `<span class="badge badge-gray" style="font-size:0.75rem; font-weight:700; margin-left:0.5rem; vertical-align:middle;"><i class="fa-solid fa-lock" aria-hidden="true"></i> ข้อมูลย้อนหลัง (ปิดการลงความเห็น)</span>` : ''}
             </h3>
           </div>
           <div style="display:flex; gap:1.5rem; margin-top:0.5rem; font-size:0.88rem; color:var(--text-main); flex-wrap:wrap;">
@@ -4988,9 +4999,15 @@ function renderHqAuditDetails() {
               '<span class="badge badge-gray" style="font-size:0.75rem;"> ยังไม่ได้ตรวจ</span>'}
                         </div>
 
-                        <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
-                          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ตรวจสอบรูป & ลงความเห็น
-                        </button>
+                        ${isToday ? `
+                          <button class="btn btn-sm btn-primary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}')" style="font-size:0.75rem; padding:0.3rem 0.65rem;">
+                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ตรวจสอบสินค้า
+                          </button>
+                        ` : (row.imgObj && (row.imgObj.url || row.imgObj.fileId)) ? `
+                          <button class="btn btn-sm btn-outline-secondary" onclick="openImeiInspectionModal('${imei}', '${row.branchId}', true)" style="font-size:0.72rem; padding:0.25rem 0.55rem; color:var(--text-main);" title="ดูรูปถ่าย (โหมดดูย้อนหลัง)">
+                            <i class="fa-solid fa-image" aria-hidden="true"></i> ดูรูปถ่าย
+                          </button>
+                        ` : ''}
                       </div>
                     ` : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
                   </td>
@@ -5066,10 +5083,14 @@ function resolveDriveImageUrl(imgObj) {
   return String(imgObj || '');
 }
 
-function openImeiInspectionModal(imei, branchId) {
+function openImeiInspectionModal(imei, branchId, isReadOnly = false) {
   if (window.hqAuditInspectionState) {
     window.hqAuditInspectionState.viewedPhotos.add(imei);
   }
+
+  const selectedHqDate = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : '';
+  const isToday = isHqAuditDateToday(selectedHqDate);
+  const canDecide = isToday && !isReadOnly;
 
   // Storing specific branchId for decisions to prevent "all" casting error
   window.currentInspectedBranchId = branchId;
@@ -5185,58 +5206,69 @@ function openImeiInspectionModal(imei, branchId) {
       `}
     </div>
 
-    <!-- 3 Choice Buttons -->
-    <div style="font-weight:800; font-size:0.95rem; color:var(--text-main); margin-bottom:0.8rem; text-align:center;">
-      เลือกลงความเห็นผลการตรวจสอบสำหรับเครื่องนี้:
-    </div>
+    ${canDecide ? `
+      <!-- 3 Choice Buttons -->
+      <div style="font-weight:800; font-size:0.95rem; color:var(--text-main); margin-bottom:0.8rem; text-align:center;">
+        เลือกลงความเห็นผลการตรวจสอบสำหรับเครื่องนี้:
+      </div>
 
-    <div class="grid-3col" style="gap:0.8rem;">
-      <button class="btn btn-warning" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700; color:var(--on-primary);" onclick="setItemDecision('${imei}', 'resubmit')">
-        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ตรวจสอบใหม่
-      </button>
-      <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="toggleFailRemarkSection(true, '${imei}')">
-        <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ข้อมูลไม่ผ่าน
-      </button>
-      <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
-        <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันว่าถูกต้อง
-      </button>
-    </div>
-
-    <!-- Collapsible Failure Remark Input Section -->
-    <div id="fail-remark-section" style="display:${isCurrentlyFailed ? 'block' : 'none'}; margin-top:1.2rem; padding:1.2rem; background:var(--surface-tile-2); border:1.5px solid var(--negative, #dc2626); border-radius:8px; text-align:left;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-        <label style="font-weight:700; color:var(--negative, #dc2626); font-size:0.92rem; margin:0;">
-          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ระบุเหตุผล / หมายเหตุที่ไม่ผ่าน:
-        </label>
-        <button type="button" class="btn btn-sm btn-link" onclick="toggleFailRemarkSection(false)" style="color:var(--text-muted); padding:0; text-decoration:none; font-size:0.85rem;">
-          <i class="fa-solid fa-xmark" aria-hidden="true"></i> ปิด
+      <div class="grid-3col" style="gap:0.8rem;">
+        <button class="btn btn-warning" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700; color:var(--on-primary);" onclick="setItemDecision('${imei}', 'resubmit')">
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ตรวจสอบใหม่
+        </button>
+        <button class="btn btn-danger" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="toggleFailRemarkSection(true, '${imei}')">
+          <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> ข้อมูลไม่ผ่าน
+        </button>
+        <button class="btn btn-success" style="padding:0.8rem 0.4rem; font-size:0.85rem; font-weight:700;" onclick="setItemDecision('${imei}', 'passed')">
+          <i class="fa-solid fa-circle-check" aria-hidden="true"></i> ยืนยันว่าถูกต้อง
         </button>
       </div>
 
-      <div style="margin-bottom:0.6rem;">
-        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.35rem;">ตัวเลือกเหตุผลด่วน (คลิกเพื่อเลือก):</div>
-        <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ชัดเจน / มัว')">📷 รูปถ่ายไม่ชัดเจน</button>
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('เลข IMEI ไม่ตรงกับตัวเครื่อง')">🔢 IMEI ไม่ตรงกับเครื่อง</button>
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สินค้าผิดรุ่น / สี / ความจุ')">🏷️ ผิดรุ่น/สี/ความจุ</button>
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สภาพเครื่องมีตำหนิ / ชำรุด')">⚠️ มีตำหนิ/ชำรุด</button>
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ใช่สินค้าจริง')">🚫 รูปไม่ใช่สินค้าจริง</button>
-          <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('ส่งเครื่องคืน')">🗑️ ส่งเครื่องคืน</button>
+      <!-- Collapsible Failure Remark Input Section -->
+      <div id="fail-remark-section" style="display:${isCurrentlyFailed ? 'block' : 'none'}; margin-top:1.2rem; padding:1.2rem; background:var(--surface-tile-2); border:1.5px solid var(--negative, #dc2626); border-radius:8px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+          <label style="font-weight:700; color:var(--negative, #dc2626); font-size:0.92rem; margin:0;">
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ระบุเหตุผล / หมายเหตุที่ไม่ผ่าน:
+          </label>
+          <button type="button" class="btn btn-sm btn-link" onclick="toggleFailRemarkSection(false)" style="color:var(--text-muted); padding:0; text-decoration:none; font-size:0.85rem;">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i> ปิด
+          </button>
+        </div>
+
+        <div style="margin-bottom:0.6rem;">
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.35rem;">ตัวเลือกเหตุผลด่วน (คลิกเพื่อเลือก):</div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ชัดเจน / มัว')">📷 รูปถ่ายไม่ชัดเจน</button>
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('เลข IMEI ไม่ตรงกับตัวเครื่อง')">🔢 IMEI ไม่ตรงกับเครื่อง</button>
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สินค้าผิดรุ่น / สี / ความจุ')">🏷️ ผิดรุ่น/สี/ความจุ</button>
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('สภาพเครื่องมีตำหนิ / ชำรุด')">⚠️ มีตำหนิ/ชำรุด</button>
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('รูปถ่ายไม่ใช่สินค้าจริง')">🚫 รูปไม่ใช่สินค้าจริง</button>
+            <button type="button" class="btn btn-xs" style="background:var(--divider-soft); border:1px solid var(--border-color); font-size:0.75rem; padding:0.25rem 0.5rem; border-radius:4px; color:var(--text-main);" onclick="setFailReasonPreset('ส่งเครื่องคืน')">🗑️ ส่งเครื่องคืน</button>
+          </div>
+        </div>
+
+        <textarea id="fail-remark-textarea" class="form-control" rows="2" placeholder="พิมพ์เหตุผลที่ไม่ผ่าน เช่น รูปถ่ายไม่ชัดเจน, IMEI ไม่ตรง..." style="width:100%; font-size:0.88rem; border-radius:6px; border:1px solid var(--border-color); background:var(--canvas-elevated); margin-bottom:0.6rem;">${escapeHtml(existingFailRemark || '')}</textarea>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.6rem;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFailRemarkSection(false)">ยกเลิก</button>
+          <button type="button" class="btn btn-danger btn-sm" style="font-weight:700;" onclick="submitFailedWithRemark('${imei}')">
+            <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> บันทึกข้อมูลไม่ผ่าน
+          </button>
         </div>
       </div>
-
-      <textarea id="fail-remark-textarea" class="form-control" rows="2" placeholder="พิมพ์เหตุผลที่ไม่ผ่าน เช่น รูปถ่ายไม่ชัดเจน, IMEI ไม่ตรง..." style="width:100%; font-size:0.88rem; border-radius:6px; border:1px solid var(--border-color); background:var(--canvas-elevated); margin-bottom:0.6rem;">${escapeHtml(existingFailRemark || '')}</textarea>
-
-      <div style="display:flex; justify-content:flex-end; gap:0.6rem;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFailRemarkSection(false)">ยกเลิก</button>
-        <button type="button" class="btn btn-danger btn-sm" style="font-weight:700;" onclick="submitFailedWithRemark('${imei}')">
-          <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> บันทึกข้อมูลไม่ผ่าน
-        </button>
+    ` : `
+      <div style="background:var(--divider-soft); border:1px solid var(--border-color); border-radius:8px; padding:0.9rem; text-align:center; margin-top:1rem;">
+        <div style="font-weight:700; color:var(--text-muted); font-size:0.9rem;">
+          <i class="fa-solid fa-lock" aria-hidden="true" style="margin-right:0.3rem;"></i> ข้อมูลย้อนหลังประจำวันที่ ${selectedHqDate || '-'}
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
+          ปิดการตรวจสอบและลงความเห็น (สามารถตรวจสอบรูปถ่ายและลงความเห็นได้เฉพาะรายการของวันที่ปัจจุบันเท่านั้น)
+        </div>
       </div>
-    </div>
+    `}
   `;
 
-  openModal(`ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>`);
+  openModal(canDecide ? `ตรวจสอบสินค้า & รูปถ่าย IMEI: ${imei}` : `ดูรูปถ่าย & ข้อมูล IMEI: ${imei} (ย้อนหลัง)`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">ย้อนกลับ</button>`);
 }
 
 function toggleFailRemarkSection(show, imei) {
@@ -5283,7 +5315,12 @@ function submitFailedWithRemark(imei) {
 async function setItemDecision(imei, decision, remark = '') {
   if (!window.hqAuditInspectionState) return;
 
-  const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : new Date().toISOString().split('T')[0];
+  const todayStr = document.getElementById('hq-audit-date-picker') ? document.getElementById('hq-audit-date-picker').value : '';
+  if (!isHqAuditDateToday(todayStr)) {
+    showToast('ไม่สามารถตรวจสอบหรือลงความเห็นย้อนหลังได้ (สามารถทำรายการได้เฉพาะวันที่ปัจจุบันเท่านั้น)', 'warning');
+    closeModal();
+    return;
+  }
 
   let branchId = window.currentInspectedBranchId;
   if (!branchId || branchId === 'all') {

@@ -678,6 +678,20 @@ const saveImeiDecision = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'กรุณาระบุ วันที่, สาขา, IMEI และผลการลงความเห็น' });
     }
 
+    // Verify that auditDate is current date only (prevent retroactive decisions)
+    const now = new Date();
+    const todayUtc = now.toISOString().split('T')[0];
+    const tzBangkokOffset = 7 * 60; // UTC+7 in minutes
+    const nowBangkok = new Date(now.getTime() + (now.getTimezoneOffset() + tzBangkokOffset) * 60000);
+    const todayBangkok = nowBangkok.toISOString().split('T')[0];
+
+    if (auditDate !== todayUtc && auditDate !== todayBangkok) {
+      return res.status(400).json({
+        success: false,
+        message: 'ไม่สามารถลงความเห็นย้อนหลังได้ สามารถตรวจสอบรูปและลงความเห็นได้เฉพาะรายการของวันที่ปัจจุบันเท่านั้น'
+      });
+    }
+
     let audit = await DailyAudit.findOne({ auditDate, branch: branchId });
     if (!audit) {
       audit = new DailyAudit({
