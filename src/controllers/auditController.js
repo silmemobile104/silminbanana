@@ -27,12 +27,27 @@ const getBranchExpectedStock = async (req, res, next) => {
       }
     }
 
+    const resubmitImeiSet = new Set();
     existingAudits.forEach(audit => {
       if (audit && audit.items) {
         audit.items.forEach(item => {
-          (item.scannedImeis || []).forEach(im => scannedImeiSet.add(im));
+          (item.imeiDecisions || []).forEach(d => {
+            if (d && d.imei && d.decision === 'resubmit') {
+              resubmitImeiSet.add(d.imei);
+            }
+          });
+        });
+      }
+    });
+
+    existingAudits.forEach(audit => {
+      if (audit && audit.items) {
+        audit.items.forEach(item => {
+          (item.scannedImeis || []).forEach(im => {
+            if (!resubmitImeiSet.has(im)) scannedImeiSet.add(im);
+          });
           (item.imeiImages || []).forEach(img => {
-            if (img.imei) {
+            if (img.imei && !resubmitImeiSet.has(img.imei)) {
               const fid = img.fileId || img.driveFileId || (img.url ? (img.url.match(/\/d\/([a-zA-Z0-9_-]+)/) || img.url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1] : null);
               const imgUrl = fid ? `/api/audit/drive-image/${fid}` : (img.url || img.imageUrl || img.driveWebViewLink);
               imeiImageMap.set(img.imei, {
@@ -43,9 +58,9 @@ const getBranchExpectedStock = async (req, res, next) => {
               });
             }
           });
-          // Retrieve issues
+          // Retrieve issues (excluding IMEIs that HQ rejected and sent back to resubmit)
           (item.imeiIssues || []).forEach(issue => {
-            if (issue.imei && issue.hasIssue) {
+            if (issue.imei && issue.hasIssue && !resubmitImeiSet.has(issue.imei)) {
               imeiIssueMap.set(issue.imei, {
                 imei: issue.imei,
                 hasIssue: issue.hasIssue,
@@ -68,11 +83,12 @@ const getBranchExpectedStock = async (req, res, next) => {
     const items = stocks.map(st => {
       const pName = st.product ? st.product.name : (st.productName || 'สินค้าไม่ระบุชื่อ');
       const imei = st.imei || '';
-      const isScanned = imei ? scannedImeiSet.has(imei) : false;
-      const imgObj = imei ? imeiImageMap.get(imei) || null : null;
+      const isResubmit = imei ? resubmitImeiSet.has(imei) : false;
+      const isScanned = (imei && !isResubmit) ? scannedImeiSet.has(imei) : false;
+      const imgObj = (imei && !isResubmit) ? imeiImageMap.get(imei) || null : null;
       const photoUrl = imgObj ? imgObj.url : null;
 
-      const issueObj = imei ? imeiIssueMap.get(imei) || null : null;
+      const issueObj = (imei && !isResubmit) ? imeiIssueMap.get(imei) || null : null;
       const hasIssue = issueObj ? issueObj.hasIssue : false;
       const issueRemark = issueObj ? issueObj.remark : '';
       const reportedByName = issueObj ? issueObj.reportedByName : '';
@@ -92,7 +108,9 @@ const getBranchExpectedStock = async (req, res, next) => {
         imeiImages: imgObj ? [imgObj] : [],
         hasIssue,
         issueRemark,
-        reportedByName
+        reportedByName,
+        imeiIssues: issueObj ? [issueObj] : [],
+        isResubmit
       };
     });
 
@@ -135,6 +153,54 @@ const submitBranchAudit = async (req, res, next) => {
       }
       if (st.imei) productMap.get(pIdStr).imeis.push(st.imei);
     });
+
+    let audit = await DailyAudit.findOne({ auditDate, branch: targetBranchId });
+
+    // Build lookup maps of existing issues, images, and decisions from previous audit records
+    const existingIssuesMap = new Map();
+    const existingImagesMap = new Map();
+    const existingDecisionsMap = new Map();
+
+    // Check which IMEIs are newly scanned or newly reported in this submission
+    const newScannedImeis = new Set();
+    const newIssueImeis = new Set();
+    (scannedItems || []).forEach(sc => {
+      (sc.scannedImeis || []).forEach(im => newScannedImeis.add(im));
+      (sc.imeiIssues || []).forEach(iss => {
+        if (iss && iss.imei && iss.hasIssue) newIssueImeis.add(iss.imei);
+      });
+    });
+
+    if (audit && audit.items) {
+      audit.items.forEach(it => {
+        const itemDecisions = it.imeiDecisions || [];
+        itemDecisions.forEach(dec => {
+          if (dec && dec.imei) {
+            if (dec.decision === 'resubmit' && (newScannedImeis.has(dec.imei) || newIssueImeis.has(dec.imei))) {
+              // Resubmitted! Old resubmit decision is superseded
+            } else {
+              existingDecisionsMap.set(dec.imei, dec);
+            }
+          }
+        });
+        (it.imeiIssues || []).forEach(iss => {
+          if (iss && iss.imei && iss.hasIssue) {
+            const isResubmit = itemDecisions.some(d => d.imei === iss.imei && d.decision === 'resubmit');
+            if (!isResubmit || newIssueImeis.has(iss.imei)) {
+              existingIssuesMap.set(iss.imei, iss);
+            }
+          }
+        });
+        (it.imeiImages || []).forEach(img => {
+          if (img && img.imei) {
+            const isResubmit = itemDecisions.some(d => d.imei === img.imei && d.decision === 'resubmit');
+            if (!isResubmit || newScannedImeis.has(img.imei)) {
+              existingImagesMap.set(img.imei, img);
+            }
+          }
+        });
+      });
+    }
 
     let totalExpected = 0;
     let totalActual = 0;
@@ -196,6 +262,27 @@ const submitBranchAudit = async (req, res, next) => {
       totalActual += actualCount;
       totalVariance += Math.abs(variance);
 
+      // Merge previously saved issues, images, and decisions
+      const allItemImeis = [...expectedImeis, ...scannedImeis];
+      const mergedIssues = [...(scanned.imeiIssues || [])];
+      allItemImeis.forEach(im => {
+        if (existingIssuesMap.has(im) && !mergedIssues.some(x => x.imei === im)) {
+          mergedIssues.push(existingIssuesMap.get(im));
+        }
+      });
+      const mergedImages = [...(scanned.imeiImages || [])];
+      allItemImeis.forEach(im => {
+        if (existingImagesMap.has(im) && !mergedImages.some(x => x.imei === im)) {
+          mergedImages.push(existingImagesMap.get(im));
+        }
+      });
+      const mergedDecisions = [];
+      allItemImeis.forEach(im => {
+        if (existingDecisionsMap.has(im)) {
+          mergedDecisions.push(existingDecisionsMap.get(im));
+        }
+      });
+
       auditedItems.push({
         product: scanned.product || (stockGrp ? stockGrp.product : null),
         productName: scanned.productName || (stockGrp ? stockGrp.productName : 'สินค้าไม่ระบุชื่อ'),
@@ -206,8 +293,9 @@ const submitBranchAudit = async (req, res, next) => {
         scannedImeis,
         missingImeis,
         unexpectedImeis,
-        imeiImages: scanned.imeiImages || [],
-        imeiIssues: scanned.imeiIssues || []
+        imeiImages: mergedImages,
+        imeiIssues: mergedIssues,
+        imeiDecisions: mergedDecisions
       });
     }
 
@@ -223,6 +311,25 @@ const submitBranchAudit = async (req, res, next) => {
         totalActual += 0;
         totalVariance += Math.abs(variance);
 
+        const unmergedIssues = [];
+        expectedImeis.forEach(im => {
+          if (existingIssuesMap.has(im)) {
+            unmergedIssues.push(existingIssuesMap.get(im));
+          }
+        });
+        const unmergedImages = [];
+        expectedImeis.forEach(im => {
+          if (existingImagesMap.has(im)) {
+            unmergedImages.push(existingImagesMap.get(im));
+          }
+        });
+        const unmergedDecisions = [];
+        expectedImeis.forEach(im => {
+          if (existingDecisionsMap.has(im)) {
+            unmergedDecisions.push(existingDecisionsMap.get(im));
+          }
+        });
+
         auditedItems.push({
           product: stockGrp.product,
           productName: stockGrp.productName,
@@ -233,12 +340,12 @@ const submitBranchAudit = async (req, res, next) => {
           scannedImeis: [],
           missingImeis: expectedImeis,
           unexpectedImeis: [],
-          imeiImages: []
+          imeiImages: unmergedImages,
+          imeiIssues: unmergedIssues,
+          imeiDecisions: unmergedDecisions
         });
       }
     }
-
-    let audit = await DailyAudit.findOne({ auditDate, branch: targetBranchId });
 
     if (audit) {
       audit.submittedBy = req.user._id;
@@ -606,6 +713,9 @@ const saveImeiDecision = async (req, res, next) => {
           if (item.imeiImages && item.imeiImages.length > 0) {
             item.imeiImages = item.imeiImages.filter(img => img.imei !== imei);
           }
+          if (item.imeiIssues && item.imeiIssues.length > 0) {
+            item.imeiIssues = item.imeiIssues.filter(iss => iss.imei !== imei);
+          }
           item.actualCount = item.scannedImeis ? item.scannedImeis.length : 0;
           item.variance = item.actualCount - item.expectedCount;
         }
@@ -761,8 +871,16 @@ const reportImeiIssue = async (req, res, next) => {
     for (const item of audit.items) {
       const hasImei = (item.expectedImeis && item.expectedImeis.includes(imei)) ||
                       (item.scannedImeis && item.scannedImeis.includes(imei));
-      if (hasImei) {
+      const hasSameProduct = product && item.product && item.product.toString() === product._id.toString();
+
+      if (hasImei || hasSameProduct) {
         foundItem = true;
+        if (!item.expectedImeis) item.expectedImeis = [];
+        if (!item.expectedImeis.includes(imei)) {
+          item.expectedImeis.push(imei);
+          item.expectedCount = item.expectedImeis.length;
+          item.variance = (item.actualCount || 0) - item.expectedCount;
+        }
         item.imeiIssues = item.imeiIssues || [];
         const existingIdx = item.imeiIssues.findIndex(i => i.imei === imei);
         if (existingIdx >= 0) {
@@ -780,6 +898,10 @@ const reportImeiIssue = async (req, res, next) => {
             reportedByName: req.user ? (req.user.fullName || req.user.username) : 'พนักงานสาขา',
             reportedAt: new Date()
           });
+        }
+
+        if (item.imeiDecisions && item.imeiDecisions.length > 0) {
+          item.imeiDecisions = item.imeiDecisions.filter(d => d.imei !== imei || d.decision !== 'resubmit');
         }
         break;
       }

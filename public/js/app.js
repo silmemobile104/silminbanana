@@ -4873,12 +4873,13 @@ function renderHqAuditDetails() {
   let totalPendingVerify = 0;
 
   unitRows.forEach(row => {
-    if ((row.isScanned || row.hasIssue) && row.imei !== '-') {
+    const imei = row.imei;
+    const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
+    const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
+    const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
+
+    if ((row.isScanned || row.hasIssue || isResubmit) && row.imei !== '-') {
       totalToVerify++;
-      const imei = row.imei;
-      const isPassed = window.hqAuditInspectionState.verifiedImeis.has(imei);
-      const isFailed = window.hqAuditInspectionState.failedImeis.has(imei);
-      const isResubmit = window.hqAuditInspectionState.resubmitImeis.has(imei);
 
       if (isPassed) {
         totalPassed++;
@@ -4962,13 +4963,15 @@ function renderHqAuditDetails() {
                       <span style="font-family:monospace; font-weight:700; color:var(--ink); font-size:0.92rem;">${imei}</span>
                       ${row.hasIssue ? `
                         <span class="badge badge-yellow" style="background:var(--primary); color:var(--on-primary); font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem; border:none;"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> แจ้งปัญหา</span>
+                      ` : isResubmit ? `
+                        <span class="badge badge-yellow" style="font-size:0.72rem; padding:0.15rem 0.35rem; margin-left:0.4rem;"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ให้ส่งตรวจใหม่</span>
                       ` : `
                         <span style="color:var(--ink); font-style:italic; font-size:0.8rem; margin-left:0.3rem;">(รอฝ่ายขายตรวจ)</span>
                       `}
                     ` : '<span style="color:var(--text-muted); font-style:italic;">รอฝ่ายขายตรวจ</span>'}
                   </td>
                   <td style="font-size:0.85rem;">
-                    ${(row.isScanned || row.hasIssue) && imei !== '-' ? `
+                    ${(row.isScanned || row.hasIssue || isResubmit) && imei !== '-' ? `
                       <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
                         <div>
                           ${isPassed ? '<span class="badge badge-green" style="font-size:0.75rem;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> ผ่าน</span>' :
@@ -5343,6 +5346,11 @@ async function renderBranchAuditView() {
                   ${selectedBranchId === 'all' ? `<td><span class="badge badge-gray" style="font-weight:700;">${item.branchName || '-'}</span></td>` : ''}
                   <td>
                     <strong style="color:var(--ink); font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; font-size:0.95rem; display:block; margin-bottom:0.2rem;">${item.imei}</strong>
+                    ${item.isResubmit && !isScanned && !item.hasIssue ? `
+                      <span class="badge badge-yellow" style="font-size:0.7rem; padding:0.15rem 0.4rem; display:inline-block; margin-bottom:0.25rem;">
+                        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ตีกลับให้ตรวจใหม่
+                      </span>
+                    ` : ''}
                     ${(!isScanned && selectedBranchId !== 'all') ? `
                       ${item.hasIssue ? `
                         <button class="btn btn-secondary btn-sm" style="font-size:0.7rem; padding:0.15rem 0.35rem; font-weight:700;" onclick="openReportIssueModal('${item.imei}', ${idx})">
@@ -5360,7 +5368,8 @@ async function renderBranchAuditView() {
                     <span id="actual-val-${idx}" style="font-size:1.25rem; font-weight:800; color:var(--text-main);">${actual}</span>
                   </td>
                   <td id="variance-status-${idx}">
-                    ${(diff === 0 || item.hasIssue) ? `<span class="badge badge-green">สำเร็จ</span>` :
+                    ${item.isResubmit && !isScanned && !item.hasIssue ? `<span class="badge badge-yellow"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ตีกลับให้ตรวจใหม่</span>` :
+          (diff === 0 || item.hasIssue) ? `<span class="badge badge-green">สำเร็จ</span>` :
           diff < 0 ? `<span class="badge badge-yellow">รอดำเนินการ</span>` :
             `<span class="badge badge-red">ยอดเกิน</span>`}
                   </td>
@@ -5436,7 +5445,9 @@ function updateRowVariance(idx) {
 
   const diff = actual - expected;
 
-  if (diff === 0 || item.hasIssue) {
+  if (item.isResubmit && actual === 0 && !item.hasIssue) {
+    statusTd.innerHTML = `<span class="badge badge-yellow"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ตีกลับให้ตรวจใหม่</span>`;
+  } else if (diff === 0 || item.hasIssue) {
     statusTd.innerHTML = `<span class="badge badge-green">สำเร็จ</span>`;
   } else if (diff < 0) {
     statusTd.innerHTML = `<span class="badge badge-yellow">รอดำเนินการ</span>`;
@@ -5555,11 +5566,8 @@ async function submitReportIssue(imei, idx) {
       // Update UI row dynamically
       updateRowVariance(idx);
 
-      // Submit form silently to sync all audit items with backend
-      await submitBranchAuditFormSilent();
-
-      // Re-fetch or refresh current view to guarantee sync
-      renderBranchAuditView();
+      // Re-fetch and re-render current view to guarantee complete sync
+      await renderBranchAuditView();
     }
   } catch (err) {
     // Handled
@@ -5828,7 +5836,16 @@ async function submitBranchAuditFormSilent() {
     const scannedImeis = item.scannedImeis || [];
     const actualCount = scannedImeis.length;
     const imeiImages = item.imeiImages || [];
-    const imeiIssues = item.imeiIssues || [];
+    let imeiIssues = item.imeiIssues || [];
+
+    if (item.hasIssue && (!imeiIssues || imeiIssues.length === 0) && item.imei && item.imei !== '-' && item.imei !== 'ไม่มี IMEI') {
+      imeiIssues = [{
+        imei: item.imei,
+        hasIssue: true,
+        remark: item.issueRemark || '',
+        reportedByName: item.reportedByName || ''
+      }];
+    }
 
     return {
       product: item.product,
