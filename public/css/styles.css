@@ -1395,11 +1395,11 @@ select {
 
 .form-select {
   appearance: none;
-  padding-right: 34px;
+  padding-right: 32px !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236B6B73' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 15px;
+  background-position: right 10px center;
+  background-size: 14px;
 }
 
 .form-select option {

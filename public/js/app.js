@@ -2298,7 +2298,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
           
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">สถานะ:</label>
-            <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value, document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
+            <select id="bi-status-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 2rem 0.25rem 0.6rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, this.value, document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
               <option value="in_stock" ${selectedStatus === 'in_stock' ? 'selected' : ''}>พร้อมขาย</option>
               <option value="sold" ${selectedStatus === 'sold' ? 'selected' : ''}>ขายแล้ว</option>
               <option value="in_transit" ${selectedStatus === 'in_transit' ? 'selected' : ''}>ระหว่างโอนย้าย</option>
@@ -2311,7 +2311,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
 
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">ยี่ห้อ:</label>
-            <select id="bi-brand-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', this.value)">
+            <select id="bi-brand-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 2rem 0.25rem 0.6rem;" onchange="renderBranchInventoryView(document.getElementById('bi-branch-select') ? document.getElementById('bi-branch-select').value : null, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', this.value)">
               <option value="all" ${selectedBrand === 'all' ? 'selected' : ''}>ทุกยี่ห้อ</option>
               ${brandsList.map(b => `<option value="${escapeHtml(b)}" ${selectedBrand === b ? 'selected' : ''}>${escapeHtml(b)}</option>`).join('')}
             </select>
@@ -2320,7 +2320,7 @@ async function renderBranchInventoryView(selectedBranchId = null, selectedStatus
           ${isAdminOrHq ? `
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">เปลี่ยนสาขา:</label>
-              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 0.5rem;" onchange="renderBranchInventoryView(this.value, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
+              <select id="bi-branch-select" class="form-select" style="width:auto; font-size:0.82rem; padding:0.25rem 2rem 0.25rem 0.6rem;" onchange="renderBranchInventoryView(this.value, document.getElementById('bi-status-select') ? document.getElementById('bi-status-select').value : 'in_stock', document.getElementById('bi-brand-select') ? document.getElementById('bi-brand-select').value : 'all')">
                 <option value="all" ${currentBranch._id === 'all' ? 'selected' : ''}>ทุกสาขา (ทั้งหมด)</option>
                 ${state.masterOptions.branches ? state.masterOptions.branches.map(b => `<option value="${b._id}" ${currentBranch._id === b._id ? 'selected' : ''}>${b.name}</option>`).join('') : ''}
               </select>
@@ -10541,9 +10541,21 @@ async function exportToExcel(dataArray, fileName, sheetName = 'Sheet1') {
     }, []);
     worksheet['!cols'] = max_width.map(w => ({ wch: w }));
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(workbook, `${fileName}_${todayStr}.xlsx`);
-    showToast(`ดาวน์โหลดไฟล์ Excel: ${fileName}_${todayStr}.xlsx เรียบร้อยแล้ว`);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    let fullFileName = fileName;
+    if (fullFileName.toLowerCase().endsWith('.xlsx')) {
+      // already has extension
+    } else if (fullFileName.includes('(') && fullFileName.includes(')')) {
+      fullFileName = `${fullFileName}.xlsx`;
+    } else {
+      fullFileName = `${fullFileName}_${todayStr}.xlsx`;
+    }
+
+    XLSX.writeFile(workbook, fullFileName);
+    showToast(`ดาวน์โหลดไฟล์ Excel: ${fullFileName} เรียบร้อยแล้ว`);
   } catch (err) {
     showToast(`เกิดข้อผิดพลาดในการส่งออก Excel: ${err.message}`, 'error');
   }
@@ -10573,9 +10585,6 @@ function exportExecutiveReportToExcel() {
 function exportBranchInventoryToExcel() {
   const th6 = document.querySelector('#bi-table th:nth-child(6)');
   const isAllBranch = th6 && (th6.innerText.includes('ที่เก็บ') || th6.innerText.includes('สาขา'));
-  let totalCost = 0;
-  let totalPrice = 0;
-  let totalQty = 0;
 
   // Branch name for single-branch export
   let singleBranchName = '';
@@ -10594,7 +10603,6 @@ function exportBranchInventoryToExcel() {
 
   // Filter out any hidden rows (e.g. from search filter)
   const allRows = Array.from(document.querySelectorAll('.bi-row')).filter(tr => tr.style.display !== 'none');
-  const itemCount = allRows.length;
 
   const rows = allRows.map(tr => {
     const tds = tr.querySelectorAll('td');
@@ -10620,9 +10628,6 @@ function exportBranchInventoryToExcel() {
     const priceRaw = tds[priceIdx] ? tds[priceIdx].innerText.replace('฿', '').replace(/,/g, '').trim() : '0';
     const costNum = parseFloat(costRaw) || 0;
     const priceNum = parseFloat(priceRaw) || 0;
-    totalCost += costNum;
-    totalPrice += priceNum;
-    totalQty += qtyVal;
 
     const rowObj = {
       'รหัสสินค้า': tds[1] ? tds[1].innerText.trim() : '',
@@ -10637,22 +10642,10 @@ function exportBranchInventoryToExcel() {
     return rowObj;
   });
 
-  // สรุปยอดรวมด้านล่างตาราง Excel
-  if (rows.length > 0) {
-    const summaryRow = {
-      'รหัสสินค้า': 'ยอดรวมทั้งหมด',
-      'ชื่อสินค้า': `${itemCount} รายการ`,
-      'ที่เก็บ': '',
-      'จำนวน': totalQty,
-      'หน่วยนับ': 'เครื่อง',
-      'ราคาต้นทุน (บาท)': totalCost,
-      'ราคาขาย (บาท)': totalPrice,
-      'สถานะสต็อก': ''
-    };
-    rows.push(summaryRow);
-  }
-
-  exportToExcel(rows, 'Branch_Inventory_Stock', 'สินค้าคงคลังสาขา');
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  exportToExcel(rows, `สต็อกสินค้า (${dateStr})`, 'สต็อกสินค้า');
 }
 
 // 3. Export Goods Receipt History
